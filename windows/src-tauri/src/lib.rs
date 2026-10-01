@@ -2,6 +2,7 @@
 
 mod claude;
 mod files;
+mod focus;
 mod hooks;
 mod integrations;
 mod island;
@@ -31,6 +32,8 @@ use settings::Settings;
 
 /// Keeps spawned helpers from flashing a console window.
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+/// Gives a terminal we open its own console window (we have none to share).
+const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
 
 pub struct Shared {
     pub settings: Mutex<Settings>,
@@ -142,27 +145,102 @@ fn open_url(url: String) {
         .spawn();
 }
 
-/// "Open terminal" opens the working folder in VS Code when `code` is on PATH,
-/// and falls back to Explorer otherwise.
+/// "Open Visual Studio Code" (integration card) opens the working folder in VS
+/// Code when `code` is on PATH, and falls back to Explorer otherwise.
+///
+/// `wsl_distro` is set when the session runs under WSL: the path is then a Linux
+/// path, so VS Code opens it through Remote WSL and Explorer through
+/// `\\wsl.localhost\<distro>`.
 #[tauri::command]
-fn open_in_vscode(path: Option<String>) -> bool {
+fn open_in_vscode(path: Option<String>, wsl_distro: Option<String>) -> bool {
+    let path = path.filter(|p| !p.is_empty());
+    let wsl = wsl_target(wsl_distro, path.as_deref());
+
     // No `cmd /C` anywhere near this. The path is a project folder chosen by
     // whoever is using Claude Code, and cmd would happily read `&`, `^` and `%`
     // in a folder name as syntax. Finding the launcher ourselves and handing the
     // path over as a separate argument keeps it a path.
     if let Some(code) = find_on_path("code") {
         let mut cmd = Command::new(code);
-        if let Some(p) = path.as_deref().filter(|p| !p.is_empty()) {
+        if let Some((distro, p)) = &wsl {
+            cmd.args(["--remote", &format!("wsl+{distro}"), p]);
+        } else if let Some(p) = &path {
             cmd.arg(p);
         }
         if cmd.creation_flags(CREATE_NO_WINDOW).spawn().is_ok() {
             return true;
         }
     }
-    if let Some(p) = path.as_deref().filter(|p| !p.is_empty()) {
+    let folder = match &wsl {
+        Some((distro, p)) => Some(format!(r"\\wsl.localhost\{distro}{}", p.replace('/', r"\"))),
+        None => path,
+    };
+    if let Some(p) = folder {
         let _ = Command::new("explorer").arg(p).spawn();
     }
     false
+}
+
+/// "Open terminal" and the ↗ button, once WSL is set up (Settings → WSL): bring
+/// the session's terminal window forward (any terminal window if that one is
+/// gone), or open one in the session folder — Windows Terminal when installed, a
+/// plain console otherwise; a WSL session gets a shell in its own distro.
+/// Without WSL they keep their original job: the folder in VS Code.
+#[tauri::command]
+fn open_terminal(
+    shared: State<Shared>,
+    path: Option<String>,
+    wsl_distro: Option<String>,
+    terminal_pids: Option<Vec<u32>>,
+) -> bool {
+    if shared.settings.lock().unwrap().wsl_hooks.is_empty() {
+        return open_in_vscode(path, wsl_distro);
+    }
+    if focus::existing_terminal(&terminal_pids.unwrap_or_default()) {
+        return true;
+    }
+    let path = path.filter(|p| !p.is_empty());
+    let wsl = wsl_target(wsl_distro, path.as_deref());
+
+    // Same rule as above: no shell in between, every value is its own argument.
+    // wt still reads `;` as "next command", so a `;` in a folder name is escaped.
+    let mut wt = Command::new("wt.exe");
+    match (&wsl, &path) {
+        (Some((distro, p)), _) => {
+            wt.args(["new-tab", "wsl.exe", "-d", distro, "--cd", &p.replace(';', r"\;")]);
+        }
+        (None, Some(p)) => {
+            wt.args(["-d", &p.replace(';', r"\;")]);
+        }
+        (None, None) => {}
+    }
+    if wt.spawn().is_ok() {
+        return true;
+    }
+
+    let mut console = match (&wsl, &path) {
+        (Some((distro, p)), _) => {
+            let mut cmd = Command::new("wsl.exe");
+            cmd.args(["-d", distro, "--cd", p]);
+            cmd
+        }
+        (None, p) => {
+            let mut cmd = Command::new("powershell.exe");
+            cmd.arg("-NoExit");
+            if let Some(p) = p {
+                cmd.current_dir(p);
+            }
+            cmd
+        }
+    };
+    console.creation_flags(CREATE_NEW_CONSOLE).spawn().is_ok()
+}
+
+/// The distro and Linux folder of a WSL session, or `None` for a Windows one.
+fn wsl_target(distro: Option<String>, path: Option<&str>) -> Option<(String, &str)> {
+    distro
+        .filter(|d| wsl::is_distro_name(d))
+        .zip(path.filter(|p| p.starts_with('/')))
 }
 
 /// Our own `where`: walks %PATH% against %PATHEXT%, no shell involved.
@@ -504,6 +582,7 @@ pub fn run() {
             reposition,
             open_url,
             open_in_vscode,
+            open_terminal,
             quit_app,
             hooks_status,
             hooks_preview,
