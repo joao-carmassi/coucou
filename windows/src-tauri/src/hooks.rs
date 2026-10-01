@@ -8,6 +8,9 @@
 // The command is only the quoted exe path in forward slashes plus the event name:
 // on Windows Claude Code runs hook commands through Git Bash, and anything with
 // PowerShell or cmd in it breaks.
+//
+// The same machinery serves a Claude Code running under WSL (see wsl.rs): a
+// `Target` is just a settings.json somewhere plus the command each hook runs.
 
 use std::path::{Path, PathBuf};
 
@@ -58,6 +61,19 @@ pub struct HookPreview {
     pub fingerprint: String,
 }
 
+/// A settings.json Coucou can hook into, and the command each event runs there.
+pub struct Target {
+    pub settings_path: PathBuf,
+    pub command: Box<dyn Fn(&str) -> String>,
+}
+
+impl Target {
+    /// Claude Code for Windows: `%USERPROFILE%\.claude\settings.json`.
+    pub fn windows() -> Self {
+        Self { settings_path: settings_path(), command: Box::new(hook_command) }
+    }
+}
+
 fn home() -> PathBuf {
     std::env::var_os("USERPROFILE")
         .map(PathBuf::from)
@@ -68,15 +84,14 @@ pub fn settings_path() -> PathBuf {
     home().join(".claude").join("settings.json")
 }
 
-/// Reads `~/.claude/settings.json`.
+/// Reads a `settings.json`.
 ///
 /// The only error that means "start from nothing" is the file not being there.
 /// Everything else — a lock held by another process, a permission problem, JSON
 /// we cannot parse — is reported, because the alternative is treating somebody's
 /// unreadable settings as an empty object and then writing that back over them.
-fn read_settings() -> Result<Value, String> {
-    let path = settings_path();
-    match std::fs::read(&path) {
+fn read_settings(path: &Path) -> Result<Value, String> {
+    match std::fs::read(path) {
         Ok(bytes) => parse_settings(&bytes, &path.display().to_string()),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(json!({})),
         // A lock, a permission problem, a bad drive: all of them mean we do not
@@ -107,8 +122,8 @@ fn parse_settings(bytes: &[u8], path: &str) -> Result<Value, String> {
 /// The settings as they are, or an empty object when we cannot tell. Only for
 /// read-only paths like `status()`, which must never fail loudly; anything that
 /// writes uses `read_settings()` and surfaces the error instead.
-fn read_settings_lossy() -> Value {
-    read_settings().unwrap_or_else(|_| json!({}))
+fn read_settings_lossy(path: &Path) -> Value {
+    read_settings(path).unwrap_or_else(|_| json!({}))
 }
 
 fn hook_command(event: &str) -> String {
@@ -132,7 +147,7 @@ fn entry_is_ours(entry: &Value) -> bool {
 }
 
 /// Settings with Coucou's hooks added; everything else is left untouched.
-fn merged(existing: &Value) -> Value {
+fn merged(existing: &Value, command: &dyn Fn(&str) -> String) -> Value {
     let mut root = existing.as_object().cloned().unwrap_or_default();
     let mut hooks = root
         .get("hooks")
@@ -150,7 +165,7 @@ fn merged(existing: &Value) -> Value {
         list.push(json!({
             "hooks": [{
                 "type": "command",
-                "command": hook_command(event),
+                "command": command(event),
                 "timeout": timeout,
             }]
         }));
@@ -204,9 +219,8 @@ fn stamp() -> String {
     )
 }
 
-fn backup_path() -> PathBuf {
-    let p = settings_path();
-    p.with_file_name(format!("settings.json.bak-{}", stamp()))
+fn backup_path(path: &Path) -> PathBuf {
+    path.with_file_name(format!("settings.json.bak-{}", stamp()))
 }
 
 /// Identifies the exact bytes a preview was computed from. FNV-1a is plenty:
@@ -220,8 +234,8 @@ fn fingerprint(bytes: &[u8]) -> String {
     format!("{hash:016x}")
 }
 
-fn current_fingerprint() -> String {
-    match std::fs::read(settings_path()) {
+fn current_fingerprint(path: &Path) -> String {
+    match std::fs::read(path) {
         Ok(bytes) => fingerprint(&bytes),
         Err(_) => fingerprint(b""),
     }
@@ -229,9 +243,9 @@ fn current_fingerprint() -> String {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-pub fn status() -> HookStatus {
-    let current = read_settings_lossy();
-    let installed = current
+/// Whether any Coucou entry sits in the settings.json at `path`.
+pub fn installed_at(path: &Path) -> bool {
+    read_settings_lossy(path)
         .get("hooks")
         .and_then(Value::as_object)
         .map(|hooks| {
@@ -241,10 +255,13 @@ pub fn status() -> HookStatus {
                 .flatten()
                 .any(entry_is_ours)
         })
-        .unwrap_or(false);
+        .unwrap_or(false)
+}
+
+pub fn status() -> HookStatus {
     let hook_path = settings::hook_exe_path();
     HookStatus {
-        installed,
+        installed: installed_at(&settings_path()),
         settings_path: settings_path().to_string_lossy().to_string(),
         hook_ready: hook_path.exists(),
         hook_path: hook_path.to_string_lossy().to_string(),
@@ -252,13 +269,18 @@ pub fn status() -> HookStatus {
 }
 
 pub fn preview(install: bool) -> Result<HookPreview, String> {
-    let current = read_settings()?;
-    let next = if install { merged(&current) } else { without_ours(&current) };
+    preview_for(&Target::windows(), install)
+}
+
+pub fn preview_for(target: &Target, install: bool) -> Result<HookPreview, String> {
+    let path = &target.settings_path;
+    let current = read_settings(path)?;
+    let next = if install { merged(&current, &*target.command) } else { without_ours(&current) };
     Ok(HookPreview {
         diff: unified_diff(&pretty(&current), &pretty(&next)),
-        backup: backup_path().to_string_lossy().to_string(),
-        settings_path: settings_path().to_string_lossy().to_string(),
-        fingerprint: current_fingerprint(),
+        backup: backup_path(path).to_string_lossy().to_string(),
+        settings_path: path.to_string_lossy().to_string(),
+        fingerprint: current_fingerprint(path),
     })
 }
 
@@ -269,26 +291,30 @@ pub fn preview(install: bool) -> Result<HookPreview, String> {
 /// and make them look at a fresh diff, because the only thing worse than not
 /// installing the hooks is silently reverting somebody else's edit.
 pub fn write(install: bool, fingerprint: &str) -> Result<String, String> {
-    let path = settings_path();
+    write_for(&Target::windows(), install, fingerprint)
+}
+
+pub fn write_for(target: &Target, install: bool, fingerprint: &str) -> Result<String, String> {
+    let path = &target.settings_path;
     let dir = path.parent().unwrap_or(Path::new("."));
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
 
     // Read before the backup: an unreadable file must abort before we touch
     // anything at all.
-    let current = read_settings()?;
-    if current_fingerprint() != fingerprint {
+    let current = read_settings(path)?;
+    if current_fingerprint(path) != fingerprint {
         return Err(format!(
             "{} changed since the preview. Nothing was written — review the new diff.",
             path.display()
         ));
     }
 
-    let backup = backup_path();
+    let backup = backup_path(path);
     if path.exists() {
-        std::fs::copy(&path, &backup).map_err(|e| format!("backup failed: {e}"))?;
+        std::fs::copy(path, &backup).map_err(|e| format!("backup failed: {e}"))?;
     }
 
-    let next = if install { merged(&current) } else { without_ours(&current) };
+    let next = if install { merged(&current, &*target.command) } else { without_ours(&current) };
     let mut text = pretty(&next);
     text.push('\n');
 
@@ -296,7 +322,7 @@ pub fn write(install: bool, fingerprint: &str) -> Result<String, String> {
     // the original settings.json intact rather than half a file.
     let temp = path.with_extension(format!("json.coucou-{}", std::process::id()));
     std::fs::write(&temp, text.as_bytes()).map_err(|e| format!("write failed: {e}"))?;
-    if let Err(err) = std::fs::rename(&temp, &path) {
+    if let Err(err) = std::fs::rename(&temp, path) {
         let _ = std::fs::remove_file(&temp);
         return Err(format!("write failed: {err}"));
     }
@@ -486,7 +512,7 @@ mod tests {
             }
         });
 
-        let after = merged(&existing);
+        let after = merged(&existing, &hook_command);
         assert_eq!(after["model"], "claude-opus-5");
         assert_eq!(after["theme"], "dark");
         assert_eq!(after["enabledPlugins"], serde_json::json!(["a", "b"]));
