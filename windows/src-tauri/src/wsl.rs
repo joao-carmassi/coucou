@@ -42,6 +42,8 @@ pub struct WslStatus {
     pub relay_path: String,
     /// The relay script is in place and matches what Coucou would write.
     pub relay_ready: bool,
+    /// Claude Code inside the distro, if installed — what "Use for Mochi" runs.
+    pub claude_cli: Option<String>,
     /// Set when the distro could not be reached; nothing else is meaningful then.
     pub error: Option<String>,
 }
@@ -106,7 +108,7 @@ impl Distro {
 }
 
 /// Runs wsl.exe with no window, under a deadline. `None` on any failure.
-fn run_wsl(args: &[&str]) -> Option<String> {
+pub(crate) fn run_wsl(args: &[&str]) -> Option<String> {
     let mut child = Command::new("wsl.exe")
         .args(args)
         // Newer WSL prints its own messages in UTF-16 unless asked otherwise.
@@ -207,6 +209,7 @@ pub fn status(name: &str) -> WslStatus {
             settings_path: d.settings_linux(),
             relay_path: d.relay_linux(),
             relay_ready: d.relay_ready(),
+            claude_cli: crate::local_claude::wsl_cli(&d.name),
             distro: d.name,
             error: None,
         },
@@ -216,6 +219,7 @@ pub fn status(name: &str) -> WslStatus {
             settings_path: String::new(),
             relay_path: String::new(),
             relay_ready: false,
+            claude_cli: None,
             error: Some(err),
         },
     }
