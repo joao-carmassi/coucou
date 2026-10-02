@@ -455,6 +455,8 @@ function buildOverview(actions: ViewActions, onResize: () => void): ViewHost {
       left.title = mode === "session" ? "Open the session" : "";
 
       const others = State.otherTasks.slice(0, 4);
+      // Nothing else active: the left card takes the full width.
+      el.classList.toggle("solo", others.length === 0);
       const pillKey = others.map((t) => `${t.id}:${t.pillBadge ?? ""}`).join("|");
       if (pillKey !== pillIds) {
         pillIds = pillKey;
