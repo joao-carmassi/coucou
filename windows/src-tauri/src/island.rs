@@ -31,6 +31,7 @@ const HIT_MARGIN: f64 = 14.0;
 pub struct CursorPayload {
     pub x: f64,
     pub y: f64,
+    pub down: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -256,7 +257,6 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
                 // the mouse, which also makes the drop zone as forgiving as the Mac's.
                 // A press may be the start of a drag: make sure the drop target is
                 // ours before the file arrives.
-                let down = left_button_down();
                 let was_down_before = was_down;
                 if down && !was_down {
                     let handle = app.clone();
@@ -304,7 +304,7 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
                     let _ = win.set_ignore_cursor_events(!accept);
                 }
 
-                let _ = win.emit("cursor", CursorPayload { x, y });
+                let _ = win.emit("cursor", CursorPayload { x, y, down });
             }
 
             // Parked: the window is (or is about to be) the wake strip, which must

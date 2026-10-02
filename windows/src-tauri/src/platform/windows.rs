@@ -7,16 +7,24 @@ use std::process::Command;
 use tauri::{AppHandle, Manager, WebviewWindow};
 
 use ::windows::core::{BOOL, PWSTR};
-use ::windows::Win32::Foundation::{CloseHandle, HANDLE, HLOCAL, HWND, LPARAM, LocalFree, POINT};
+use ::windows::Win32::Foundation::{CloseHandle, HANDLE, HLOCAL, HWND, LPARAM, LocalFree, POINT, RECT};
+use ::windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
+use ::windows::Win32::Graphics::Gdi::{
+    BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
+    ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, SRCCOPY,
+};
 use ::windows::Win32::Security::Authorization::ConvertSidToStringSidW;
 use ::windows::Win32::Security::{GetTokenInformation, TokenUser, TOKEN_QUERY, TOKEN_USER};
 use ::windows::Win32::System::Ole::RevokeDragDrop;
 use ::windows::Win32::System::SystemInformation::GetLocalTime;
-use ::windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+use ::windows::Win32::System::Threading::{
+    GetCurrentProcess, OpenProcess, OpenProcessToken, QueryFullProcessImageNameW,
+    PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+};
 use ::windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
 use ::windows::Win32::UI::WindowsAndMessaging::{
-    EnumChildWindows, GetClassNameW, GetCursorPos, GetWindowLongPtrW, SetWindowLongPtrW,
-    GWL_EXSTYLE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    EnumChildWindows, GetAncestor, GetClassNameW, GetCursorPos, GetWindowLongPtrW, GetWindowRect,
+    GetWindowThreadProcessId, IsIconic, SetWindowLongPtrW, WindowFromPoint, GA_ROOT, GWL_EXSTYLE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
 };
 
 use super::LocalTime;
@@ -161,6 +169,131 @@ pub fn cursor_physical() -> Option<(f64, f64)> {
 /// drag might be in flight before it reaches the window.
 pub fn left_button_down() -> bool {
     unsafe { (GetAsyncKeyState(VK_LBUTTON.0 as i32) as u16 & 0x8000) != 0 }
+}
+
+// ── Window attach ─────────────────────────────────────────────────────────────
+
+/// Screenshots the top-level window under the cursor. Returns (app name, width,
+/// height, RGB pixels) in physical pixels. Our own windows and minimized ones are
+/// refused, so a drop on the island never captures Coucou.
+pub fn capture_under_cursor() -> Result<(String, u32, u32, Vec<u8>), String> {
+    let mut p = POINT::default();
+    unsafe { GetCursorPos(&mut p).map_err(|_| "Can't read the cursor.".to_string())? };
+    // The whole top-level window, not the child control under the cursor.
+    let hwnd = unsafe { GetAncestor(WindowFromPoint(p), GA_ROOT) };
+    if hwnd.0.is_null() {
+        return Err("No window under Mochi.".into());
+    }
+    let mut pid = 0u32;
+    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+    if pid == std::process::id() {
+        return Err("Drop Mochi on another app's window.".into());
+    }
+    if unsafe { IsIconic(hwnd) }.as_bool() {
+        return Err("That window is minimized.".into());
+    }
+
+    // The visible frame: GetWindowRect includes Win11's invisible border and the
+    // overhang of maximized windows.
+    let mut rect = RECT::default();
+    let dwm = unsafe {
+        DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            &mut rect as *mut RECT as *mut _,
+            std::mem::size_of::<RECT>() as u32,
+        )
+    };
+    if dwm.is_err() {
+        unsafe { GetWindowRect(hwnd, &mut rect).map_err(|_| "Can't read the window size.".to_string())? };
+    }
+    let (w, h) = (rect.right - rect.left, rect.bottom - rect.top);
+    if !(8..=8192).contains(&w) || !(8..=8192).contains(&h) {
+        return Err("That window has no usable size.".into());
+    }
+
+    unsafe {
+        let screen = GetDC(None);
+        if screen.is_invalid() {
+            return Err("Can't reach the screen.".into());
+        }
+        let mem = CreateCompatibleDC(Some(screen));
+        let bmp = CreateCompatibleBitmap(screen, w, h);
+        if mem.is_invalid() || bmp.is_invalid() {
+            if !bmp.is_invalid() {
+                let _ = DeleteObject(bmp.into());
+            }
+            if !mem.is_invalid() {
+                let _ = DeleteDC(mem);
+            }
+            ReleaseDC(None, screen);
+            return Err("Can't create the capture buffer.".into());
+        }
+        let old = SelectObject(mem, bmp.into());
+        // A screen blit: what is visible there is what gets captured.
+        let blit = BitBlt(mem, 0, 0, w, h, Some(screen), rect.left, rect.top, SRCCOPY).is_ok();
+        SelectObject(mem, old);
+
+        let result = if blit {
+            let mut info = BITMAPINFO {
+                bmiHeader: BITMAPINFOHEADER {
+                    biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                    biWidth: w,
+                    biHeight: -h, // top-down
+                    biPlanes: 1,
+                    biBitCount: 32,
+                    biCompression: BI_RGB.0,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let mut bgra = vec![0u8; (w * h * 4) as usize];
+            let lines = GetDIBits(
+                mem,
+                bmp,
+                0,
+                h as u32,
+                Some(bgra.as_mut_ptr() as *mut _),
+                &mut info,
+                DIB_RGB_COLORS,
+            );
+            if lines == 0 {
+                Err("Can't read the captured pixels.".to_string())
+            } else {
+                // BGRA to RGB: the alpha of a screen blit is garbage.
+                let mut rgb = Vec::with_capacity((w * h * 3) as usize);
+                for px in bgra.chunks_exact(4) {
+                    rgb.extend_from_slice(&[px[2], px[1], px[0]]);
+                }
+                Ok(rgb)
+            }
+        } else {
+            Err("Can't capture that window.".to_string())
+        };
+        let _ = DeleteObject(bmp.into());
+        let _ = DeleteDC(mem);
+        ReleaseDC(None, screen);
+        result.map(|rgb| (process_stem(pid), w as u32, h as u32, rgb))
+    }
+}
+
+/// File stem of the process's executable ("notepad"), or "window" if unknown.
+fn process_stem(pid: u32) -> String {
+    unsafe {
+        let Ok(handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
+            return "window".into();
+        };
+        let mut buf = [0u16; 520];
+        let mut len = buf.len() as u32;
+        let ok = QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut len).is_ok();
+        let _ = CloseHandle(handle);
+        let path = String::from_utf16_lossy(&buf[..len as usize]);
+        std::path::Path::new(&path)
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .filter(|s| ok && !s.is_empty())
+            .unwrap_or_else(|| "window".into())
+    }
 }
 
 // ── Island window ─────────────────────────────────────────────────────────────

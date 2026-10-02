@@ -99,6 +99,13 @@ export class Island {
   private lastLoveTime = 0;
   private botHoverStart = { x: 0, y: 0 };
 
+  // Mochi drag-out: press on him, pull past 7 px with the button held, release
+  // over another window to attach a screenshot of it.
+  private botPress: { x: number; y: number } | null = null;
+  private draggingGhost = false;
+  private lastDown = false;
+  private ghostEl!: HTMLElement;
+
   private confusedRecovery: number | null = null;
   private prevViewBeforeConfused: IslandViewName = "overview";
   private lastSyncedView: IslandViewName | null = null;
@@ -286,7 +293,8 @@ export class Island {
     this.greetingCanvas.style.width = `${EXPANDED_W}px`;
     this.greetingCanvas.style.height = "150px";
 
-    this.root.append(this.wakeStrip, this.islandEl);
+    this.ghostEl = this.buildGhost();
+    this.root.append(this.wakeStrip, this.islandEl, this.ghostEl);
     this.applyGeometry();
   }
 
@@ -449,6 +457,8 @@ export class Island {
   }
 
   collapse() {
+    this.botPress = null;
+    if (this.draggingGhost) this.endGhostHidden();
     State.isPinned = false;
     this.fsm.pinned = false;
     // Drive the state machine rather than the mode: setting the mode behind its
@@ -607,12 +617,84 @@ export class Island {
       })
       .catch((err) => {
         UploadSeq.deactivate();
-        State.noteMessage = String(err).replace(/^Error:\s*/, "");
         this.engine.animateMorph(0);
-        this.setView("note");
-        Sound.play("error");
-        window.setTimeout(() => this.setView(State.defaultView()), 2400);
+        this.showError(err);
       });
+  }
+
+  private showError(err: unknown) {
+    State.noteMessage = String(err).replace(/^Error:\s*/, "");
+    this.setView("note");
+    Sound.play("error");
+    window.setTimeout(() => this.setView(State.defaultView()), 2400);
+  }
+
+  // ── Mochi drag-out → window attach ──────────────────────────────────────────
+
+  /**
+   * A simple CSS Mochi (cream squircle + two eyes) that follows the cursor while
+   * he is dragged out. The real canvas is hidden until the release.
+   */
+  private buildGhost(): HTMLElement {
+    const eye = (left: string) => h("div", {
+      style: `position:absolute;top:20px;left:${left};width:9px;height:11px;border-radius:50%;background:#1A1412`,
+    });
+    return h("div", {
+      id: "bot-ghost",
+      style: "position:absolute;display:none;width:54px;height:48px;border-radius:46% 46% 48% 48%/58% 58% 42% 42%;background:radial-gradient(circle at 68% 22%,#FFFAF5 0%,#EAD9CC 78%,#DDCCBF 100%);box-shadow:0 6px 22px rgba(0,0,0,.5);z-index:60;pointer-events:none",
+    }, eye("15px"), eye("30px"));
+  }
+
+  private startGhost(x: number, y: number) {
+    this.draggingGhost = true;
+    this.botPress = null;
+    this.cancelBotHover();
+    this.botHovering = false;
+    this.engine.triggerEmote("surprised");
+    Sound.play("pop");
+    this.moveGhost(x, y);
+    this.ghostEl.style.display = "block";
+  }
+
+  private moveGhost(x: number, y: number) {
+    this.ghostEl.style.left = `${x - 27}px`;
+    this.ghostEl.style.top = `${y - 30}px`;
+  }
+
+  private endGhostHidden() {
+    this.draggingGhost = false;
+    this.ghostEl.style.display = "none";
+    this.ensureRunning();
+  }
+
+  /** Release of the left button: ends a ghost drag, or is Mochi's plain click. Idempotent. */
+  private onMouseUp(x: number, y: number) {
+    if (this.draggingGhost) {
+      const rect = this.islandRect();
+      const overIsland =
+        x >= rect.x - HIT_MARGIN && x <= rect.x + rect.w + HIT_MARGIN &&
+        y >= rect.y - HIT_MARGIN && y <= rect.y + rect.h + HIT_MARGIN;
+      this.endGhostHidden();
+      if (overIsland) return; // dropped back home: silent cancel
+      void Bridge.attachWindow()
+        .then((file) => {
+          State.droppedFile = { name: file.name, path: file.path };
+          State.promptContext = { kind: "file", name: file.name, path: file.path };
+          State.chatHistory = [];
+          // Like a dropped file: a new session, in the inbox where the print lives.
+          State.activeSession = null;
+          void Bridge.chatReset();
+          Sound.play("attach");
+          this.engine.triggerEmote("wink");
+          this.setView("prompt");
+        })
+        .catch((err) => this.showError(err));
+    } else if (this.botPress) {
+      this.botPress = null;
+      this.cancelBotHover();
+      // A Mochi with news to tell takes you to it; any other gets his slap.
+      if (!followNews(this)) this.engine.slap();
+    }
   }
 
   /**
@@ -745,11 +827,14 @@ export class Island {
         this.fsm.click();
         return;
       }
-      if (this.isBotHit(e.clientX, e.clientY)) {
-        this.cancelBotHover();
-        // A Mochi with news to tell takes you to it; any other gets his slap.
-        if (!followNews(this)) this.engine.slap();
-      }
+      // The slap (or news) waits for the release: past 7 px this is a drag-out.
+      if (this.isBotHit(e.clientX, e.clientY)) this.botPress = { x: e.clientX, y: e.clientY };
+    });
+
+    // The DOM only sees releases over our window; the cursor poll's falling edge
+    // covers the rest. Both funnel into onMouseUp.
+    window.addEventListener("mouseup", () => {
+      if (!this.draggingGhost) this.onMouseUp(State.mouse.x, State.mouse.y);
     });
 
     window.addEventListener("keydown", (e) => {
@@ -777,11 +862,25 @@ export class Island {
     });
   }
 
-  /** Cursor in window-logical coordinates. */
-  onCursor(x: number, y: number) {
+  /** Cursor in window-logical coordinates; `down` is the left button, from Rust's poll. */
+  onCursor(x: number, y: number, down = false) {
     State.mouse = { x, y };
     const rect = this.islandRect();
     State.mouseInIsland = { x: x - rect.x, y: y - rect.y };
+
+    const released = this.lastDown && !down;
+    this.lastDown = down;
+    if (this.botPress && down && Math.hypot(x - this.botPress.x, y - this.botPress.y) > 7) {
+      this.startGhost(x, y);
+    }
+    if (this.draggingGhost) {
+      if (released) this.onMouseUp(x, y);
+      else this.moveGhost(x, y);
+      this.ensureRunning();
+      return; // no hover or auto-close bookkeeping mid-drag
+    }
+    // A stale press (released off the island) must not turn a later drag into a ghost.
+    if (released && this.botPress) this.onMouseUp(x, y);
 
     // Windows sends no cursor position with an OLE drag, so the drop sequence is
     // fed from the Win32 cursor poll instead — it runs throughout the drag.
@@ -966,7 +1065,7 @@ export class Island {
 
     const greetingActive = State.mode === "expanded" && State.view === "greeting";
     // The drop canvas draws its own Mochi; two of them would overlap.
-    const visible = p.opacity > 0 && !greetingActive && !this.uploadActive;
+    const visible = p.opacity > 0 && !greetingActive && !this.uploadActive && !this.draggingGhost;
     this.botCanvas.style.opacity = visible ? "1" : "0";
 
     if (State.mode === "expanded" && State.view !== "uploading" && !greetingActive && !this.uploadActive) {

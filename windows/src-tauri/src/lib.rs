@@ -582,6 +582,15 @@ fn ingest_file(path: String) -> Result<DroppedFile, String> {
     files::ingest(&path)
 }
 
+/// Screenshots the window under the cursor into the inbox (Mochi dragged onto it).
+#[tauri::command]
+async fn attach_window() -> Result<DroppedFile, String> {
+    let (app, w, h, rgb) = platform::capture_under_cursor()?;
+    let file = files::save_capture(&app, w, h, &rgb)?;
+    log::line(format!("window attached: {app} {w}x{h}"));
+    Ok(file)
+}
+
 /// The island may only ask whether a key exists — never read it.
 #[tauri::command]
 fn secret_present(key: String) -> bool {
@@ -793,6 +802,7 @@ pub fn run() {
             chat_send,
             chat_reset,
             ingest_file,
+            attach_window,
             secret_present,
             secret_set,
             secret_clear,

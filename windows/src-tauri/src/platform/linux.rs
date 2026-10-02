@@ -160,6 +160,11 @@ pub fn left_button_down() -> bool {
     false
 }
 
+/// Window attach (Mochi dragged onto a window) is Windows-only for now.
+pub fn capture_under_cursor() -> Result<(String, u32, u32, Vec<u8>), String> {
+    Err("Window attach is Windows-only for now.".into())
+}
+
 // ── Island window ─────────────────────────────────────────────────────────────
 
 /// The few gtk-layer-shell calls we need, straight from the C library.
