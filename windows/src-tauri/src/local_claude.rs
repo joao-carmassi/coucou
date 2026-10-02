@@ -103,7 +103,7 @@ pub fn windows_cli() -> Option<PathBuf> {
         .map(|h| PathBuf::from(h).join(r".local\bin\claude.exe"))
         .filter(|p| p.is_file());
     native
-        .or_else(|| crate::find_on_path("claude"))
+        .or_else(|| crate::platform::find_on_path("claude"))
         .or_else(desktop_app_cli)
 }
 
