@@ -141,6 +141,26 @@ fn version_key(name: &str) -> Vec<u64> {
     name.split('.').map(|p| p.parse().unwrap_or(0)).collect()
 }
 
+/// A Claude Code we start must not inherit the markers of one that started us
+/// (Coucou is often launched from a Claude Code session): CLAUDE_CODE_CHILD_SESSION
+/// and friends make it a "child" with transcript saving off, so `--resume` would
+/// find nothing. Same for the parent's terminal identity (WT_SESSION, TERM…),
+/// which describe a window this process is not in. CLAUDE_CONFIG_DIR is the
+/// user's own choice and stays.
+pub fn fresh_env(cmd: &mut Command) {
+    for (key, _) in std::env::vars_os() {
+        let name = key.to_string_lossy().to_ascii_uppercase();
+        let inherited = (name.starts_with("CLAUDE") && name != "CLAUDE_CONFIG_DIR")
+            || matches!(
+                name.as_str(),
+                "WT_SESSION" | "WT_PROFILE_ID" | "TERM" | "TERM_PROGRAM" | "TERM_PROGRAM_VERSION"
+            );
+        if inherited {
+            cmd.env_remove(&key);
+        }
+    }
+}
+
 /// Whether that Claude Code is signed in, from its own `claude auth status` —
 /// which costs nothing. `None` when it can't be asked. A copy that comes with
 /// the Claude desktop app answers "no" until it is signed in on its own.
@@ -150,6 +170,7 @@ pub fn logged_in(backend: &Backend) -> Option<bool> {
         Backend::Windows => {
             let mut c = Command::new(windows_cli()?);
             c.args(["auth", "status"]);
+            fresh_env(&mut c);
             if let Some(dir) = crate::settings::claude_config_dir() {
                 c.env("CLAUDE_CONFIG_DIR", dir);
             }
@@ -229,6 +250,7 @@ pub fn send(
                 .ok_or("Claude Code isn't installed on Windows. Pick another engine in Settings.")?;
             let mut c = Command::new(cli);
             c.args(&args).current_dir(&cwd);
+            fresh_env(&mut c);
             if let Some(dir) = crate::settings::claude_config_dir() {
                 c.env("CLAUDE_CONFIG_DIR", dir);
             }

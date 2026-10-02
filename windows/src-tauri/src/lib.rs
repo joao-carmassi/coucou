@@ -284,6 +284,7 @@ fn start_claude_terminal() -> bool {
     let Some(cli) = local_claude::windows_cli() else { return false };
     let mut cmd = Command::new(cli);
     cmd.current_dir(platform::home_dir());
+    local_claude::fresh_env(&mut cmd);
     if let Some(dir) = settings::claude_config_dir() {
         cmd.env("CLAUDE_CONFIG_DIR", dir);
     }
