@@ -735,7 +735,8 @@ export class Island {
 
   private targetSize(): { w: number; h: number; r: number } {
     const news = State.focusId != null && State.integrations[State.focusId]?.news != null;
-    const proposal = State.pendingApproval?.proposal != null;
+    // A diff or a plan on the approval card: the island grows to its tallest.
+    const proposal = State.pendingApproval?.proposal != null || !!State.pendingApproval?.plan;
     // A view that knows how tall its content is has the last word.
     const fitted = this.views?.get(State.view)?.height ?? null;
     // An open session menu wants the room: the chat grows to its tallest.
