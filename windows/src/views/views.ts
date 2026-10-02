@@ -29,6 +29,8 @@ export interface ViewActions {
   toggleSound(): void;
   setVolume(v: number): void;
   setAutoClose(seconds: number): void;
+  /** Cancel on the drop card: forget the file, not just leave the card. */
+  cancelDrop(): void;
   openSettingsWindow(): void;
   blip(): void;
   /** Mochi reacts to something a view just showed (the GitHub panel's news). */

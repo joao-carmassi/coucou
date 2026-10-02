@@ -4,7 +4,6 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { Settings } from "./state";
 
 export const IS_TAURI =
@@ -627,16 +626,19 @@ export type BridgeEvent =
   | { name: "screen-changed"; payload: null };
 
 export interface DragDropPayload {
-  type: "enter" | "over" | "drop" | "leave";
+  /** `end`: the drag finished without a drop on the island. */
+  type: "enter" | "over" | "drop" | "leave" | "end";
   paths?: string[];
 }
 
-/** Files dragged onto the island. Only reaches us when the window takes the mouse. */
+/**
+ * Files dragged onto the island. Only reaches us when the window takes the mouse.
+ * Comes from Coucou's own drop target (drop_target.rs), not Tauri's: WebView2
+ * replaces the one wry installs with a target that refuses every file.
+ */
 export async function onDragDrop(handler: (e: DragDropPayload) => void) {
   if (!IS_TAURI) return () => {};
-  return getCurrentWebview().onDragDropEvent((event) => {
-    handler(event.payload as DragDropPayload);
-  });
+  return listen<DragDropPayload>("file-drag", (e) => handler(e.payload));
 }
 
 export async function onEvent<T>(name: string, handler: (payload: T) => void) {
