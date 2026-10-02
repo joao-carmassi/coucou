@@ -229,11 +229,13 @@ fn open_terminal(
     wsl_distro: Option<String>,
     terminal_pids: Option<Vec<u32>>,
 ) -> bool {
-    if shared.settings.lock().unwrap().wsl_hooks.is_empty() {
-        return open_in_vscode(path, wsl_distro);
-    }
+    // The session's own window first, WSL or not; the VS Code fallback without
+    // WSL is only for when no terminal window can be found.
     if focus::existing_terminal(&terminal_pids.unwrap_or_default()) {
         return true;
+    }
+    if shared.settings.lock().unwrap().wsl_hooks.is_empty() {
+        return open_in_vscode(path, wsl_distro);
     }
     let path = path.filter(|p| !p.is_empty());
     let wsl = wsl_target(wsl_distro, path.as_deref());
