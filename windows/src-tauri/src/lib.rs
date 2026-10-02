@@ -292,28 +292,42 @@ fn resume_in_terminal(id: String, cwd: Option<String>) -> Result<(), String> {
         .map(std::path::PathBuf::from)
         .filter(|p| p.is_absolute() && p.is_dir())
         .unwrap_or_else(files::inbox_dir);
-    let mut cmd = Command::new(cli);
-    cmd.args(["--resume", &id]).current_dir(dir);
-    local_claude::fresh_env(&mut cmd);
-    if let Some(config) = settings::claude_config_dir() {
-        cmd.env("CLAUDE_CONFIG_DIR", config);
-    }
-    cmd.creation_flags(CREATE_NEW_CONSOLE)
-        .spawn()
-        .map(|_| ())
+    claude_console(&cli, &["--resume", &id], &dir)
         .map_err(|e| format!("Não foi possível iniciar o Claude Code: {e}"))
 }
 
 #[tauri::command]
 fn start_claude_terminal() -> bool {
     let Some(cli) = local_claude::windows_cli() else { return false };
-    let mut cmd = Command::new(cli);
-    cmd.current_dir(platform::home_dir());
-    local_claude::fresh_env(&mut cmd);
-    if let Some(dir) = settings::claude_config_dir() {
-        cmd.env("CLAUDE_CONFIG_DIR", dir);
+    claude_console(&cli, &[], &platform::home_dir()).is_ok()
+}
+
+/// Claude Code in a new console, inside PowerShell 7 so the window stays a
+/// shell once Claude exits; straight claude.exe when pwsh isn't installed.
+/// `args` are ours (flags and a checked session id), never user text.
+fn claude_console(cli: &std::path::Path, args: &[&str], dir: &std::path::Path) -> std::io::Result<()> {
+    let prepare = |cmd: &mut Command| {
+        cmd.current_dir(dir);
+        local_claude::fresh_env(cmd);
+        if let Some(config) = settings::claude_config_dir() {
+            cmd.env("CLAUDE_CONFIG_DIR", config);
+        }
+        cmd.creation_flags(CREATE_NEW_CONSOLE);
+    };
+    let mut pwsh = Command::new("pwsh.exe");
+    let cli_quoted = cli.display().to_string().replace('\'', "''");
+    pwsh.args(["-NoLogo", "-NoExit", "-Command"])
+        .arg(format!("& '{cli_quoted}' {}", args.join(" ")));
+    prepare(&mut pwsh);
+    match pwsh.spawn() {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let mut direct = Command::new(cli);
+            direct.args(args);
+            prepare(&mut direct);
+            direct.spawn().map(|_| ())
+        }
+        other => other.map(|_| ()),
     }
-    cmd.creation_flags(CREATE_NEW_CONSOLE).spawn().is_ok()
 }
 
 fn wsl_target(distro: Option<String>, path: Option<&str>) -> Option<(String, &str)> {
