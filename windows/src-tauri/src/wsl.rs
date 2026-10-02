@@ -81,7 +81,9 @@ impl Distro {
             settings_path: self.unc(&self.settings_linux()),
             // Run through `sh` so the script works without its executable bit,
             // which a file written from Windows does not get.
-            command: Box::new(|event| format!("sh \"$HOME/{RELAY_REL}\" {event}")),
+            hook: Box::new(|event| {
+                serde_json::json!({"type": "command", "command": format!("sh \"$HOME/{RELAY_REL}\" {event}")})
+            }),
         }
     }
 
@@ -348,6 +350,6 @@ mod tests {
             d.unc("/home/me/.claude/settings.json"),
             PathBuf::from(r"\\wsl.localhost\Ubuntu\home\me\.claude\settings.json")
         );
-        assert_eq!((d.target().command)("Stop"), r#"sh "$HOME/.claude/hooks/coucou-hook-wsl.sh" Stop"#);
+        assert_eq!((d.target().hook)("Stop")["command"], r#"sh "$HOME/.claude/hooks/coucou-hook-wsl.sh" Stop"#);
     }
 }

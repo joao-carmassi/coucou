@@ -5,12 +5,18 @@
 // touching anybody else's hooks, show the diff, and write only after an explicit
 // click. Uninstall removes Coucou's entries and nothing else.
 //
-// The command is only the quoted exe path in forward slashes plus the event name:
-// on Windows Claude Code runs hook commands through Git Bash, and anything with
-// PowerShell or cmd in it breaks.
+// Each hook is written in Claude Code's exec form — `command` is the relay's
+// path and `args` holds the event name — so no shell is involved at all. The
+// shell form it replaces ("\"C:/…/coucou-hook.exe\" Stop") only worked in
+// Git Bash: on a PC without Git Bash, Claude Code runs hooks in PowerShell,
+// which reads a quoted path as a string and fails on the event name
+// ("Unexpected token 'Stop'"). Exec form also makes spaces in the path a
+// non-issue. A Claude Code too old to know `args` still runs the relay, which
+// then reads the event name from the JSON on stdin.
 //
 // The same machinery serves a Claude Code running under WSL (see wsl.rs): a
-// `Target` is just a settings.json somewhere plus the command each hook runs.
+// `Target` is just a settings.json somewhere plus the hook each event runs.
+// WSL's is a Linux Claude Code, so it keeps the shell form.
 
 use std::path::{Path, PathBuf};
 
@@ -61,16 +67,16 @@ pub struct HookPreview {
     pub fingerprint: String,
 }
 
-/// A settings.json Coucou can hook into, and the command each event runs there.
+/// A settings.json Coucou can hook into, and the hook object each event runs there.
 pub struct Target {
     pub settings_path: PathBuf,
-    pub command: Box<dyn Fn(&str) -> String>,
+    pub hook: Box<dyn Fn(&str) -> Value>,
 }
 
 impl Target {
     /// Claude Code for Windows: `%USERPROFILE%\.claude\settings.json`.
     pub fn windows() -> Self {
-        Self { settings_path: settings_path(), command: Box::new(hook_command) }
+        Self { settings_path: settings_path(), hook: Box::new(hook_entry) }
     }
 }
 
@@ -121,18 +127,25 @@ fn read_settings_lossy(path: &Path) -> Value {
     read_settings(path).unwrap_or_else(|_| json!({}))
 }
 
+/// One Coucou hook, in exec form (see the note at the top): no shell involved.
 #[cfg(windows)]
-fn hook_command(event: &str) -> String {
-    let exe = settings::hook_exe_path().to_string_lossy().replace('\\', "/");
-    format!("\"{exe}\" {event}")
+fn hook_entry(event: &str) -> Value {
+    json!({
+        "type": "command",
+        "command": settings::hook_exe_path().to_string_lossy(),
+        "args": [event],
+    })
 }
 
 /// Claude Code runs the command through `sh`, which still reads `$`, `` ` ``
 /// and `\` inside double quotes. Single quotes keep the path a path, whatever
 /// the home directory is called.
 #[cfg(unix)]
-fn hook_command(event: &str) -> String {
-    format!("{} {event}", sh_quote(&settings::hook_exe_path().to_string_lossy()))
+fn hook_entry(event: &str) -> Value {
+    json!({
+        "type": "command",
+        "command": format!("{} {event}", sh_quote(&settings::hook_exe_path().to_string_lossy())),
+    })
 }
 
 /// `s` as one single-quoted shell word: `'` becomes `'\''`, nothing else is
@@ -158,7 +171,7 @@ fn entry_is_ours(entry: &Value) -> bool {
 }
 
 /// Settings with Coucou's hooks added; everything else is left untouched.
-fn merged(existing: &Value, command: &dyn Fn(&str) -> String) -> Value {
+fn merged(existing: &Value, hook: &dyn Fn(&str) -> Value) -> Value {
     let mut root = existing.as_object().cloned().unwrap_or_default();
     let mut hooks = root
         .get("hooks")
@@ -173,13 +186,9 @@ fn merged(existing: &Value, command: &dyn Fn(&str) -> String) -> Value {
             .cloned()
             .unwrap_or_default();
         list.retain(|entry| !entry_is_ours(entry));
-        list.push(json!({
-            "hooks": [{
-                "type": "command",
-                "command": command(event),
-                "timeout": timeout,
-            }]
-        }));
+        let mut h = hook(event);
+        h["timeout"] = json!(timeout);
+        list.push(json!({ "hooks": [h] }));
         hooks.insert((*event).to_string(), Value::Array(list));
     }
 
@@ -287,7 +296,7 @@ pub fn preview(install: bool) -> Result<HookPreview, String> {
 pub fn preview_for(target: &Target, install: bool) -> Result<HookPreview, String> {
     let path = &target.settings_path;
     let current = read_settings(path)?;
-    let next = if install { merged(&current, &*target.command) } else { without_ours(&current) };
+    let next = if install { merged(&current, &*target.hook) } else { without_ours(&current) };
     Ok(HookPreview {
         diff: unified_diff(&pretty(&current), &pretty(&next)),
         backup: backup_path(path).to_string_lossy().to_string(),
@@ -326,7 +335,7 @@ pub fn write_for(target: &Target, install: bool, fingerprint: &str) -> Result<St
         std::fs::copy(path, &backup).map_err(|e| format!("backup failed: {e}"))?;
     }
 
-    let next = if install { merged(&current, &*target.command) } else { without_ours(&current) };
+    let next = if install { merged(&current, &*target.hook) } else { without_ours(&current) };
     let mut text = pretty(&next);
     text.push('\n');
 
@@ -586,7 +595,7 @@ mod tests {
             }
         });
 
-        let after = merged(&existing, &hook_command);
+        let after = merged(&existing, &hook_entry);
         assert_eq!(after["model"], "claude-opus-5");
         assert_eq!(after["theme"], "dark");
         assert_eq!(after["enabledPlugins"], serde_json::json!(["a", "b"]));
@@ -602,6 +611,35 @@ mod tests {
         // And removing ours puts it back exactly as it was.
         let cleaned = without_ours(&after);
         assert_eq!(cleaned, existing);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn hooks_are_written_in_exec_form_with_no_shell() {
+        let after = merged(&json!({}), &hook_entry);
+        for (event, timeout) in HOOK_EVENTS {
+            let hook = &after["hooks"][*event][0]["hooks"][0];
+            assert_eq!(hook["type"], "command");
+            // Just the relay's path: nothing a shell would have to parse.
+            let command = hook["command"].as_str().unwrap();
+            assert!(command.ends_with("coucou-hook.exe"), "got {command}");
+            assert!(!command.contains('"'), "no shell quoting in exec form: {command}");
+            assert_eq!(hook["args"], json!([event]));
+            assert_eq!(hook["timeout"], json!(timeout));
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn an_old_shell_form_install_is_replaced_not_duplicated() {
+        // What Coucou 0.1.1 wrote: fine in Git Bash, a syntax error in PowerShell.
+        let old = json!({ "hooks": { "Stop": [
+            { "hooks": [{ "type": "command", "command": "\"C:/Users/me/AppData/Local/Coucou/bin/coucou-hook.exe\" Stop" }] }
+        ] } });
+        let after = merged(&old, &hook_entry);
+        let stop = after["hooks"]["Stop"].as_array().unwrap();
+        assert_eq!(stop.len(), 1, "the old entry must be replaced, not kept next to the new one");
+        assert_eq!(stop[0]["hooks"][0]["args"], json!(["Stop"]));
     }
 
     #[test]

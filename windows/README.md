@@ -70,6 +70,12 @@ It works wherever Claude Code runs — the Claude desktop app, VS Code, Windows
 Terminal, PowerShell, Git Bash. The Claude pill takes the name of the app the
 session is in, and its ↗ brings that app forward.
 
+The hooks are written in Claude Code's *exec form* (`"command"` is the relay's
+path, `"args"` the event name), so no shell is involved: they work the same
+whether Claude Code runs hooks through Git Bash or, on a PC without Git Bash,
+through PowerShell, and spaces in the path are no problem. The relay links the
+Visual C++ runtime statically, so it needs no Redistributable either.
+
 ### Watching a session
 
 <img src="screenshots/claude-card.png" width="640" alt="A session's card: the step under way with its icon and its file, and the lines it read">
@@ -178,7 +184,8 @@ one in the session folder — for a WSL session, a shell in its own distro
 (`wsl.exe -d <distro> --cd <folder>`). "Open Visual Studio Code" opens a WSL
 session through **Remote WSL**. The relay passes `WSL_DISTRO_NAME` through
 `WSLENV` for that.
-Each hook costs about 0.3 s for the WSL → Windows hop.
+Each hook costs about 0.3 s for the WSL → Windows hop. Its hooks stay in shell
+form (`sh "$HOME/…" <event>`): the Linux Claude Code relies on `$HOME`, and the exec form above is only for the Windows hooks.
 
 ## Chat and keys
 
