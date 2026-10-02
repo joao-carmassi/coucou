@@ -145,15 +145,22 @@ fn version_key(name: &str) -> Vec<u64> {
 /// (Coucou is often launched from a Claude Code session): CLAUDE_CODE_CHILD_SESSION
 /// and friends make it a "child" with transcript saving off, so `--resume` would
 /// find nothing. Same for the parent's terminal identity (WT_SESSION, TERM…),
-/// which describe a window this process is not in. CLAUDE_CONFIG_DIR is the
-/// user's own choice and stays.
+/// which describe a window this process is not in, and NO_COLOR/FORCE_COLOR,
+/// which Claude Code sets for the commands it runs (a white, colorless claude).
+/// CLAUDE_CONFIG_DIR is the user's own choice and stays.
 pub fn fresh_env(cmd: &mut Command) {
     for (key, _) in std::env::vars_os() {
         let name = key.to_string_lossy().to_ascii_uppercase();
         let inherited = (name.starts_with("CLAUDE") && name != "CLAUDE_CONFIG_DIR")
             || matches!(
                 name.as_str(),
-                "WT_SESSION" | "WT_PROFILE_ID" | "TERM" | "TERM_PROGRAM" | "TERM_PROGRAM_VERSION"
+                "WT_SESSION"
+                    | "WT_PROFILE_ID"
+                    | "TERM"
+                    | "TERM_PROGRAM"
+                    | "TERM_PROGRAM_VERSION"
+                    | "NO_COLOR"
+                    | "FORCE_COLOR"
             );
         if inherited {
             cmd.env_remove(&key);
