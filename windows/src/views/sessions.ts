@@ -91,6 +91,11 @@ export function buildSessionsPanel(onChange: () => void): SessionsPanel {
     menu.append(
       h("button", {
         class: "sess-row sess-new",
+        title: "Start an empty conversation, with no folder and no file",
+        onclick: () => void newChat(),
+      }, h("span", { class: "sess-title", text: "+ New chat" })),
+      h("button", {
+        class: "sess-row sess-new",
         title: "Pick a folder for a new session — or drop a file on Mochi to start one about it",
         onclick: () => void newInFolder(),
       }, h("span", { class: "sess-title", text: "+ New in a folder…" })),
@@ -147,6 +152,23 @@ export function buildSessionsPanel(onChange: () => void): SessionsPanel {
       State.droppedFile = null;
       State.promptContext = null;
       await loadHistory(s.id);
+      error = "";
+      setOpen(false);
+    } catch (err) {
+      error = message(err);
+    }
+    drawMenu();
+    onChange();
+  }
+
+  /** A blank conversation in the inbox: nothing carried over from the last one. */
+  async function newChat() {
+    try {
+      await Bridge.chatReset();
+      State.activeSession = null;
+      State.droppedFile = null;
+      State.promptContext = null;
+      State.chatHistory = [];
       error = "";
       setOpen(false);
     } catch (err) {
