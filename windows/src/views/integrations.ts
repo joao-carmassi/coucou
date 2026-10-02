@@ -66,14 +66,22 @@ function idleCard(task: AgentTask, openSettings: () => void): HTMLElement {
 
   const actions = h("div", { class: "int-actions" });
   if (task.id === "integration_claude") {
+    const desktop = State.session.client === "desktop";
+    const terminal = !desktop && State.settings.idleOpen === "terminal";
     actions.append(
       h("button", {
         class: "link-btn",
         style: `color:${task.color}b3`,
-        // The app the last session ran in; Visual Studio Code until one has.
-        text: State.session.client === "desktop" ? "Open Claude" : "Open Visual Studio Code",
+        // The app the last session ran in; otherwise what Settings picked
+        // (Visual Studio Code, or Claude Code in a new terminal).
+        text: desktop ? "Open Claude" : terminal ? "Open terminal" : "Open Visual Studio Code",
         onclick: () =>
-          void (State.session.client === "desktop" ? Bridge.openClaudeApp() : Bridge.openInVSCode(State.session.cwd, State.session.wslDistro)),
+          void (desktop
+            ? Bridge.openClaudeApp()
+            : terminal
+              // No Claude Code to start: the click still opens something.
+              ? Bridge.startClaudeTerminal().then((ok) => ok || Bridge.openInVSCode(State.session.cwd, State.session.wslDistro))
+              : Bridge.openInVSCode(State.session.cwd, State.session.wslDistro)),
       }),
     );
   } else if (task.id === "integration_n8n") {

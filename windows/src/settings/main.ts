@@ -103,6 +103,28 @@ function accountRow(): HTMLElement {
   );
 }
 
+/** What the idle Claude card opens when no session is going. */
+function idleOpenRow(cli: string | null): HTMLElement {
+  const select = h("select", {}) as HTMLSelectElement;
+  select.append(
+    h("option", { value: "", text: "Visual Studio Code" }),
+    h("option", { value: "terminal", text: "Terminal (Claude Code)" }),
+  );
+  const term = select.options[1];
+  term.disabled = !cli;
+  if (!cli) term.title = "Claude Code isn't installed on Windows.";
+  select.value = settings.idleOpen === "terminal" && cli ? "terminal" : "";
+  select.addEventListener("change", () => {
+    settings.idleOpen = select.value;
+    void save();
+  });
+  return h("div", { class: "row" },
+    h("label", { text: "Idle button opens" }),
+    select,
+    h("span", { class: "hint", text: "With no session going. Terminal starts Claude Code in your home folder, on the account above." }),
+  );
+}
+
 function mochiRow(backend: string, cli: string | null, missing: string): HTMLElement {
   const sw = h("button", { class: settings.chatBackend === backend ? "switch on" : "switch" });
   engineSwitches.push({ backend, el: sw });
@@ -249,6 +271,7 @@ function claudeSection(status: HookStatus): HTMLElement {
       ),
       mochiRow("windows", status.claudeCli, "Claude Code isn't installed on Windows."),
       accountRow(),
+      idleOpenRow(status.claudeCli),
     );
 
     if (!status.hookReady) {

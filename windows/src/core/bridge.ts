@@ -68,6 +68,8 @@ export const Bridge = {
    */
   openTerminal: (path: string | null, wslDistro: string | null, terminalPids: number[]) =>
     call<boolean>("open_terminal", { path, wslDistro, terminalPids }),
+  /** Idle "Open terminal": Claude Code in a new terminal, in the home folder. */
+  startClaudeTerminal: () => call<boolean>("start_claude_terminal"),
 
   quit: () => call<void>("quit_app"),
 

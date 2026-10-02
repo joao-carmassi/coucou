@@ -281,6 +281,8 @@ export interface Settings {
   chatBackend: string;
   /** A second Claude account: Claude Code's config folder on Windows; empty = the default. */
   claudeConfigDir: string;
+  /** What the idle Claude card opens: "" = Visual Studio Code, "terminal" = Claude Code in a terminal. */
+  idleOpen: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -298,6 +300,7 @@ export const DEFAULT_SETTINGS: Settings = {
   githubMuted: [],
   chatBackend: "api",
   claudeConfigDir: "",
+  idleOpen: "",
 };
 
 type Listener = () => void;
@@ -415,7 +418,8 @@ class AppState {
 
   /** The Claude pill's name: the app of the session it follows. */
   get clientName(): string {
-    return this.session.client ? CLIENT_NAMES[this.session.client] : CLIENT_UNKNOWN;
+    if (this.session.client) return CLIENT_NAMES[this.session.client];
+    return this.settings.idleOpen === "terminal" ? CLIENT_NAMES.terminal : CLIENT_UNKNOWN;
   }
 
   /** The files the session being followed has changed, the last touched first. */

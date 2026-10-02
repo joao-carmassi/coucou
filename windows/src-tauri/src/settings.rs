@@ -39,6 +39,10 @@ pub struct Settings {
     /// sign-in and sessions in (`CLAUDE_CONFIG_DIR`). Empty = the default `~/.claude`.
     #[serde(default)]
     pub claude_config_dir: String,
+    /// What the idle Claude card opens: "" = Visual Studio Code, "terminal" =
+    /// Claude Code in a new terminal, in the home folder.
+    #[serde(default)]
+    pub idle_open: String,
     /// The session Mochi's chat is in, kept across restarts. Owned by Rust.
     #[serde(default)]
     pub mochi_session: Option<crate::local_claude::ActiveSession>,
@@ -74,6 +78,7 @@ impl Default for Settings {
             wsl_prompted: false,
             chat_backend: default_backend(),
             claude_config_dir: String::new(),
+            idle_open: String::new(),
             mochi_session: None,
         }
     }

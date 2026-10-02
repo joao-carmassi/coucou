@@ -275,6 +275,21 @@ fn open_terminal(
 }
 
 /// The distro and Linux folder of a WSL session, or `None` for a Windows one.
+/// Idle "Open terminal": a fresh console running Claude Code in the home folder,
+/// on the account from "Account folder". Never reuses a window. Spawned
+/// directly rather than through wt.exe, which may hand the tab to a running
+/// Terminal that would not see our CLAUDE_CONFIG_DIR.
+#[tauri::command]
+fn start_claude_terminal() -> bool {
+    let Some(cli) = local_claude::windows_cli() else { return false };
+    let mut cmd = Command::new(cli);
+    cmd.current_dir(platform::home_dir());
+    if let Some(dir) = settings::claude_config_dir() {
+        cmd.env("CLAUDE_CONFIG_DIR", dir);
+    }
+    cmd.creation_flags(CREATE_NEW_CONSOLE).spawn().is_ok()
+}
+
 fn wsl_target(distro: Option<String>, path: Option<&str>) -> Option<(String, &str)> {
     distro
         .filter(|d| wsl::is_distro_name(d))
@@ -785,6 +800,7 @@ pub fn run() {
             open_in_vscode,
             open_claude_app,
             open_terminal,
+            start_claude_terminal,
             quit_app,
             hooks_status,
             hooks_preview,
