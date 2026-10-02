@@ -100,6 +100,18 @@ export function buildSessionsPanel(onChange: () => void): SessionsPanel {
         onclick: () => void newInFolder(),
       }, h("span", { class: "sess-title", text: "+ New in a folder…" })),
     );
+    // The picked session can go on in a terminal: Windows' Claude Code only,
+    // since a WSL transcript means nothing to it.
+    const active = State.activeSession;
+    if (active?.id && State.settings.chatBackend === "windows") {
+      menu.append(
+        h("button", {
+          class: "sess-row sess-new",
+          title: "Open this conversation in a terminal, with Claude Code",
+          onclick: () => void continueInTerminal(active.id!, active.cwd ?? null),
+        }, h("span", { class: "sess-title", text: "↗ Continue in terminal" })),
+      );
+    }
     if (error) menu.append(h("div", { class: "sess-error", text: error }));
     for (const s of State.chatSessions) menu.append(row(s));
     if (State.chatSessions.length === 0 && !error) {
@@ -169,6 +181,18 @@ export function buildSessionsPanel(onChange: () => void): SessionsPanel {
       State.droppedFile = null;
       State.promptContext = null;
       State.chatHistory = [];
+      error = "";
+      setOpen(false);
+    } catch (err) {
+      error = message(err);
+    }
+    drawMenu();
+    onChange();
+  }
+
+  async function continueInTerminal(id: string, cwd: string | null) {
+    try {
+      await Bridge.resumeInTerminal(id, cwd);
       error = "";
       setOpen(false);
     } catch (err) {

@@ -126,6 +126,9 @@ export const Bridge = {
   sessionSelect: (id: string, cwd: string) => callOrThrow<void>("session_select", { id, cwd }),
   /** Erases the transcript — only after the island's second click. */
   sessionDelete: (id: string) => callOrThrow<void>("session_delete", { id }),
+  /** The session, carried on by an interactive Claude Code in a new terminal. */
+  resumeInTerminal: (id: string, cwd: string | null) =>
+    callOrThrow<void>("resume_in_terminal", { id, cwd }),
   /** Folder picker, then a new session there. `null` when cancelled. */
   sessionNewInFolder: () => callOrThrow<string | null>("session_new_in_folder"),
   chatReset: () => call<void>("chat_reset"),

@@ -279,6 +279,31 @@ fn open_terminal(
 /// on the account from "Account folder". Never reuses a window. Spawned
 /// directly rather than through wt.exe, which may hand the tab to a running
 /// Terminal that would not see our CLAUDE_CONFIG_DIR.
+/// The Ask tab's "Continue in terminal": the picked session, resumed by an
+/// interactive Claude Code in a new console, in that session's own folder
+/// (`--resume` looks sessions up by it), on the "Account folder" account.
+#[tauri::command]
+fn resume_in_terminal(id: String, cwd: Option<String>) -> Result<(), String> {
+    if !sessions::is_session_id(&id) {
+        return Err("Not a session id.".into());
+    }
+    let cli = local_claude::windows_cli().ok_or("Claude Code isn't installed on Windows.")?;
+    let dir = cwd
+        .map(std::path::PathBuf::from)
+        .filter(|p| p.is_absolute() && p.is_dir())
+        .unwrap_or_else(files::inbox_dir);
+    let mut cmd = Command::new(cli);
+    cmd.args(["--resume", &id]).current_dir(dir);
+    local_claude::fresh_env(&mut cmd);
+    if let Some(config) = settings::claude_config_dir() {
+        cmd.env("CLAUDE_CONFIG_DIR", config);
+    }
+    cmd.creation_flags(CREATE_NEW_CONSOLE)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Could not start Claude Code: {e}"))
+}
+
 #[tauri::command]
 fn start_claude_terminal() -> bool {
     let Some(cli) = local_claude::windows_cli() else { return false };
@@ -802,6 +827,7 @@ pub fn run() {
             open_claude_app,
             open_terminal,
             start_claude_terminal,
+            resume_in_terminal,
             quit_app,
             hooks_status,
             hooks_preview,
