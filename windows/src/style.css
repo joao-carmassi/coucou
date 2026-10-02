@@ -178,6 +178,21 @@ body {
   transition: opacity 0.25s ease-in-out;
 }
 
+/* Compact: one line on what Claude is doing, where the grid sits when Claude is alone. */
+#activity-line {
+  position: absolute;
+  height: 16px;
+  line-height: 16px;
+  font-size: 11px;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease-in-out;
+}
+
 /* A mini Mochi: the slot is the body, the canvas is larger and overflows it so
    hands, badges and particles are not cut off. */
 .mini {
@@ -414,6 +429,8 @@ body {
 .overview.solo > .left {
   flex: 1 1 auto;
   width: auto;
+  /* Else a long unwrapped command line widens the card past the island. */
+  min-width: 0;
 }
 
 .overview.solo > .right {

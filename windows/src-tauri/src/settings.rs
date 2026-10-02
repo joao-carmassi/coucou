@@ -46,6 +46,13 @@ pub struct Settings {
     /// The session Mochi's chat is in, kept across restarts. Owned by Rust.
     #[serde(default)]
     pub mochi_session: Option<crate::local_claude::ActiveSession>,
+    /// Seconds the minimized island waits before hiding. 0 = never hide.
+    #[serde(default = "default_compact_hide")]
+    pub compact_hide_interval: f64,
+}
+
+fn default_compact_hide() -> f64 {
+    60.0
 }
 
 fn default_backend() -> String {
@@ -80,6 +87,7 @@ impl Default for Settings {
             claude_config_dir: String::new(),
             idle_open: String::new(),
             mochi_session: None,
+            compact_hide_interval: default_compact_hide(),
         }
     }
 }

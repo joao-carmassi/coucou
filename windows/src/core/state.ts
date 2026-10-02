@@ -197,6 +197,9 @@ export interface ClaudeSession {
   wslDistro: string | null;
   /** The relay's ancestor processes; one of them owns the session's window. */
   terminalPids: number[];
+  /** Subagents running now, and how many were launched in this wave. */
+  agentsRunning: number;
+  agentsLaunched: number;
 }
 
 /** What a session is called before its folder is known. */
@@ -207,6 +210,7 @@ export function newSession(id: string): ClaudeSession {
     id, client: null, title: null, project: SESSION_UNNAMED, cwd: null, state: "idle",
     lines: [], steps: [], asked: null, answer: null, answeredAt: 0,
     approval: null, question: null, news: null, heardAt: 0, wslDistro: null, terminalPids: [],
+    agentsRunning: 0, agentsLaunched: 0,
   };
 }
 
@@ -272,6 +276,8 @@ export interface Settings {
   soundEnabled: boolean;
   soundVolume: number;
   autoCloseInterval: number;
+  /** Seconds minimized before hiding; 0 = never. */
+  compactHideInterval: number;
   absenceInterval: number;
   activeIntegrations: string[];
   screen: "primary" | "cursor";
@@ -293,6 +299,7 @@ export const DEFAULT_SETTINGS: Settings = {
   soundEnabled: true,
   soundVolume: 0.12,
   autoCloseInterval: 15,
+  compactHideInterval: 60,
   absenceInterval: 180,
   activeIntegrations: [
     "integration_resend", "integration_n8n", "integration_vercel", "integration_github",

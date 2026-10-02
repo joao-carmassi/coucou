@@ -834,6 +834,25 @@ function generalSection(): HTMLElement {
     void save();
   });
 
+  let lastHide = settings.compactHideInterval > 0 ? settings.compactHideInterval : 60;
+  const hide = h("input", {
+    type: "number", min: "10", max: "600", step: "1",
+    value: String(Math.round(lastHide)),
+    style: "width:72px",
+  }) as HTMLInputElement;
+  hide.disabled = settings.compactHideInterval <= 0;
+  hide.addEventListener("change", () => {
+    lastHide = Math.max(10, Math.min(600, Number(hide.value) || 60));
+    settings.compactHideInterval = lastHide;
+    hide.value = String(lastHide);
+    void save();
+  });
+  const hideNever = toggle(settings.compactHideInterval <= 0, (v) => {
+    hide.disabled = v;
+    settings.compactHideInterval = v ? 0 : lastHide;
+    void save();
+  });
+
   const screen = h("select", {}) as HTMLSelectElement;
   screen.append(
     h("option", { value: "primary", text: "Tela principal" }),
@@ -858,6 +877,12 @@ function generalSection(): HTMLElement {
       h("label", { text: "Fechar sozinha" }),
       autoClose,
       h("span", { class: "hint", text: "segundos depois de você sair da ilha" }),
+    ),
+    h("div", { class: "row" },
+      h("label", { text: "Ocultar sozinha" }),
+      hide,
+      h("span", { class: "hint", text: "segundos minimizada, depois some · nunca" }),
+      hideNever,
     ),
     h("div", { class: "row" },
       h("label", { text: "A ilha fica em" }),

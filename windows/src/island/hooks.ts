@@ -646,6 +646,7 @@ export function handleHook(island: Island, payload: HookPayload) {
         session.answeredAt = Date.now();
       }
       closeSteps(session, payload.last_message ?? null);
+      session.agentsRunning = session.agentsLaunched = 0;
       session.state = "finished";
       if (payload.message) say(session, payload.message.slice(0, LINE_CHARS));
       Sound.play("finish");
@@ -660,17 +661,22 @@ export function handleHook(island: Island, payload: HookPayload) {
 
     case "StopFailure":
       log(session, newStep("Error", "note", "A sessão parou com um erro.")).state = "failed";
+      session.agentsRunning = session.agentsLaunched = 0;
       session.state = "error";
       Sound.play("error");
       tell("error");
       break;
 
     case "SubagentStart":
+      session.agentsRunning++;
+      session.agentsLaunched++;
       say(session, "+ subagente");
       log(session, newStep("Subagent", "note", "Um subagente começou."));
       break;
 
     case "SubagentStop":
+      session.agentsRunning = Math.max(0, session.agentsRunning - 1);
+      if (!session.agentsRunning) session.agentsLaunched = 0;
       say(session, "• subagente concluiu");
       log(session, newStep("Subagent", "note", "Um subagente terminou."));
       break;

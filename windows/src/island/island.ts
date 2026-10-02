@@ -24,6 +24,7 @@ import { followNews } from "./integrations";
 import { h } from "../views/dom";
 import { usesSessions } from "../views/sessions";
 import { IslandStateMachine, type FsmState } from "./fsm";
+import { activityLine } from "./activity";
 
 const BOT_OVERHANG = 40;
 /** Same margin as the Rust hit test (src-tauri/src/island.rs). */
@@ -54,6 +55,7 @@ export class Island {
   private botGlow!: HTMLElement;
   private greetingCanvas!: HTMLCanvasElement;
   private miniGrid!: HTMLElement;
+  private activityEl!: HTMLElement;
   private countdown!: HTMLElement;
   private wakeStrip!: HTMLElement;
 
@@ -254,6 +256,7 @@ export class Island {
     this.botCanvas = h("canvas", { id: "bot-canvas" });
     this.greetingCanvas = h("canvas", { id: "greeting-canvas" });
     this.miniGrid = h("div", { id: "mini-grid" });
+    this.activityEl = h("div", { id: "activity-line" });
     this.countdown = h("div", { id: "countdown" });
 
     this.header = buildHeader(actions);
@@ -287,6 +290,7 @@ export class Island {
       this.botGlow,
       this.botCanvas,
       this.miniGrid,
+      this.activityEl,
       this.countdown,
     );
 
@@ -305,6 +309,7 @@ export class Island {
 
   private wireFsm() {
     this.fsm.homeToPetitDelay = State.settings.autoCloseInterval;
+    this.fsm.petitToHiddenDelay = State.settings.compactHideInterval;
     // A session at work keeps the compact island up; one silent for 15 min is presumed dead.
     this.fsm.keepAwake = () => State.sessions.some(
       (s) => (s.state === "working" || s.state === "thinking") && Date.now() - s.heardAt < 15 * 60_000,
@@ -778,6 +783,9 @@ export class Island {
     // the state-driven DOM sync.
     this.miniGrid.style.left = `${w - 40 - 14.5}px`;
     this.miniGrid.style.top = `${hh / 2 - 14.5}px`;
+    this.activityEl.style.left = "58px";
+    this.activityEl.style.width = `${Math.max(0, w - 58 - 12)}px`;
+    this.activityEl.style.top = `${hh / 2 - 8}px`;
     this.greetingCanvas.style.left = `${(w - EXPANDED_W) / 2}px`;
     this.uploadCanvas.el.style.left = `${(w - EXPANDED_W) / 2}px`;
 
@@ -1245,6 +1253,10 @@ export class Island {
       }
     }
 
+    const line = State.mode === "compact" && State.otherTasks.length === 0 ? activityLine(State.session) : "";
+    this.activityEl.style.opacity = line ? "1" : "0";
+    if (line && this.activityEl.textContent !== line) this.activityEl.textContent = line;
+
     syncMiniBotStates(State.tasks);
     // A view's look fills in for a Mochi with nothing of his own to say: idle,
     // or only "working" — which the view, closer to what it shows, knows better.
@@ -1258,6 +1270,9 @@ export class Island {
     Sound.setEnabled(State.settings.soundEnabled);
     Sound.setVolume(State.settings.soundVolume);
     this.fsm.homeToPetitDelay = State.settings.autoCloseInterval;
+    this.fsm.petitToHiddenDelay = State.settings.compactHideInterval;
+    // Re-arm with the new delay (or cancel it, for "never") if already minimized.
+    if (this.fsm.state === "petit" && !this.wasInIsland) this.fsm.mouseLeft();
     State.notify();
   }
 

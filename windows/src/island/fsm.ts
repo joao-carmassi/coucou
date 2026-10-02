@@ -108,6 +108,7 @@ export class IslandStateMachine {
 
   private schedulePetitHide() {
     this.clear("petitHide");
+    if (this.petitToHiddenDelay <= 0) return;
     this.petitHide = window.setTimeout(() => {
       this.petitHide = null;
       if (this.state !== "petit") return;
