@@ -35,6 +35,10 @@ pub struct Settings {
     /// Windows) or "wsl:<distro>" (Claude Code inside that distro).
     #[serde(default = "default_backend")]
     pub chat_backend: String,
+    /// A second Claude account: the folder Claude Code on Windows keeps its
+    /// sign-in and sessions in (`CLAUDE_CONFIG_DIR`). Empty = the default `~/.claude`.
+    #[serde(default)]
+    pub claude_config_dir: String,
     /// The session Mochi's chat is in, kept across restarts. Owned by Rust.
     #[serde(default)]
     pub mochi_session: Option<crate::local_claude::ActiveSession>,
@@ -69,6 +73,7 @@ impl Default for Settings {
             wsl_hooks: Vec::new(),
             wsl_prompted: false,
             chat_backend: default_backend(),
+            claude_config_dir: String::new(),
             mochi_session: None,
         }
     }
@@ -88,6 +93,21 @@ pub fn load() -> Settings {
     match std::fs::read(settings_path()) {
         Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_default(),
         Err(_) => Settings::default(),
+    }
+}
+
+/// The folder set in "Account folder", `~` expanded; `None` for the default.
+pub fn claude_config_dir() -> Option<PathBuf> {
+    let dir = load().claude_config_dir;
+    let dir = dir.trim();
+    if dir.is_empty() {
+        return None;
+    }
+    match dir.strip_prefix('~') {
+        Some(rest) if rest.is_empty() || rest.starts_with(['/', '\\']) => {
+            Some(crate::platform::home_dir().join(rest.trim_start_matches(['/', '\\'])))
+        }
+        _ => Some(PathBuf::from(dir)),
     }
 }
 

@@ -150,6 +150,9 @@ pub fn logged_in(backend: &Backend) -> Option<bool> {
         Backend::Windows => {
             let mut c = Command::new(windows_cli()?);
             c.args(["auth", "status"]);
+            if let Some(dir) = crate::settings::claude_config_dir() {
+                c.env("CLAUDE_CONFIG_DIR", dir);
+            }
             c
         }
         Backend::Wsl(distro) => {
@@ -226,6 +229,9 @@ pub fn send(
                 .ok_or("Claude Code isn't installed on Windows. Pick another engine in Settings.")?;
             let mut c = Command::new(cli);
             c.args(&args).current_dir(&cwd);
+            if let Some(dir) = crate::settings::claude_config_dir() {
+                c.env("CLAUDE_CONFIG_DIR", dir);
+            }
             c
         }
         Backend::Wsl(distro) => {

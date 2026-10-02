@@ -83,6 +83,26 @@ function signInNotice(backend: string, cli: string): HTMLElement {
   );
 }
 
+/** A second Claude account: where Claude Code on Windows keeps its sign-in and sessions. */
+function accountRow(): HTMLElement {
+  const field = h("input", {
+    type: "text",
+    value: settings.claudeConfigDir,
+    placeholder: "~/.claude",
+    style: "flex:1 1 auto;min-width:0",
+    spellcheck: "false",
+  }) as HTMLInputElement;
+  field.addEventListener("change", () => {
+    settings.claudeConfigDir = field.value.trim();
+    void save();
+  });
+  return h("div", { class: "row" },
+    h("label", { text: "Account folder" }),
+    field,
+    h("span", { class: "hint", text: "Optional. Another Claude Code config folder, for Mochi's chat and sessions. Empty = the default." }),
+  );
+}
+
 function mochiRow(backend: string, cli: string | null, missing: string): HTMLElement {
   const sw = h("button", { class: settings.chatBackend === backend ? "switch on" : "switch" });
   engineSwitches.push({ backend, el: sw });
@@ -228,6 +248,7 @@ function claudeSection(status: HookStatus): HTMLElement {
         statusDot(status.hookReady),
       ),
       mochiRow("windows", status.claudeCli, "Claude Code isn't installed on Windows."),
+      accountRow(),
     );
 
     if (!status.hookReady) {

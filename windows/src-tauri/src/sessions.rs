@@ -50,9 +50,12 @@ pub struct HistoryItem {
 fn projects_dir(backend: &Backend) -> Result<PathBuf, String> {
     match backend {
         Backend::Api => Err("Sessions need Claude Code: turn on \"Use for Mochi\" in Settings.".into()),
-        Backend::Windows => std::env::var_os("USERPROFILE")
-            .map(|h| PathBuf::from(h).join(".claude").join("projects"))
-            .ok_or_else(|| "No user profile.".into()),
+        Backend::Windows => match crate::settings::claude_config_dir() {
+            Some(dir) => Ok(dir.join("projects")),
+            None => std::env::var_os("USERPROFILE")
+                .map(|h| PathBuf::from(h).join(".claude").join("projects"))
+                .ok_or_else(|| "No user profile.".into()),
+        },
         Backend::Wsl(distro) => Ok(crate::wsl::home_unc(distro)?.join(".claude").join("projects")),
     }
 }

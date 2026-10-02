@@ -279,6 +279,8 @@ export interface Settings {
   githubMuted: string[];
   /** Mochi's chat engine: "api", "windows" or "wsl:<distro>" (local Claude Code). */
   chatBackend: string;
+  /** A second Claude account: Claude Code's config folder on Windows; empty = the default. */
+  claudeConfigDir: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -295,6 +297,7 @@ export const DEFAULT_SETTINGS: Settings = {
   model: "claude-opus-5",
   githubMuted: [],
   chatBackend: "api",
+  claudeConfigDir: "",
 };
 
 type Listener = () => void;
