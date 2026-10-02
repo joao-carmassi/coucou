@@ -783,8 +783,8 @@ export class Island {
     // the state-driven DOM sync.
     this.miniGrid.style.left = `${w - 40 - 14.5}px`;
     this.miniGrid.style.top = `${hh / 2 - 14.5}px`;
-    this.activityEl.style.left = "58px";
-    this.activityEl.style.width = `${Math.max(0, w - 58 - 12)}px`;
+    this.activityEl.style.left = "61px";
+    this.activityEl.style.width = `${Math.max(0, w - 61 - 12)}px`;
     this.activityEl.style.top = `${hh / 2 - 8}px`;
     this.greetingCanvas.style.left = `${(w - EXPANDED_W) / 2}px`;
     this.uploadCanvas.el.style.left = `${(w - EXPANDED_W) / 2}px`;
