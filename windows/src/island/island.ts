@@ -304,6 +304,10 @@ export class Island {
 
   private wireFsm() {
     this.fsm.homeToPetitDelay = State.settings.autoCloseInterval;
+    // A session at work keeps the compact island up; one silent for 15 min is presumed dead.
+    this.fsm.keepAwake = () => State.sessions.some(
+      (s) => (s.state === "working" || s.state === "thinking") && Date.now() - s.heardAt < 15 * 60_000,
+    );
     this.fsm.onTransition = (from, to) => {
       switch (to) {
         case "hidden":
