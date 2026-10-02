@@ -104,7 +104,7 @@ export const Bridge = {
   /** Is that Claude Code signed in? (`claude auth status`; null when unknown) */
   claudeLoggedIn: (target: string) => call<boolean>("claude_logged_in", { target }),
 
-  approvalDecision: (requestId: string, decision: "allow" | "deny" | "skip") =>
+  approvalDecision: (requestId: string, decision: "allow" | "deny" | "skip" | "plan-keep" | "plan-manual" | "plan-auto") =>
     call<void>("approval_decision", { requestId, decision }),
   /** "The card is up" — until this lands the relay only waits a moment. */
   approvalAck: (requestId: string) => call<void>("approval_ack", { requestId }),

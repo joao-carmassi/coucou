@@ -3430,6 +3430,11 @@ button.gh-block:hover {
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
 
+/* A plan waiting for approval, in the same box as a diff. */
+.proposed > .md {
+  padding: 8px 10px;
+}
+
 /* The session's last steps, under its name: done, going, failed. */
 .sess-steps {
   display: flex;

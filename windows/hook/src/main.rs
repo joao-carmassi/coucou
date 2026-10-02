@@ -44,6 +44,11 @@ const MAX_RESULT_LINE: usize = 240;
 /// The tool Claude asks its questions with. Its input goes back whole, with the
 /// answers added, so it is kept as it came.
 const QUESTION_TOOL: &str = "AskUserQuestion";
+/// The tool Claude ends planning with. Like the question tool, Claude Code only
+/// takes a hook's allow for it with its input given back, so it is kept too.
+const PLAN_TOOL: &str = "ExitPlanMode";
+/// Longest plan forwarded for the island to show, in characters.
+const MAX_PLAN: usize = 30_000;
 /// Longest diff forwarded for one change, and longest line in it.
 const MAX_PATCH: usize = 12_000;
 const MAX_PATCH_LINE: usize = 400;
@@ -116,6 +121,8 @@ fn decision_json(decision: &str) -> Option<String> {
         // A question the user chose not to answer: Claude is told so, and decides
         // what to do without the answer.
         "skip" => r#"{"behavior":"deny","message":"The user skipped this question from Coucou, without answering it."}"#.to_string(),
+        // A plan sent back: Claude stays in plan mode and asks what to change.
+        "plan-keep" => r#"{"behavior":"deny","message":"The user wants to keep planning. Ask what to change in the plan."}"#.to_string(),
         _ => return None,
     };
     Some(format!(
@@ -129,10 +136,24 @@ fn decision_json(decision: &str) -> Option<String> {
 /// keyed by question.
 fn reply_json(answer: &str, tool_input: Option<&serde_json::Value>) -> Option<String> {
     let answer = answer.trim();
-    match answer.strip_prefix("answer ") {
-        Some(answers) => answered_json(answers, tool_input?),
-        None => decision_json(answer),
+    match answer {
+        "plan-manual" => plan_json(tool_input?, None),
+        "plan-auto" => plan_json(tool_input?, Some("auto")),
+        _ => match answer.strip_prefix("answer ") {
+            Some(answers) => answered_json(answers, tool_input?),
+            None => decision_json(answer),
+        },
     }
+}
+
+/// Approves a plan: its input as Claude sent it, without which Claude Code
+/// ignores the allow and asks in the terminal anyway, and the mode to carry on in.
+fn plan_json(tool_input: &serde_json::Value, mode: Option<&str>) -> Option<String> {
+    let mut decision = serde_json::json!({ "behavior": "allow", "updatedInput": tool_input.as_object()? });
+    if let Some(mode) = mode {
+        decision["updatedPermissions"] = serde_json::json!([{ "type": "setMode", "mode": mode, "destination": "session" }]);
+    }
+    Some(serde_json::json!({ "hookSpecificOutput": { "hookEventName": "PermissionRequest", "decision": decision } }).to_string())
 }
 
 /// Allows the question tool with its input as Claude sent it plus `answers`:
@@ -486,7 +507,11 @@ fn read_event() -> Option<Event> {
     let result = (event == "PostToolUse")
         .then(|| map.get("tool_response").and_then(|response| result_of(&tool, response)))
         .flatten();
-    let tool_input = (tool == QUESTION_TOOL).then(|| map.get("tool_input").cloned()).flatten();
+    let tool_input = (tool == QUESTION_TOOL || tool == PLAN_TOOL).then(|| map.get("tool_input").cloned()).flatten();
+    // A plan waiting for approval: shown whole on the island, not cut like a field.
+    let plan = (event == "PermissionRequest" && tool == PLAN_TOOL)
+        .then(|| map.get("tool_input").and_then(|input| input.get("plan")).and_then(|v| v.as_str()).map(|text| clip(text, MAX_PLAN)))
+        .flatten();
     // A question that got its answers, wherever they were picked: the island's
     // journal shows them under the question.
     let answers = (event == "PostToolUse" && tool == QUESTION_TOOL)
@@ -571,6 +596,9 @@ fn read_event() -> Option<Event> {
     }
     if let Some(result) = result {
         payload["result"] = result;
+    }
+    if let Some(plan) = plan {
+        payload["plan"] = serde_json::Value::String(plan);
     }
     if let Some(title) = title {
         payload["session_title"] = serde_json::Value::String(title);
@@ -678,6 +706,23 @@ mod tests {
         assert!(reply_json(r#"answer {"a":"b"}"#, None).is_none());
         assert!(reply_json("answer nonsense", Some(&input)).is_none());
         assert_eq!(reply_json("deny", None), decision_json("deny"));
+    }
+
+    #[test]
+    fn a_plan_is_approved_with_its_input_and_the_mode_picked() {
+        let input = serde_json::json!({ "plan": "# Plan" });
+        let v: serde_json::Value = serde_json::from_str(&reply_json("plan-auto", Some(&input)).unwrap()).unwrap();
+        let decision = &v["hookSpecificOutput"]["decision"];
+        assert_eq!(decision["behavior"], "allow");
+        assert_eq!(decision["updatedInput"]["plan"], "# Plan");
+        assert_eq!(decision["updatedPermissions"][0]["type"], "setMode");
+        assert_eq!(decision["updatedPermissions"][0]["mode"], "auto");
+        let v: serde_json::Value = serde_json::from_str(&reply_json("plan-manual", Some(&input)).unwrap()).unwrap();
+        assert_eq!(v["hookSpecificOutput"]["decision"]["updatedInput"]["plan"], "# Plan");
+        assert!(v["hookSpecificOutput"]["decision"].get("updatedPermissions").is_none());
+        // Without the input Claude Code would ignore the allow: say nothing instead.
+        assert!(reply_json("plan-auto", None).is_none());
+        assert!(reply_json("plan-keep", None).unwrap().contains(r#""behavior":"deny""#));
     }
 
     #[test]

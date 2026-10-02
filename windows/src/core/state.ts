@@ -29,6 +29,8 @@ export interface ApprovalInfo {
   command: string;
   /** For an edit: what it would do to its file, to read before allowing it. */
   proposal: FileProposal | null;
+  /** For the end of plan mode: the plan, to read before approving it. */
+  plan: string | null;
 }
 
 /** An edit that has not happened yet, as the diff it would make. */
@@ -105,6 +107,8 @@ export interface StepResult {
 
 /** The tool Claude asks its questions with. */
 export const QUESTION_TOOL = "AskUserQuestion";
+/** The tool Claude ends plan mode with: its approval card shows the plan. */
+export const PLAN_TOOL = "ExitPlanMode";
 
 /** The step that closes a turn, in the place of a tool's name. */
 export const TURN_DONE = "Done";

@@ -12,7 +12,7 @@
 import { Bridge, onEvent } from "../core/bridge";
 import { Sound } from "../core/sound";
 import {
-  CLAUDE_ID, QUESTION_TOOL, SESSION_UNNAMED, State, TURN_DONE, newSession, newStep,
+  CLAUDE_ID, PLAN_TOOL, QUESTION_TOOL, SESSION_UNNAMED, State, TURN_DONE, newSession, newStep,
   type ChangedFile, type ClaudeClient, type ClaudeSession, type Question, type StepKind, type StepResult,
 } from "../core/state";
 import type { IslandViewName } from "../core/layout";
@@ -54,6 +54,8 @@ export interface HookPayload {
   /** What was picked for each question of Claude's question tool — added by coucou-hook to PostToolUse. */
   answers?: Record<string, string>;
   /** What an edit asking for permission would do — added by coucou-hook to PermissionRequest. */
+  /** ExitPlanMode asking for approval: the plan, whole (coucou-hook). */
+  plan?: string;
   proposal?: { patch: string; additions: number; deletions: number; truncated: boolean; created: boolean };
   /** The conversation's title, read by coucou-hook from the session's transcript. */
   session_title?: string;
@@ -694,7 +696,8 @@ export function handleHook(island: Island, payload: HookPayload) {
         const file = input.file_path;
         const proposal =
           payload.proposal && typeof file === "string" ? { path: sessionPath(file, cwd), ...payload.proposal } : null;
-        session.approval = { requestId, sessionId: session.id, tool, command: approvalTarget(tool, input), proposal };
+        const plan = tool === PLAN_TOOL ? (payload.plan ?? "") : null;
+        session.approval = { requestId, sessionId: session.id, tool, command: approvalTarget(tool, input), proposal, plan };
       }
       // The journal says the tool had to ask, and later what it was told.
       const asking = goingStep(session, tool);

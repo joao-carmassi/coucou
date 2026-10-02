@@ -175,9 +175,10 @@ export class Island {
         const req = State.pendingApproval;
         void Bridge.log(`decide ${d} req=${req?.requestId ?? "none"}`);
         if (!req) return;
-        Sound.play(d === "deny" ? "blip" : "approve");
+        const denied = d === "deny" || d === "plan-keep";
+        Sound.play(denied ? "blip" : "approve");
         void Bridge.approvalDecision(req.requestId, d);
-        this.noteOutcome(req.tool, (step) => (step.permission = d === "deny" ? "denied" : "allowed"));
+        this.noteOutcome(req.tool, (step) => (step.permission = denied ? "denied" : "allowed"));
         this.settleRequest();
       },
       answer: (answers) => {

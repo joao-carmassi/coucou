@@ -13,6 +13,7 @@ import { renderIntegrationCard, type GithubOpening, type IntegrationCardHooks } 
 import { buildGithub, enterGithubPanel, newsFacts } from "./github";
 import { buildSession, sessionName, sessionsChip } from "./session";
 import { diffLine, fileKind, plusMinus, readPatch } from "./code";
+import { markdown } from "./markdown";
 import { hasPreview, stepIcon, stepName, stepPreview } from "./step";
 import { COLOR } from "./palette";
 import type { IntegrationNews } from "../core/bridge";
@@ -25,7 +26,7 @@ export interface ViewActions {
   /** The ↗ button: opens whatever the focused pill points at. */
   openTarget(): void;
   openUrl(url: string): void;
-  decide(d: "allow" | "deny"): void;
+  decide(d: "allow" | "deny" | "plan-keep" | "plan-manual" | "plan-auto"): void;
   toggleSound(): void;
   setVolume(v: number): void;
   setAutoClose(seconds: number): void;
@@ -548,11 +549,13 @@ function buildApproval(actions: ViewActions, onResize: () => void): ViewHost {
     el,
     // With a diff the island is as tall as the window allows, and the diff takes what is left.
     get height() {
-      return State.pendingApproval?.proposal ? undefined : air.height;
+      const approval = State.pendingApproval;
+      return approval?.proposal || approval?.plan ? undefined : air.height;
     },
     sync() {
       const approval = State.pendingApproval;
       const proposal = approval?.proposal ?? null;
+      const plan = approval?.plan ?? null;
       clear(who);
       const asking = sessionWho("needs permission");
       if (proposal) asking.append(plusMinus(proposal.additions, proposal.deletions));
@@ -560,20 +563,26 @@ function buildApproval(actions: ViewActions, onResize: () => void): ViewHost {
       // The whole point of approving here rather than in the terminal: this line
       // is the command, the file path or the URL being authorised, not just the
       // name of the tool asking.
-      code.textContent = proposal
-        ? `${approval?.tool} · ${proposal.path}${proposal.created ? " · new file" : ""}`
-        : approval?.command || approval?.tool || "…";
+      code.textContent = plan != null
+        ? "Plan ready for review"
+        : proposal
+          ? `${approval?.tool} · ${proposal.path}${proposal.created ? " · new file" : ""}`
+          : approval?.command || approval?.tool || "…";
       // What that edit would do, line by line, before it is allowed. Drawn once
       // per request: a list redrawn under the mouse would lose its scroll.
-      proposed.style.display = proposal ? "" : "none";
+      proposed.style.display = proposal || plan ? "" : "none";
       // A diff takes all the room it is given: the card keeps the air a
       // card has above its first line and under its buttons.
-      lines.classList.toggle("airy", proposal != null);
-      const nextProposed = proposal ? (approval?.requestId ?? "") : "";
+      lines.classList.toggle("airy", proposal != null || !!plan);
+      const nextProposed = proposal || plan ? (approval?.requestId ?? "") : "";
       if (nextProposed !== proposedKey) {
         proposedKey = nextProposed;
         clear(proposed);
-        if (proposal) {
+        // A plan waiting to be approved: read here, as it reads in Claude Code.
+        if (plan) {
+          proposed.append(markdown(plan));
+          proposed.scrollTop = 0;
+        } else if (proposal) {
           const kind = fileKind(proposal.path);
           const diff = h("div", { class: "gh-diff" });
           for (const line of readPatch(proposal.patch)) {
@@ -590,16 +599,26 @@ function buildApproval(actions: ViewActions, onResize: () => void): ViewHost {
           proposed.scrollTop = first ? Math.max(0, first.offsetTop - diff.offsetTop - first.offsetHeight) : 0;
         }
       }
-      // Two buttons, built once. Rebuilding them between a mouse-down and a
-      // mouse-up would swallow the click, and there is nothing left to vary:
-      // "Always" is gone until the remembered-rules list exists to back it.
-      if (rowKey !== "built") {
-        rowKey = "built";
+      // The buttons, built once per kind of request. Rebuilding them between a
+      // mouse-down and a mouse-up would swallow the click. "Always" is gone
+      // until the remembered-rules list exists to back it.
+      const kind = plan != null ? "plan" : "tool";
+      if (rowKey !== kind) {
+        rowKey = kind;
         clear(row);
-        row.append(
-          btn("Deny", "secondary", () => actions.decide("deny"), "N"),
-          btn("Allow", "primary", () => actions.decide("allow"), "Y"),
-        );
+        if (kind === "plan") {
+          // What Claude Code offers at the end of plan mode, minus the typed feedback.
+          row.append(
+            btn("Keep planning", "secondary", () => actions.decide("plan-keep"), "N"),
+            btn("Manual", "secondary", () => actions.decide("plan-manual")),
+            btn("Auto mode", "primary", () => actions.decide("plan-auto"), "Y"),
+          );
+        } else {
+          row.append(
+            btn("Deny", "secondary", () => actions.decide("deny"), "N"),
+            btn("Allow", "primary", () => actions.decide("allow"), "Y"),
+          );
+        }
       }
       air.fit();
     },

@@ -300,6 +300,10 @@ pub fn answer(app: &AppHandle, request_id: &str, decision: &str) {
     let word = match decision {
         "allow" | "always" => "allow",
         "skip" => "skip",
+        // A plan: back to planning, or approved and in which mode.
+        "plan-keep" => "plan-keep",
+        "plan-manual" => "plan-manual",
+        "plan-auto" => "plan-auto",
         _ => "deny",
     };
     log::line(format!("decision id={request_id} {word}"));
