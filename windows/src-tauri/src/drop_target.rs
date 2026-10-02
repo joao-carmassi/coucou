@@ -6,7 +6,7 @@
 // "no drop" cursor and nothing reaching the island. Rather than chase whichever
 // window WebView2 picks in a given runtime version, every window of the island
 // that lives in our process gets this target, re-installed whenever a drag may
-// be starting (see `island::unblock_webview_drops`), and the island hears about
+// be starting (see `platform::unblock_webview_drops`), and the island hears about
 // drags through our own `file-drag` event.
 
 use std::cell::{Cell, RefCell};
@@ -186,7 +186,7 @@ fn own_descendants(root: HWND) -> Vec<HWND> {
 /// of hit-testing so the drag lands on WRY_WEBVIEW and our target; restores it
 /// when the drag ends. Main thread only.
 pub fn shield_webview(app: &AppHandle, on: bool) {
-    let Some(root) = crate::island::island_hwnd(app) else { return };
+    let Some(root) = crate::platform::island_hwnd(app) else { return };
     if on {
         install(app, root);
     }
