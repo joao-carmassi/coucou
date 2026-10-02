@@ -657,7 +657,15 @@ function buildQuestion(actions: ViewActions, onResize: () => void): ViewHost {
   // A question with more options than the window is tall for fills its card:
   // the list of options scrolls, and the card keeps its least air around it.
   lines.style.paddingTop = lines.style.paddingBottom = `${CARD_AIR_MIN}px`;
-  const el = h("div", { class: "view" }, card("cyan", lines));
+  // The ↗ of the overview: the way to the session, to read the conversation there.
+  const jump = h(
+    "button",
+    { class: "icon-btn jump", title: "Abrir a conversa", onclick: () => actions.openTerminal() },
+    svg(ICONS.arrowUpRight, 8),
+  );
+  // The who line runs under the ↗: it keeps clear of it.
+  who.style.paddingRight = "14px";
+  const el = h("div", { class: "view" }, card("cyan", lines, jump));
 
   /** The request all of this is about: a new one starts from the first question. */
   let request = "";
