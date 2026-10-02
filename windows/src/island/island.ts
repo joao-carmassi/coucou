@@ -105,6 +105,7 @@ export class Island {
   private botPress: { x: number; y: number } | null = null;
   private draggingGhost = false;
   private lastDown = false;
+  private pressedOutside = false;
   private ghostEl!: HTMLElement;
 
   private confusedRecovery: number | null = null;
@@ -870,6 +871,7 @@ export class Island {
     State.mouseInIsland = { x: x - rect.x, y: y - rect.y };
 
     const released = this.lastDown && !down;
+    const pressed = down && !this.lastDown;
     this.lastDown = down;
     if (this.botPress && down && Math.hypot(x - this.botPress.x, y - this.botPress.y) > 7) {
       this.startGhost(x, y);
@@ -879,6 +881,15 @@ export class Island {
       else this.moveGhost(x, y);
       this.ensureRunning();
       return; // no hover or auto-close bookkeeping mid-drag
+    }
+
+    // A click elsewhere on screen folds the island (#31). Judged on the release, so a file
+    // dragged in from Explorer and dropped on us isn't one; an approval/question (isPinned) keeps it.
+    const inRect = x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
+    if (pressed) this.pressedOutside = !inRect;
+    if (released && this.pressedOutside) {
+      this.pressedOutside = false;
+      if (!inRect && State.mode === "expanded" && !State.isPinned) this.collapse();
     }
     // A stale press (released off the island) must not turn a later drag into a ghost.
     if (released && this.botPress) this.onMouseUp(x, y);
