@@ -444,6 +444,8 @@ export class Island {
       const s = State.session;
       void Bridge.openTerminal(s.cwd, s.wslDistro, s.terminalPids);
     }
+    // The window is in front now: fold the island back.
+    this.collapse();
   }
 
   collapse() {
