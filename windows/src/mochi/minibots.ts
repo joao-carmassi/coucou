@@ -3,6 +3,7 @@
 
 import { BOT_STATES, BotEngine, hexToRGB } from "./engine";
 import type { BotStateName } from "../core/layout";
+import { wipe } from "../core/canvas";
 import type { AgentTask } from "../core/state";
 
 interface MiniBot {
@@ -116,7 +117,7 @@ export function tickMiniBots(dt: number) {
     if (!ctx) continue;
     mb.engine.update(dt);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, mb.cssSize, mb.cssSize);
+    wipe(ctx);
     mb.engine.draw(ctx, mb.cssSize, mb.cssSize);
   }
 }
