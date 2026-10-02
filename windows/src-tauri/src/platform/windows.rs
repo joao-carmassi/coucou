@@ -178,19 +178,19 @@ pub fn left_button_down() -> bool {
 /// refused, so a drop on the island never captures Coucou.
 pub fn capture_under_cursor() -> Result<(String, u32, u32, Vec<u8>), String> {
     let mut p = POINT::default();
-    unsafe { GetCursorPos(&mut p).map_err(|_| "Can't read the cursor.".to_string())? };
+    unsafe { GetCursorPos(&mut p).map_err(|_| "Não consegui ler o cursor.".to_string())? };
     // The whole top-level window, not the child control under the cursor.
     let hwnd = unsafe { GetAncestor(WindowFromPoint(p), GA_ROOT) };
     if hwnd.0.is_null() {
-        return Err("No window under Mochi.".into());
+        return Err("Não há janela embaixo do Mochi.".into());
     }
     let mut pid = 0u32;
     unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
     if pid == std::process::id() {
-        return Err("Drop Mochi on another app's window.".into());
+        return Err("Solte o Mochi na janela de outro app.".into());
     }
     if unsafe { IsIconic(hwnd) }.as_bool() {
-        return Err("That window is minimized.".into());
+        return Err("Essa janela está minimizada.".into());
     }
 
     // The visible frame: GetWindowRect includes Win11's invisible border and the
@@ -205,17 +205,17 @@ pub fn capture_under_cursor() -> Result<(String, u32, u32, Vec<u8>), String> {
         )
     };
     if dwm.is_err() {
-        unsafe { GetWindowRect(hwnd, &mut rect).map_err(|_| "Can't read the window size.".to_string())? };
+        unsafe { GetWindowRect(hwnd, &mut rect).map_err(|_| "Não consegui ler o tamanho da janela.".to_string())? };
     }
     let (w, h) = (rect.right - rect.left, rect.bottom - rect.top);
     if !(8..=8192).contains(&w) || !(8..=8192).contains(&h) {
-        return Err("That window has no usable size.".into());
+        return Err("Essa janela não tem um tamanho utilizável.".into());
     }
 
     unsafe {
         let screen = GetDC(None);
         if screen.is_invalid() {
-            return Err("Can't reach the screen.".into());
+            return Err("Não consegui acessar a tela.".into());
         }
         let mem = CreateCompatibleDC(Some(screen));
         let bmp = CreateCompatibleBitmap(screen, w, h);
@@ -227,7 +227,7 @@ pub fn capture_under_cursor() -> Result<(String, u32, u32, Vec<u8>), String> {
                 let _ = DeleteDC(mem);
             }
             ReleaseDC(None, screen);
-            return Err("Can't create the capture buffer.".into());
+            return Err("Não consegui criar o buffer de captura.".into());
         }
         let old = SelectObject(mem, bmp.into());
         // A screen blit: what is visible there is what gets captured.
@@ -258,7 +258,7 @@ pub fn capture_under_cursor() -> Result<(String, u32, u32, Vec<u8>), String> {
                 DIB_RGB_COLORS,
             );
             if lines == 0 {
-                Err("Can't read the captured pixels.".to_string())
+                Err("Não consegui ler os pixels capturados.".to_string())
             } else {
                 // BGRA to RGB: the alpha of a screen blit is garbage.
                 let mut rgb = Vec::with_capacity((w * h * 3) as usize);
@@ -268,7 +268,7 @@ pub fn capture_under_cursor() -> Result<(String, u32, u32, Vec<u8>), String> {
                 Ok(rgb)
             }
         } else {
-            Err("Can't capture that window.".to_string())
+            Err("Não consegui capturar essa janela.".to_string())
         };
         let _ = DeleteObject(bmp.into());
         let _ = DeleteDC(mem);

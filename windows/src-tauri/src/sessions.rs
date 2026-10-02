@@ -49,12 +49,12 @@ pub struct HistoryItem {
 /// `~/.claude/projects` of the Claude Code Mochi uses.
 fn projects_dir(backend: &Backend) -> Result<PathBuf, String> {
     match backend {
-        Backend::Api => Err("Sessions need Claude Code: turn on \"Use for Mochi\" in Settings.".into()),
+        Backend::Api => Err("As sessões precisam do Claude Code: ative \"Usar no Mochi\" nas Configurações.".into()),
         Backend::Windows => match crate::settings::claude_config_dir() {
             Some(dir) => Ok(dir.join("projects")),
             None => std::env::var_os("USERPROFILE")
                 .map(|h| PathBuf::from(h).join(".claude").join("projects"))
-                .ok_or_else(|| "No user profile.".into()),
+                .ok_or_else(|| "Sem perfil de usuário.".into()),
         },
         Backend::Wsl(distro) => Ok(crate::wsl::home_unc(distro)?.join(".claude").join("projects")),
     }
@@ -193,7 +193,7 @@ fn describe(path: &Path, updated: u64) -> Option<SessionInfo> {
     let title = title
         .or(first_prompt)
         .map(|t| one_line(&t, 60))
-        .unwrap_or_else(|| "Untitled session".into());
+        .unwrap_or_else(|| "Sessão sem título".into());
     Some(SessionInfo { id, cwd, title, updated })
 }
 
@@ -210,14 +210,14 @@ pub fn list(backend: &Backend) -> Result<Vec<SessionInfo>, String> {
 
 fn find(backend: &Backend, id: &str) -> Result<PathBuf, String> {
     if !is_session_id(id) {
-        return Err("Not a session id.".into());
+        return Err("ID de sessão inválido.".into());
     }
     let projects = projects_dir(backend)?;
     transcripts(&projects)
         .into_iter()
         .map(|(p, _)| p)
         .find(|p| p.file_stem().and_then(|s| s.to_str()) == Some(id))
-        .ok_or_else(|| "That session is gone.".into())
+        .ok_or_else(|| "Essa sessão não existe mais.".into())
 }
 
 /// What was said, user and assistant, without the tool calls in between.
@@ -250,9 +250,9 @@ pub fn delete(backend: &Backend, id: &str) -> Result<(), String> {
     let file = find(backend, id)?;
     let projects = projects_dir(backend)?;
     if !file.starts_with(&projects) {
-        return Err("Refusing to delete outside Claude Code's projects folder.".into());
+        return Err("Recusei apagar fora da pasta de projetos do Claude Code.".into());
     }
-    std::fs::remove_file(&file).map_err(|e| format!("Could not delete the session: {e}"))?;
+    std::fs::remove_file(&file).map_err(|e| format!("Não foi possível apagar a sessão: {e}"))?;
     let side = file.with_extension("");
     if side.is_dir() && side.file_name().and_then(|s| s.to_str()) == Some(id) {
         let _ = std::fs::remove_dir_all(side);
@@ -265,7 +265,7 @@ pub fn delete(backend: &Backend, id: &str) -> Result<(), String> {
 pub fn pick_folder(backend: &Backend, owner: Option<isize>) -> Result<Option<String>, String> {
     let Some(picked) = folder_dialog(owner) else { return Ok(None) };
     match backend {
-        Backend::Api => Err("Sessions need Claude Code.".into()),
+        Backend::Api => Err("As sessões precisam do Claude Code.".into()),
         Backend::Windows => Ok(Some(picked)),
         Backend::Wsl(distro) => crate::wsl::to_linux_path(distro, &picked).map(Some),
     }
@@ -290,7 +290,7 @@ fn folder_dialog(owner: Option<isize>) -> Option<String> {
             let dialog: IFileOpenDialog = CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER).ok()?;
             let options = dialog.GetOptions().ok()?;
             dialog.SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM).ok()?;
-            let _ = dialog.SetTitle(w!("A folder for a new Mochi session"));
+            let _ = dialog.SetTitle(w!("Uma pasta para uma nova sessão do Mochi"));
             // Owned by the island, so it comes up above it rather than behind.
             let owner = owner.map(|h| HWND(h as *mut _));
             dialog.Show(owner).ok()?; // cancelled → Err

@@ -60,7 +60,7 @@ export function enterSessionPanel(on: "journal" | "changes" | "sessions" = "jour
   stamp++;
 }
 
-const counted = (n: number, one: string) => `${n} ${n === 1 ? one : `${one}s`}`;
+const counted = (n: number, one: string) => `${n} ${n === 1 ? one : one.endsWith("ão") ? `${one.slice(0, -2)}ões` : `${one}s`}`;
 
 // ── Several sessions ──────────────────────────────────────────────────────────
 
@@ -69,13 +69,13 @@ export const sessionName = (session: ClaudeSession) => session.title ?? session.
 
 /** Where a session is at, as a colour and in words: what its tab shows and says. */
 function standing(session: ClaudeSession): { color: string; words: string } {
-  if (session.question) return { color: COLOR.cyan, words: "is asking a question" };
-  if (session.approval) return { color: COLOR.amber, words: "needs permission" };
-  if (session.news === "error" || session.state === "error") return { color: COLOR.red, words: "stopped on an error" };
-  if (session.news === "finished" || session.state === "finished") return { color: COLOR.green, words: "finished" };
-  if (session.state === "question") return { color: COLOR.cyan, words: "is waiting for you" };
-  if (session.state === "idle" || session.state === "sleeping") return { color: COLOR.grey, words: "at rest" };
-  return { color: botGlowColor(session.state), words: "at work" };
+  if (session.question) return { color: COLOR.cyan, words: "está perguntando" };
+  if (session.approval) return { color: COLOR.amber, words: "precisa de permissão" };
+  if (session.news === "error" || session.state === "error") return { color: COLOR.red, words: "parou com um erro" };
+  if (session.news === "finished" || session.state === "finished") return { color: COLOR.green, words: "terminou" };
+  if (session.state === "question") return { color: COLOR.cyan, words: "está esperando você" };
+  if (session.state === "idle" || session.state === "sleeping") return { color: COLOR.grey, words: "em repouso" };
+  return { color: botGlowColor(session.state), words: "trabalhando" };
 }
 
 /** Something a session wants looked at: it is waiting for an answer, or has news nobody has seen. */
@@ -94,11 +94,11 @@ export function sessionsChip(onOpen: () => void): { el: HTMLElement; sync(): voi
     sync() {
       const count = State.sessions.length;
       el.style.display = count > 1 ? "" : "none";
-      el.textContent = counted(count, "session");
+      el.textContent = counted(count, "sessão");
       const calling = State.sessions.find((s) => s.id !== State.frontId && calls(s));
       el.classList.toggle("calls", calling != null);
       el.style.setProperty("--c", calling ? standing(calling).color : "currentColor");
-      el.title = calling ? `${sessionName(calling)} ${standing(calling).words}` : "Every Claude Code session followed";
+      el.title = calling ? `${sessionName(calling)} ${standing(calling).words}` : "Todas as sessões do Claude Code acompanhadas";
     },
   };
 }
@@ -107,7 +107,7 @@ export function sessionsChip(onOpen: () => void): { el: HTMLElement; sync(): voi
 function sessionRow(session: ClaudeSession, onPick: (id: string) => void): HTMLElement {
   const { color, words } = standing(session);
   const front = session.id === State.frontId;
-  const state = h("span", { class: "gh-file-status", text: front ? `on show · ${words}` : words });
+  const state = h("span", { class: "gh-file-status", text: front ? `em cena · ${words}` : words });
   if (calls(session)) state.style.color = color;
   return h(
     "button",
@@ -121,7 +121,7 @@ function sessionRow(session: ClaudeSession, onPick: (id: string) => void): HTMLE
 
 /** What happened to the file, as the GitHub panel says it: "edited" in grey, "new" in green. */
 function statusWord(file: ChangedFile): HTMLElement {
-  const word = h("span", { class: "gh-file-status", text: file.created ? "new" : "edited" });
+  const word = h("span", { class: "gh-file-status", text: file.created ? "novo" : "editado" });
   if (file.created) word.style.color = COLOR.green;
   return word;
 }
@@ -152,14 +152,14 @@ function diffView(file: ChangedFile, kind: FileKind): HTMLElement {
     for (const line of readPatch(edit.patch)) {
       if ("hunk" in line) {
         // Between two edits, which one this is; inside one, where lines were skipped.
-        const label = first && several ? `Edit ${i + 1} of ${file.edits.length} · ${timeAgo(edit.at)}` : "";
+        const label = first && several ? `Edição ${i + 1} de ${file.edits.length} · ${timeAgo(edit.at)}` : "";
         if (!first || label) diff.append(diffBreak(label));
         first = false;
         continue;
       }
       diff.append(diffLine(line.new ?? line.old, line.sign, line.text, kind));
     }
-    if (edit.truncated) diff.append(diffBreak("The rest of this edit is in Claude Code"));
+    if (edit.truncated) diff.append(diffBreak("O resto desta edição está no Claude Code"));
   });
   return h("div", { class: "gh-code" }, diff);
 }
@@ -167,16 +167,16 @@ function diffView(file: ChangedFile, kind: FileKind): HTMLElement {
 // ── The journal ───────────────────────────────────────────────────────────────
 
 /** When a line of the journal happened, as a clock shows it. */
-const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const clock = (at: number) => new Date(at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
 /** Several options picked for one question come back as one answer, joined like this. */
 const ANSWER_JOIN = ", ";
 
 /** Where a tool's permission request stands, in a word and a colour. */
 const PERMISSIONS = {
-  asked: { words: "needs permission", color: COLOR.amber },
-  allowed: { words: "allowed", color: COLOR.green },
-  denied: { words: "denied", color: COLOR.red },
+  asked: { words: "precisa de permissão", color: COLOR.amber },
+  allowed: { words: "permitido", color: COLOR.green },
+  denied: { words: "negado", color: COLOR.red },
 } as const;
 
 function chip(text: string, color: string): HTMLElement {
@@ -203,7 +203,7 @@ function askedView(step: SessionStep): HTMLElement {
     el.append(h("div", { class: "jr-q" }, h("div", { class: "jr-q-title", text: q.question }), options));
   }
   if (!step.answers) {
-    el.append(h("div", { class: "jr-waiting", text: step.state === "running" ? "Waiting for an answer…" : step.state === "failed" ? "Left unanswered." : "Answered in Claude Code." }));
+    el.append(h("div", { class: "jr-waiting", text: step.state === "running" ? "Aguardando resposta…" : step.state === "failed" ? "Sem resposta." : "Respondido no Claude Code." }));
   }
   return el;
 }
@@ -222,7 +222,7 @@ function journalEntry(step: SessionStep, typed?: ToType[]): HTMLElement {
       "div",
       { class: "jr jr-reply" },
       h("div", { class: "sess-said" }, dot(COLOR.green, 6), h("b", { text: "Claude" }), h("span", { text: clock(step.at) })),
-      step.target ? markdown(step.target) : h("div", { class: "jr-waiting", text: "The turn ended without a word." }),
+      step.target ? markdown(step.target) : h("div", { class: "jr-waiting", text: "A vez terminou sem uma palavra." }),
     );
   }
   if (step.kind === "note") {
@@ -240,7 +240,7 @@ function journalEntry(step: SessionStep, typed?: ToType[]): HTMLElement {
   );
   if (step.permission) head.append(chip(PERMISSIONS[step.permission].words, PERMISSIONS[step.permission].color));
   if (step.state === "running") head.append(h("i", { class: "sess-mark run" }));
-  else if (step.state === "failed" && !step.questions) head.append(chip("failed", COLOR.red));
+  else if (step.state === "failed" && !step.questions) head.append(chip("falhou", COLOR.red));
   head.append(h("span", { class: "jr-time", text: clock(step.at) }));
 
   const el = h("div", { class: `jr jr-step ${step.state}` }, head);
@@ -271,11 +271,11 @@ export function buildSession(actions: ViewActions): ViewHost {
   const badge = h("span", { class: "gh-head-badge" });
   const aside = h("span", { class: "gh-head-aside" });
   // One step back: from a file to the changes, from the changes to the journal.
-  const backBtn = h("button", { class: "gh-icon sess-back", title: "Back" }, svg(ICONS.chevronLeft, 10, { stroke: 2.4 }));
-  const filesBtn = h("button", { class: "sess-files", title: "Every file this session changed" });
+  const backBtn = h("button", { class: "gh-icon sess-back", title: "Voltar" }, svg(ICONS.chevronLeft, 10, { stroke: 2.4 }));
+  const filesBtn = h("button", { class: "sess-files", title: "Todos os arquivos que esta sessão alterou" });
   const openBtn = h(
     "button",
-    { class: "gh-icon", title: "Open the session", onclick: () => actions.openTerminal() },
+    { class: "gh-icon", title: "Abrir a sessão", onclick: () => actions.openTerminal() },
     svg(ICONS.arrowUpRight, 10),
   );
   // With several sessions followed: the way to the list of them.
@@ -422,7 +422,7 @@ export function buildSession(actions: ViewActions): ViewHost {
       wanted.push(entry.el);
     }
     if (wanted.length === 0) {
-      empty.textContent = session.id ? "Nothing has happened in this session yet." : "No Claude Code session yet.";
+      empty.textContent = session.id ? "Nada aconteceu nesta sessão ainda." : "Nenhuma sessão do Claude Code ainda.";
       wanted.push(empty);
     }
     const same = journal.children.length === wanted.length && wanted.every((node, i) => journal.children[i] === node);
@@ -508,15 +508,15 @@ export function buildSession(actions: ViewActions): ViewHost {
         who.classList.toggle("file", path != null);
         backBtn.style.display = live ? "none" : "";
         filesBtn.style.display = live && files.length > 0 ? "" : "none";
-        filesBtn.textContent = counted(files.length, "file");
+        filesBtn.textContent = counted(files.length, "arquivo");
         if (path) {
           who.textContent = splitPath(path).base;
           sub.textContent = path;
           badge.append(extBadge(path));
         } else {
-          who.textContent = live ? "Journal" : screen.kind === "sessions" ? "Sessions" : "Changes";
+          who.textContent = live ? "Diário" : screen.kind === "sessions" ? "Sessões" : "Alterações";
           sub.textContent =
-            screen.kind === "sessions" ? counted(State.sessions.length, "session") : !live && files.length > 0 ? counted(files.length, "file") : "";
+            screen.kind === "sessions" ? counted(State.sessions.length, "sessão") : !live && files.length > 0 ? counted(files.length, "arquivo") : "";
           badge.append(dot(task?.color ?? COLOR.idle, 7));
         }
         if (picked) aside.append(statusWord(picked), plusMinus(picked.additions, picked.deletions));
@@ -546,7 +546,7 @@ export function buildSession(actions: ViewActions): ViewHost {
       list.classList.toggle("gh-edge", picked != null);
       if (screen.kind === "sessions") for (const s of State.sessions) list.append(sessionRow(s, pick));
       else if (picked) list.append(diffView(picked, fileKind(picked.path)));
-      else if (files.length === 0) list.append(h("div", { class: "int-empty", text: "Nothing written in this session yet." }));
+      else if (files.length === 0) list.append(h("div", { class: "int-empty", text: "Nada escrito nesta sessão ainda." }));
       else for (const f of files) list.append(fileRow(f));
       list.scrollTop = scroll;
     },

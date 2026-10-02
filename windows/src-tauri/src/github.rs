@@ -44,7 +44,7 @@ const LOG_CHARS: usize = 160;
 const ETAG: &str = "etag";
 
 /// What stands in for a name GitHub left out.
-pub(crate) const UNTITLED: &str = "Untitled";
+pub(crate) const UNTITLED: &str = "Sem título";
 pub(crate) const WORKFLOW: &str = "Workflow";
 const OTHER: &str = "Other";
 const CREATED: &str = "Created the repository";
@@ -165,16 +165,16 @@ pub enum GhError {
 impl GhError {
     pub fn message(&self) -> String {
         match self {
-            GhError::NoToken => "No token saved — Settings → GitHub".into(),
-            GhError::Unauthorized => "Token refused (401): invalid or expired".into(),
-            GhError::Forbidden => "Missing permission (403)".into(),
-            GhError::NotFound => "Not found (404)".into(),
+            GhError::NoToken => "Nenhum token salvo — Configurações → GitHub".into(),
+            GhError::Unauthorized => "Token recusado (401): inválido ou expirado".into(),
+            GhError::Forbidden => "Falta permissão (403)".into(),
+            GhError::NotFound => "Não encontrado (404)".into(),
             GhError::RateLimited(until) => {
-                format!("GitHub rate limit — {}", wait_text(*until, unix_now()))
+                format!("Limite de requisições do GitHub — {}", wait_text(*until, unix_now()))
             }
-            GhError::Offline => "No connection".into(),
-            GhError::Status(code) => format!("GitHub error {code}"),
-            GhError::BadResponse => "Unexpected answer from GitHub".into(),
+            GhError::Offline => "Sem conexão".into(),
+            GhError::Status(code) => format!("Erro do GitHub {code}"),
+            GhError::BadResponse => "Resposta inesperada do GitHub".into(),
         }
     }
 }
@@ -192,13 +192,13 @@ pub(crate) fn unix_now() -> u64 {
         .unwrap_or(0)
 }
 
-/// "back in 12 min" — relative, so no time zone is involved.
+/// "volta em 12 min" — relative, so no time zone is involved.
 fn wait_text(until: u64, now: u64) -> String {
     let minutes = until.saturating_sub(now).div_ceil(60);
     if minutes <= 1 {
-        "back in a minute".into()
+        "volta em um minuto".into()
     } else {
-        format!("back in {minutes} min")
+        format!("volta em {minutes} min")
     }
 }
 
@@ -662,9 +662,9 @@ fn broke(before: &[Repo], now: &[Repo], muted: &[String]) -> Option<News> {
         let target = Target::Run { repo: repo.full_name.clone(), id: build.id };
         let event = IntegrationEvent {
             success: false,
-            label: format!("{} failed on {}", build.workflow, short_name(&repo.full_name)),
+            label: format!("{} falhou em {}", build.workflow, short_name(&repo.full_name)),
             detail: build.branch.clone(),
-            open: Some(json!({ "target": target, "label": build.workflow, "url": build.url, "says": "a build broke" })),
+            open: Some(json!({ "target": target, "label": build.workflow, "url": build.url, "says": "um build quebrou" })),
         };
         Some((event, target))
     })
@@ -680,14 +680,14 @@ fn went_in(seen: Option<&str>, merged: &[Merged]) -> Option<News> {
     let target = Target::Pull { repo: pull.repo.clone(), number: pull.number };
     let event = IntegrationEvent {
         success: true,
-        label: format!("#{} merged", pull.number),
+        label: format!("#{} mesclado", pull.number),
         detail: Some(pull.title.clone()).filter(|t| !t.is_empty()),
         open: Some(json!({
             "target": target,
             "label": format!("#{}", pull.number),
             "url": pull.url,
             "title": format!("#{} {}", pull.number, pull.title),
-            "says": "pull request merged",
+            "says": "pull request mesclado",
         })),
     };
     Some((event, target))
@@ -705,14 +705,14 @@ fn came_in(seen: Option<&str>, opened: &[Opened], login: &str) -> Option<News> {
     let target = Target::Pull { repo: pull.repo.clone(), number: pull.number };
     let event = IntegrationEvent {
         success: true,
-        label: format!("#{} opened on {}", pull.number, short_name(&pull.repo)),
+        label: format!("#{} aberto em {}", pull.number, short_name(&pull.repo)),
         detail: Some(pull.title.clone()).filter(|t| !t.is_empty()),
         open: Some(json!({
             "target": target,
             "label": format!("#{}", pull.number),
             "url": pull.url,
             "title": format!("#{} {}", pull.number, pull.title),
-            "says": "pull request opened",
+            "says": "pull request aberto",
         })),
     };
     Some((event, target))
@@ -1177,8 +1177,8 @@ fn parse_event(event: &Value) -> Option<Activity> {
                 .and_then(|c| text(c.get("message")))
                 .and_then(first_line);
             let title = message.unwrap_or_else(|| match count {
-                Some(n) if n > 1 => format!("Pushed {n} commits"),
-                _ => "Pushed".to_string(),
+                Some(n) if n > 1 => format!("Push de {n} commits"),
+                _ => "Push".to_string(),
             });
             let detail = match (count, &branch) {
                 (Some(n), Some(b)) if n > 1 => Some(format!("{n} commits · {b}")),
@@ -1270,7 +1270,7 @@ fn parse_event(event: &Value) -> Option<Activity> {
             "tag" => {
                 let tag = text(payload.get("ref"))?;
                 let url = format!("{repo_url}/releases/tag/{tag}");
-                ("create", format!("Tagged {tag}"), None, url, None)
+                ("create", format!("Tag {tag}"), None, url, None)
             }
             _ => return None,
         },
@@ -1407,7 +1407,7 @@ fn refused(errors: &[Value], field: &str) -> bool {
 }
 
 pub async fn project(full_name: &str, force: bool) -> Result<Project, String> {
-    let (owner, name) = split_full_name(full_name).ok_or("Unknown repository")?;
+    let (owner, name) = split_full_name(full_name).ok_or("Repositório desconhecido")?;
     let now = unix_now();
     if !force {
         if let Some(kept) = PROJECTS.fresh(full_name, now, |_| PROJECT_TTL) {
@@ -1609,7 +1609,7 @@ pub(crate) fn is_timestamp(s: &str) -> bool {
 /// the island, so the list matches the day they clicked on.
 pub async fn day(from: &str, to: &str, today: bool) -> Result<Day, String> {
     if !is_timestamp(from) || !is_timestamp(to) {
-        return Err("Unknown day".into());
+        return Err("Dia desconhecido".into());
     }
     let key = format!("{from}/{to}");
     let now = unix_now();
@@ -1731,7 +1731,7 @@ fn check(label: &'static str, result: Result<(), GhError>) -> Check {
         Err(GhError::Forbidden) | Err(GhError::NotFound) => Check {
             label,
             ok: false,
-            note: Some("not granted to this token".into()),
+            note: Some("não concedido a este token".into()),
         },
         Err(e) => Check { label, ok: false, note: Some(e.message()) },
     }
@@ -1747,7 +1747,7 @@ pub async fn test() -> Result<Account, String> {
     let name = text(me.json.get("name"));
     let expires_at = header_str(&me.headers, "github-authentication-token-expiration");
 
-    let mut checks = vec![Check { label: "Account", ok: true, note: None }];
+    let mut checks = vec![Check { label: "Conta", ok: true, note: None }];
 
     // The contribution graph and the project list both come from GraphQL.
     let graphql = gh.graphql("query { viewer { login } }").await.map(|_| ());
@@ -1764,7 +1764,7 @@ pub async fn test() -> Result<Account, String> {
         (Ok(_), None) => checks.push(Check {
             label: "Repositories",
             ok: false,
-            note: Some("none visible — set Repository access to All repositories".into()),
+            note: Some("nenhum visível — defina o acesso a repositórios como Todos os repositórios".into()),
         }),
         (Ok(_), Some(_)) => checks.push(check("Repositories", Ok(()))),
     }
@@ -1835,7 +1835,7 @@ mod tests {
 
         // A new run that failed, and a run that was going and ended badly.
         let (event, target) = broke(&green, &red, &[]).unwrap();
-        assert_eq!((event.success, event.label.as_str(), event.detail.as_deref()), (false, "CI failed on coucou", Some("main")));
+        assert_eq!((event.success, event.label.as_str(), event.detail.as_deref()), (false, "CI falhou em coucou", Some("main")));
         assert_eq!(target, Target::Run { repo: "edu/coucou".into(), id: 2 });
         assert!(broke(&running, &red, &[]).is_some());
         // Still the same failure on the next refresh: already told.
@@ -1860,7 +1860,7 @@ mod tests {
         assert!(went_in(None, &merged).is_none());
         // Merged after the latest one known: news, and it opens that pull request.
         let (event, target) = went_in(Some("2026-09-30T17:00:00Z"), &merged).unwrap();
-        assert_eq!((event.success, event.label.as_str(), event.detail.as_deref()), (true, "#12 merged", Some("Panel")));
+        assert_eq!((event.success, event.label.as_str(), event.detail.as_deref()), (true, "#12 mesclado", Some("Panel")));
         assert_eq!(target, Target::Pull { repo: "edu/coucou".into(), number: 12 });
         // Nothing merged since: the old one coming back up is not news.
         assert!(went_in(Some("2026-09-30T18:00:00Z"), &merged).is_none());
@@ -1889,7 +1889,7 @@ mod tests {
         assert!(came_in(None, &opened, "edu").is_none());
         // Opened since by somebody else: news, and it opens that pull request. Your own is not.
         let (event, target) = came_in(Some("2026-10-01T14:00:00Z"), &opened, "edu").unwrap();
-        assert_eq!((event.success, event.label.as_str(), event.detail.as_deref()), (true, "#7 opened on coucou", Some("Pull 7")));
+        assert_eq!((event.success, event.label.as_str(), event.detail.as_deref()), (true, "#7 aberto em coucou", Some("Pull 7")));
         assert_eq!(target, Target::Pull { repo: "edu/coucou".into(), number: 7 });
         // Nothing but your own since.
         assert!(came_in(Some("2026-10-01T15:00:00Z"), &opened, "edu").is_none());
@@ -1936,10 +1936,10 @@ mod tests {
 
     #[test]
     fn the_wait_is_said_in_minutes_rounded_up() {
-        assert_eq!(wait_text(NOW + 30, NOW), "back in a minute");
-        assert_eq!(wait_text(NOW + 61, NOW), "back in 2 min");
-        assert_eq!(wait_text(NOW + 720, NOW), "back in 12 min");
-        assert_eq!(wait_text(NOW - 10, NOW), "back in a minute");
+        assert_eq!(wait_text(NOW + 30, NOW), "volta em um minuto");
+        assert_eq!(wait_text(NOW + 61, NOW), "volta em 2 min");
+        assert_eq!(wait_text(NOW + 720, NOW), "volta em 12 min");
+        assert_eq!(wait_text(NOW - 10, NOW), "volta em um minuto");
     }
 
     fn event(kind: &str, payload: Value) -> Value {
@@ -1974,7 +1974,7 @@ mod tests {
     fn a_push_without_commits_still_makes_a_line() {
         let push = event("PushEvent", json!({ "ref": "refs/heads/dev" }));
         let a = parse_event(&push).unwrap();
-        assert_eq!(a.title, "Pushed");
+        assert_eq!(a.title, "Push");
         assert_eq!(a.detail.as_deref(), Some("dev"));
         assert_eq!(a.url, "https://github.com/edu/coucou/commits/dev");
     }

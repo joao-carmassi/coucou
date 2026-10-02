@@ -285,9 +285,9 @@ fn open_terminal(
 #[tauri::command]
 fn resume_in_terminal(id: String, cwd: Option<String>) -> Result<(), String> {
     if !sessions::is_session_id(&id) {
-        return Err("Not a session id.".into());
+        return Err("ID de sessão inválido.".into());
     }
-    let cli = local_claude::windows_cli().ok_or("Claude Code isn't installed on Windows.")?;
+    let cli = local_claude::windows_cli().ok_or("O Claude Code não está instalado no Windows.")?;
     let dir = cwd
         .map(std::path::PathBuf::from)
         .filter(|p| p.is_absolute() && p.is_dir())
@@ -301,7 +301,7 @@ fn resume_in_terminal(id: String, cwd: Option<String>) -> Result<(), String> {
     cmd.creation_flags(CREATE_NEW_CONSOLE)
         .spawn()
         .map(|_| ())
-        .map_err(|e| format!("Could not start Claude Code: {e}"))
+        .map_err(|e| format!("Não foi possível iniciar o Claude Code: {e}"))
 }
 
 #[tauri::command]
@@ -567,7 +567,7 @@ fn session_active(app: AppHandle) -> Option<local_claude::ActiveSession> {
 #[tauri::command]
 fn session_select(app: AppHandle, chat: State<Chat>, id: String, cwd: String) -> Result<(), String> {
     if !sessions::is_session_id(&id) {
-        return Err("Not a session id.".into());
+        return Err("ID de sessão inválido.".into());
     }
     chat.reset();
     let backend = mochi_backend(&app);
@@ -740,7 +740,7 @@ fn create_settings_window(app: &AppHandle) {
     let url = settings_page_url(app);
     match WebviewWindowBuilder::new(app, "settings", url)
         .additional_browser_args(BROWSER_ARGS)
-        .title("Settings — Coucou")
+        .title("Configurações — Coucou")
         .inner_size(560.0, 680.0)
         .min_inner_size(460.0, 480.0)
         .resizable(true)

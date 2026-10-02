@@ -43,10 +43,10 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
   const input = h("input", {
     type: "text",
     class: "chat-input",
-    placeholder: "Ask me anything…",
+    placeholder: "Pergunte qualquer coisa…",
     spellcheck: "false",
   }) as HTMLInputElement;
-  const send = h("button", { class: "send-btn", title: "Send" }, svg(ICONS.arrowUp, 11));
+  const send = h("button", { class: "send-btn", title: "Enviar" }, svg(ICONS.arrowUp, 11));
   const bar = h("div", { class: "chat-bar" }, input, send);
 
   // With a local Claude Code the view splits: sessions on the left, the
@@ -146,7 +146,7 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
         log.scrollTop = log.scrollHeight;
       }
 
-      input.placeholder = State.chatHistory.length === 0 ? "Ask me anything…" : "Continue…";
+      input.placeholder = State.chatHistory.length === 0 ? "Pergunte qualquer coisa…" : "Continuar…";
       input.disabled = sending;
     },
     focus() {

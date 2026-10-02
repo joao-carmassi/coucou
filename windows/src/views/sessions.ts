@@ -31,11 +31,11 @@ function activeLabel(): { title: string; folder: string } {
   const a = State.activeSession;
   if (a?.id) {
     const s = State.chatSessions.find((x) => x.id === a.id);
-    return { title: s?.title ?? "Session", folder: folderName(a.cwd ?? s?.cwd) };
+    return { title: s?.title ?? "Sessão", folder: folderName(a.cwd ?? s?.cwd) };
   }
-  if (a?.cwd) return { title: "New session", folder: folderName(a.cwd) };
-  if (State.droppedFile) return { title: State.droppedFile.name, folder: "dropped file" };
-  return { title: "New session", folder: "inbox" };
+  if (a?.cwd) return { title: "Nova sessão", folder: folderName(a.cwd) };
+  if (State.droppedFile) return { title: State.droppedFile.name, folder: "arquivo solto" };
+  return { title: "Nova sessão", folder: "entrada" };
 }
 
 export interface SessionsPanel {
@@ -57,7 +57,7 @@ export function buildSessionsPanel(onChange: () => void): SessionsPanel {
   const chevron = svg(ICONS.chevronRight, 9, { stroke: 2.4 });
   const title = h("span", { class: "sess-title" });
   const folder = h("span", { class: "sess-folder" });
-  const trigger = h("button", { class: "sess-trigger", title: "Sessions" }, title, folder, chevron);
+  const trigger = h("button", { class: "sess-trigger", title: "Sessões" }, title, folder, chevron);
   const menu = h("div", { class: "sess-menu" });
   const el = h("div", { class: "sessions" }, trigger, menu);
 
@@ -91,14 +91,14 @@ export function buildSessionsPanel(onChange: () => void): SessionsPanel {
     menu.append(
       h("button", {
         class: "sess-row sess-new",
-        title: "Start an empty conversation, with no folder and no file",
+        title: "Começar uma conversa vazia, sem pasta nem arquivo",
         onclick: () => void newChat(),
-      }, h("span", { class: "sess-title", text: "+ New chat" })),
+      }, h("span", { class: "sess-title", text: "+ Nova conversa" })),
       h("button", {
         class: "sess-row sess-new",
-        title: "Pick a folder for a new session — or drop a file on Mochi to start one about it",
+        title: "Escolha uma pasta para uma nova sessão — ou solte um arquivo na Mochi para começar uma sobre ele",
         onclick: () => void newInFolder(),
-      }, h("span", { class: "sess-title", text: "+ New in a folder…" })),
+      }, h("span", { class: "sess-title", text: "+ Nova em uma pasta…" })),
     );
     // The picked session can go on in a terminal: Windows' Claude Code only,
     // since a WSL transcript means nothing to it.
@@ -107,15 +107,15 @@ export function buildSessionsPanel(onChange: () => void): SessionsPanel {
       menu.append(
         h("button", {
           class: "sess-row sess-new",
-          title: "Open this conversation in a terminal, with Claude Code",
+          title: "Abrir esta conversa em um terminal, com o Claude Code",
           onclick: () => void continueInTerminal(active.id!, active.cwd ?? null),
-        }, h("span", { class: "sess-title", text: "↗ Continue in terminal" })),
+        }, h("span", { class: "sess-title", text: "↗ Continuar no terminal" })),
       );
     }
     if (error) menu.append(h("div", { class: "sess-error", text: error }));
     for (const s of State.chatSessions) menu.append(row(s));
     if (State.chatSessions.length === 0 && !error) {
-      menu.append(h("div", { class: "sess-empty", text: "No sessions yet" }));
+      menu.append(h("div", { class: "sess-empty", text: "Nenhuma sessão ainda" }));
     }
   }
 
@@ -127,8 +127,8 @@ export function buildSessionsPanel(onChange: () => void): SessionsPanel {
     );
     const del = h("button", {
       class: isArmed ? "sess-del armed" : "sess-del",
-      title: isArmed ? "Click again to erase this session's transcript" : "Delete this session",
-      text: isArmed ? "Delete?" : "",
+      title: isArmed ? "Clique de novo para apagar o histórico desta sessão" : "Excluir esta sessão",
+      text: isArmed ? "Excluir?" : "",
     });
     if (!isArmed) del.append(svg(ICONS.xmark, 8));
     del.addEventListener("click", (e) => {

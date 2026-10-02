@@ -200,7 +200,7 @@ export interface ClaudeSession {
 }
 
 /** What a session is called before its folder is known. */
-export const SESSION_UNNAMED = "Session";
+export const SESSION_UNNAMED = "Sessão";
 
 export function newSession(id: string): ClaudeSession {
   return {

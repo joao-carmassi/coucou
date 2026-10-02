@@ -14,12 +14,17 @@ import type { SessionStep } from "../core/state";
 
 /** Tools by a name short enough for a column, where their own is not. */
 const STEP_NAMES: Record<string, string> = {
-  AskUserQuestion: "Question",
+  AskUserQuestion: "Pergunta",
+  Done: "Pronto",
+  Prompt: "Pedido",
+  Error: "Erro",
+  Subagent: "Subagente",
+  Notification: "Aviso",
   NotebookEdit: "Notebook",
   MultiEdit: "Edit",
-  TodoWrite: "Todos",
-  WebSearch: "Search",
-  WebFetch: "Fetch",
+  TodoWrite: "Tarefas",
+  WebSearch: "Busca",
+  WebFetch: "Web",
   PowerShell: "Shell",
 };
 
@@ -91,7 +96,7 @@ export function stepPreview(step: SessionStep, limit?: number, typed?: ToType[])
       }
       rows.push(row);
     }
-    if (shown.length < lines.length - first) rows.push(termLine(`… ${lines.length - first - shown.length} more lines`));
+    if (shown.length < lines.length - first) rows.push(termLine(`… ${lines.length - first - shown.length} linhas a mais`));
   } else if (step.kind === "command") {
     if (step.target) rows.push(termLine(oneLine(step.target), true));
     // Short of room, an empty line is one line less of what was printed.

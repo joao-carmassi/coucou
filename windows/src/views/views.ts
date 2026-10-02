@@ -120,12 +120,12 @@ function nowOf(session: ClaudeSession): Now {
 
   if (session.question || session.approval) {
     return {
-      icon: svg(ICONS.bang, 12), label: "Waiting", color: session.question ? COLOR.cyan : COLOR.amber,
-      detail: session.question ? "for your answer" : "for your permission", step: shown, words: null,
+      icon: svg(ICONS.bang, 12), label: "Aguardando", color: session.question ? COLOR.cyan : COLOR.amber,
+      detail: session.question ? "sua resposta" : "sua permissão", step: shown, words: null,
     };
   }
   if (session.state === "error") {
-    return { icon: svg(ICONS.xmark, 11), label: "Stopped", color: COLOR.red, detail: "on an error", step: shown, words: session.lines.at(-1) ?? null };
+    return { icon: svg(ICONS.xmark, 11), label: "Parou", color: COLOR.red, detail: "com um erro", step: shown, words: session.lines.at(-1) ?? null };
   }
   // The turn is over when the journal's last line is Claude's reply — a word
   // from Claude Code after it (a notification that it is waiting, a subagent
@@ -136,17 +136,17 @@ function nowOf(session: ClaudeSession): Now {
     // take the place of the last thing it ran. With no words, that stays.
     const said = plainWords(session.answer);
     return {
-      icon: svg(ICONS.check, 12, { stroke: 3 }), label: "Done", color: COLOR.green,
-      detail: said ? "Claude replied" : "", step: said ? null : shown, words: said,
+      icon: svg(ICONS.check, 12, { stroke: 3 }), label: "Pronto", color: COLOR.green,
+      detail: said ? "Claude respondeu" : "", step: said ? null : shown, words: said,
     };
   }
   if (last) {
     return { icon: stepIcon(last), label: stepName(last), color: null, detail: oneLine(last.target), step: hasPreview(last) ? last : shown, words: null };
   }
   if (session.state === "thinking") {
-    return { icon: svg(ICONS.bubble, 12), label: "Thinking", color: null, detail: "", step: null, words: session.asked };
+    return { icon: svg(ICONS.bubble, 12), label: "Pensando", color: null, detail: "", step: null, words: session.asked };
   }
-  return { icon: svg(ICONS.bubble, 12), label: "Open", color: null, detail: "waiting for a prompt", step: null, words: null };
+  return { icon: svg(ICONS.bubble, 12), label: "Aberta", color: null, detail: "esperando um pedido", step: null, words: null };
 }
 
 
@@ -205,7 +205,7 @@ function sessionWho(label: string): HTMLElement {
   if (task) row.append(dot(task.color, 8), h("span", { class: "n", text: session.id ? sessionName(session) : task.name }));
   row.append(h("span", { text: label }));
   const waiting = State.waiting.length;
-  if (waiting > 0) row.append(h("span", { class: "who-waiting", text: `+${waiting} waiting`, title: "Other sessions waiting for an answer" }));
+  if (waiting > 0) row.append(h("span", { class: "who-waiting", text: `+${waiting} esperando`, title: "Outras sessões esperando uma resposta" }));
   return row;
 }
 
@@ -246,12 +246,12 @@ function airy(lines: HTMLElement, onResize: () => void): { fit(): void; readonly
 // ── Header ────────────────────────────────────────────────────────────────────
 
 export function buildHeader(actions: ViewActions): ViewHost {
-  const tabHome = h("button", { class: "tab", title: "Overview", onclick: () => go("overview") }, svg(ICONS.house, 13));
-  const tabChat = h("button", { class: "tab", title: "Ask", onclick: () => go("prompt") }, svg(ICONS.bubble, 13));
-  const tabDrop = h("button", { class: "tab", title: "Drop", onclick: () => go("upload") }, svg(ICONS.plus, 13));
+  const tabHome = h("button", { class: "tab", title: "Visão geral", onclick: () => go("overview") }, svg(ICONS.house, 13));
+  const tabChat = h("button", { class: "tab", title: "Perguntar", onclick: () => go("prompt") }, svg(ICONS.bubble, 13));
+  const tabDrop = h("button", { class: "tab", title: "Soltar", onclick: () => go("upload") }, svg(ICONS.plus, 13));
 
-  const gearBtn = h("button", { title: "Settings", onclick: () => go("settings") }, svg(ICONS.gear, 14));
-  const soundBtn = h("button", { title: "Mute", onclick: () => actions.toggleSound() }, svg(ICONS.speakerOn, 14));
+  const gearBtn = h("button", { title: "Configurações", onclick: () => go("settings") }, svg(ICONS.gear, 14));
+  const soundBtn = h("button", { title: "Silenciar", onclick: () => actions.toggleSound() }, svg(ICONS.speakerOn, 14));
 
   function go(v: IslandViewName) {
     actions.blip();
@@ -299,7 +299,7 @@ function buildOverview(actions: ViewActions, onResize: () => void): ViewHost {
   const leftBody = h("div", { class: "left-body" });
   const jump = h(
     "button",
-    { class: "icon-btn jump", title: "Open", onclick: () => actions.openTarget() },
+    { class: "icon-btn jump", title: "Abrir", onclick: () => actions.openTarget() },
     svg(ICONS.arrowUpRight, 8),
   );
   const left = card(null, leftBody, jump);
@@ -427,7 +427,7 @@ function buildOverview(actions: ViewActions, onResize: () => void): ViewHost {
         if (files.length > 0) {
           const size = plusMinus(files.reduce((n, f) => n + f.additions, 0), files.reduce((n, f) => n + f.deletions, 0));
           size.classList.add("count");
-          size.title = files.length === 1 ? "1 file changed" : `${files.length} files changed`;
+          size.title = files.length === 1 ? "1 arquivo alterado" : `${files.length} arquivos alterados`;
           who.append(size);
         }
         syncNow(session);
@@ -455,7 +455,7 @@ function buildOverview(actions: ViewActions, onResize: () => void): ViewHost {
       }
 
       left.classList.toggle("opens", mode === "session");
-      left.title = mode === "session" ? "Open the session" : "";
+      left.title = mode === "session" ? "Abrir a sessão" : "";
 
       const others = State.otherTasks.slice(0, 4);
       // Nothing else active: the left card takes the full width.
@@ -523,11 +523,11 @@ function buildEmpty(actions: ViewActions): ViewHost {
     h(
       "div",
       { style: "display:flex;flex-direction:column;gap:5px" },
-      h("div", { class: "title", text: "Nothing running right now." }),
-      h("div", { class: "sub", text: "Drop a file or window, or ask me anything." }),
+      h("div", { class: "title", text: "Nada rodando agora." }),
+      h("div", { class: "sub", text: "Solte um arquivo ou janela, ou pergunte qualquer coisa." }),
     ),
     h("div", { class: "grow" }),
-    btn("Ask Claude", "primary", () => actions.setView("prompt")),
+    btn("Perguntar ao Claude", "primary", () => actions.setView("prompt")),
   );
   return { el: h("div", { class: "view" }, card(null, body)), sync() {} };
 }
@@ -557,16 +557,16 @@ function buildApproval(actions: ViewActions, onResize: () => void): ViewHost {
       const proposal = approval?.proposal ?? null;
       const plan = approval?.plan ?? null;
       clear(who);
-      const asking = sessionWho("needs permission");
+      const asking = sessionWho("precisa de permissão");
       if (proposal) asking.append(plusMinus(proposal.additions, proposal.deletions));
       who.append(asking);
       // The whole point of approving here rather than in the terminal: this line
       // is the command, the file path or the URL being authorised, not just the
       // name of the tool asking.
       code.textContent = plan != null
-        ? "Plan ready for review"
+        ? "Plano pronto para revisão"
         : proposal
-          ? `${approval?.tool} · ${proposal.path}${proposal.created ? " · new file" : ""}`
+          ? `${approval?.tool} · ${proposal.path}${proposal.created ? " · novo arquivo" : ""}`
           : approval?.command || approval?.tool || "…";
       // What that edit would do, line by line, before it is allowed. Drawn once
       // per request: a list redrawn under the mouse would lose its scroll.
@@ -590,7 +590,7 @@ function buildApproval(actions: ViewActions, onResize: () => void): ViewHost {
           }
           if (proposal.truncated) {
             diff.append(
-              h("div", { class: "gh-diff-line hunk" }, h("span", { class: "n", text: "⋯" }), h("span", { class: "s" }), h("span", { class: "t", text: "The rest of this edit is in Claude Code" })),
+              h("div", { class: "gh-diff-line hunk" }, h("span", { class: "n", text: "⋯" }), h("span", { class: "s" }), h("span", { class: "t", text: "O resto desta edição está no Claude Code" })),
             );
           }
           proposed.append(diff);
@@ -609,14 +609,14 @@ function buildApproval(actions: ViewActions, onResize: () => void): ViewHost {
         if (kind === "plan") {
           // What Claude Code offers at the end of plan mode, minus the typed feedback.
           row.append(
-            btn("Keep planning", "secondary", () => actions.decide("plan-keep"), "N"),
+            btn("Continuar planejando", "secondary", () => actions.decide("plan-keep"), "N"),
             btn("Manual", "secondary", () => actions.decide("plan-manual")),
-            btn("Auto mode", "primary", () => actions.decide("plan-auto"), "Y"),
+            btn("Modo auto", "primary", () => actions.decide("plan-auto"), "Y"),
           );
         } else {
           row.append(
-            btn("Deny", "secondary", () => actions.decide("deny"), "N"),
-            btn("Allow", "primary", () => actions.decide("allow"), "Y"),
+            btn("Negar", "secondary", () => actions.decide("deny"), "N"),
+            btn("Aprovar", "primary", () => actions.decide("allow"), "Y"),
           );
         }
       }
@@ -643,15 +643,15 @@ function buildQuestion(actions: ViewActions, onResize: () => void): ViewHost {
   const title = h("div", { class: "title q-title" });
   const row = h("div", { class: "actions q-options" });
   const hint = h("span", { class: "q-hint" });
-  const back = h("button", { class: "link-btn q-link", text: "‹ Previous" });
+  const back = h("button", { class: "link-btn q-link", text: "‹ Anterior" });
   const pass = h("button", { class: "link-btn q-link", onclick: () => actions.passQuestion() });
-  const skip = h("button", { class: "btn secondary q-skip", text: "Skip", title: "Leave this question unanswered", onclick: () => actions.skipQuestion() });
+  const skip = h("button", { class: "btn secondary q-skip", text: "Pular", title: "Deixar esta pergunta sem resposta", onclick: () => actions.skipQuestion() });
   // Under a list of options: "Other…", and Send when several can be picked.
   const tail = h("div", { class: "q-tail" });
   const foot = h("div", { class: "q-foot" }, tail, hint, h("div", { class: "grow" }), back, pass, skip);
   const field = h("input", {
     class: "island-field", type: "text", maxlength: "2000", autocomplete: "off", spellcheck: "false",
-    placeholder: "Your answer",
+    placeholder: "Sua resposta",
   }) as HTMLInputElement;
   const lines = stack(116, 16, who, title, row, foot);
   // A question with more options than the window is tall for fills its card:
@@ -750,11 +750,11 @@ function buildQuestion(actions: ViewActions, onResize: () => void): ViewHost {
     clear(who);
     clear(row);
     clear(tail);
-    pass.textContent = `Answer in ${State.clientName}`;
+    pass.textContent = `Responder no ${State.clientName}`;
     back.style.display = at > 0 ? "" : "none";
     if (!info || !q) {
-      who.append(sessionWho("is asking a question"));
-      title.textContent = task?.steps.at(-1) ?? "Claude needs an answer.";
+      who.append(sessionWho("está perguntando"));
+      title.textContent = task?.steps.at(-1) ?? "Claude precisa de uma resposta.";
       hint.textContent = "";
       pass.style.display = "none";
       skip.style.display = "none";
@@ -763,22 +763,22 @@ function buildQuestion(actions: ViewActions, onResize: () => void): ViewHost {
     pass.style.display = "";
     skip.style.display = "";
 
-    const asking = sessionWho("is asking a question");
+    const asking = sessionWho("está perguntando");
     if (q.header) asking.append(h("span", { class: "q-chip", text: q.header }));
     if (info.questions.length > 1) asking.append(h("span", { class: "q-count", text: `${at + 1}/${info.questions.length}` }));
     who.append(asking);
     title.textContent = q.question;
     title.title = q.question;
 
-    const rest = q.multiSelect ? "Pick one or more, then send." : "";
+    const rest = q.multiSelect ? "Escolha uma ou mais, depois envie." : "";
     hint.textContent = rest;
 
     if (typing) {
       row.classList.remove("q-list");
       row.append(
         field,
-        btn(at + 1 < info.questions.length ? "Next" : "Send", "primary", () => settle(field.value.trim())),
-        btn("Back", "secondary", () => {
+        btn(at + 1 < info.questions.length ? "Próxima" : "Enviar", "primary", () => settle(field.value.trim())),
+        btn("Voltar", "secondary", () => {
           stopTyping();
           State.notify();
         }),
@@ -813,7 +813,7 @@ function buildQuestion(actions: ViewActions, onResize: () => void): ViewHost {
     after.append(
       h("button", {
         class: "btn secondary q-opt other",
-        text: "Other…",
+        text: "Outra…",
         onclick: () => {
           typing = true;
           State.notify();
@@ -824,7 +824,7 @@ function buildQuestion(actions: ViewActions, onResize: () => void): ViewHost {
     );
     if (q.multiSelect) {
       after.append(
-        btn(at + 1 < info.questions.length ? "Next" : "Send", "primary", () =>
+        btn(at + 1 < info.questions.length ? "Próxima" : "Enviar", "primary", () =>
           // In the order the options are listed, not the order they were clicked.
           settle(q.options.filter((o) => picked.has(o.label)).map((o) => o.label).join(ANSWER_JOIN)),
         ),
@@ -865,7 +865,7 @@ function frontNews(): IntegrationNews | null {
  */
 function newsActions(actions: ViewActions): HTMLElement {
   return h("div", { class: "actions" },
-    btn("Open", "primary", () => actions.followNews()),
+    btn("Abrir", "primary", () => actions.followNews()),
     // OK only folds the island: the news stays on the pill until it is opened
     // or gets old, in case it was closed too fast.
     btn("OK", "secondary", () => actions.collapse()),
@@ -878,7 +878,7 @@ function newsActions(actions: ViewActions): HTMLElement {
  * with it — the step that broke, who merged, how big.
  */
 function tellNews(news: IntegrationNews, who: HTMLElement, title: HTMLElement, facts: HTMLElement) {
-  who.append(agentWho(State.focusTask, news.open?.says ?? (news.success ? "pull request merged" : "a build broke")));
+  who.append(agentWho(State.focusTask, news.open?.says ?? (news.success ? "pull request mesclado" : "um build quebrou")));
   title.textContent = news.open?.title ?? news.label;
   clear(facts);
   facts.append(...newsFacts(news));
@@ -886,7 +886,7 @@ function tellNews(news: IntegrationNews, who: HTMLElement, title: HTMLElement, f
 
 function buildError(actions: ViewActions, onResize: () => void): ViewHost {
   const who = h("div");
-  const title = h("div", { class: "title", text: "Workflow stopped." });
+  const title = h("div", { class: "title", text: "Workflow parou." });
   const detail = h("div", { class: "detail" });
   // Where what stopped runs: n8n, the Claude app, a terminal — the pill's own way out.
   const openLabel = h("span");
@@ -919,11 +919,11 @@ function buildError(actions: ViewActions, onResize: () => void): ViewHost {
       }
       // A Claude Code session is named by its conversation; n8n and a
       // third-party agent's pill by their own name.
-      who.append(task?.id === CLAUDE_ID ? sessionWho("Claude Code") : agentWho(task, task?.source === "n8n" ? "n8n" : "stopped"));
-      title.textContent = task?.source === "n8n" ? "Workflow stopped." : "Session stopped on an error.";
-      detail.textContent = task?.steps.at(-1) ?? "No detail available.";
+      who.append(task?.id === CLAUDE_ID ? sessionWho("Claude Code") : agentWho(task, task?.source === "n8n" ? "n8n" : "parou"));
+      title.textContent = task?.source === "n8n" ? "Workflow parou." : "Sessão parou com um erro.";
+      detail.textContent = task?.steps.at(-1) ?? "Sem detalhes.";
       openLabel.textContent =
-        task?.source === "n8n" ? "Open in n8n" : task?.id === CLAUDE_ID && State.session.client === "desktop" ? "Open Claude" : "Open terminal";
+        task?.source === "n8n" ? "Abrir no n8n" : task?.id === CLAUDE_ID && State.session.client === "desktop" ? "Abrir Claude" : "Abrir terminal";
       air.fit();
     },
   };
@@ -940,7 +940,7 @@ function buildFinished(actions: ViewActions, onResize: () => void): ViewHost {
   const changesLabel = h("span");
   const changesBtn = h("button", { class: "btn secondary", onclick: () => actions.openSession(true) }, changesLabel);
   // What Claude said, in full: the card only has room for its first words.
-  const readBtn = h("button", { class: "btn primary", onclick: () => actions.openSession() }, h("span", { text: "Read reply" }));
+  const readBtn = h("button", { class: "btn primary", onclick: () => actions.openSession() }, h("span", { text: "Ler resposta" }));
   const row = h("div", { class: "actions" },
     readBtn,
     openBtn,
@@ -970,10 +970,10 @@ function buildFinished(actions: ViewActions, onResize: () => void): ViewHost {
       }
       // A third-party agent's pill has no session behind it: its name, its last step, and OK.
       const claude = State.focusTask?.id === CLAUDE_ID;
-      who.append(claude ? sessionWho("finished") : agentWho(State.focusTask, "finished"));
+      who.append(claude ? sessionWho("terminou") : agentWho(State.focusTask, "terminou"));
       // What Claude said to end its turn, its first line; its last step otherwise.
       const answer = claude ? firstWords(State.session.answer) : null;
-      title.textContent = answer ?? State.focusTask?.steps.at(-1) ?? "Session finished";
+      title.textContent = answer ?? State.focusTask?.steps.at(-1) ?? "Sessão concluída";
       // An answer is a sentence, not a step: smaller, and two lines at most.
       title.classList.toggle("said", answer != null);
       readBtn.style.display = answer ? "" : "none";
@@ -981,9 +981,9 @@ function buildFinished(actions: ViewActions, onResize: () => void): ViewHost {
       // Where the session runs, and what it left behind: the way to its diffs.
       const files = claude ? State.sessionFiles.length : 0;
       openBtn.style.display = claude ? "" : "none";
-      openLabel.textContent = State.session.client === "desktop" ? "Open Claude" : "Open terminal";
+      openLabel.textContent = State.session.client === "desktop" ? "Abrir Claude" : "Abrir terminal";
       changesBtn.style.display = files > 0 ? "" : "none";
-      changesLabel.textContent = files === 1 ? "1 file changed" : `${files} files changed`;
+      changesLabel.textContent = files === 1 ? "1 arquivo alterado" : `${files} arquivos alterados`;
       air.fit();
     },
   };
@@ -995,8 +995,8 @@ function buildConfused(): ViewHost {
   const body = h(
     "div",
     { class: "stack", style: "padding:0 18px 0 128px" },
-    h("div", { class: "title", text: "Too many hits at once." }),
-    h("div", { class: "sub", text: "Give me a sec — back to work in three seconds." }),
+    h("div", { class: "title", text: "Cliques demais de uma vez." }),
+    h("div", { class: "sub", text: "Me dá um segundo — volto ao trabalho em três segundos." }),
   );
   return { el: h("div", { class: "view" }, card("pink", body)), sync() {} };
 }
@@ -1032,7 +1032,7 @@ function buildSettings(actions: ViewActions): ViewHost {
   const rows = h(
     "div",
     { class: "settings-rows" },
-    h("div", { class: "settings-row" }, soundSwitch, h("span", { text: "Sound" }), volume),
+    h("div", { class: "settings-row" }, soundSwitch, h("span", { text: "Som" }), volume),
     h(
       "div",
       { class: "settings-row" },
@@ -1049,7 +1049,7 @@ function buildSettings(actions: ViewActions): ViewHost {
       h("button", {
         class: "link-btn",
         style: "color:#8e939c;font-size:11.5px",
-        text: "Settings…",
+        text: "Configurações…",
         onclick: () => actions.openSettingsWindow(),
       }),
     ),
@@ -1065,7 +1065,7 @@ function buildSettings(actions: ViewActions): ViewHost {
       soundSwitch.classList.toggle("on", s.soundEnabled);
       volume.value = String(s.soundVolume);
       volume.style.opacity = s.soundEnabled ? "1" : "0.4";
-      autoLabel.textContent = `Auto-close · ${Math.round(s.autoCloseInterval)}s`;
+      autoLabel.textContent = `Fechar auto · ${Math.round(s.autoCloseInterval)}s`;
       segButtons.forEach((b, i) => b.classList.toggle("on", s.autoCloseInterval === [10, 15, 30][i]));
       clear(claudeBadge);
       claudeBadge.append(
@@ -1113,8 +1113,8 @@ export function buildViews(
   map.set("github", buildGithub(actions));
   map.set("session", buildSession(actions));
   // Not in the Windows v1: sending a file by email, window attach + web result.
-  map.set("mail", buildPlaceholder("Sending by email isn't in this version.", ""));
-  map.set("searching", buildPlaceholder("Claude is searching…", ""));
-  map.set("result", buildPlaceholder("Result", ""));
+  map.set("mail", buildPlaceholder("Enviar por e-mail não está nesta versão.", ""));
+  map.set("searching", buildPlaceholder("Claude está buscando…", ""));
+  map.set("result", buildPlaceholder("Resultado", ""));
   return map;
 }

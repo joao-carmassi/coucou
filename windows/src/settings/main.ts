@@ -53,9 +53,9 @@ const engineListeners: (() => void)[] = [];
 const engineSwitches: { backend: string; el: HTMLElement }[] = [];
 
 function engineLabel(backend: string): string {
-  if (backend === "windows") return "Claude Code on Windows";
-  if (backend.startsWith("wsl:")) return `Claude Code in WSL · ${backend.slice(4)}`;
-  return "the Claude API";
+  if (backend === "windows") return "Claude Code no Windows";
+  if (backend.startsWith("wsl:")) return `Claude Code no WSL · ${backend.slice(4)}`;
+  return "a API do Claude";
 }
 
 function syncEngine() {
@@ -72,10 +72,10 @@ function signInNotice(backend: string, cli: string): HTMLElement {
   const wsl = backend.startsWith("wsl:");
   const app = !wsl && /\\Claude\\claude-code\\/i.test(cli);
   const why = wsl
-    ? `This Claude Code isn't signed in. Sign it in once in ${backend.slice(4)}, then reopen the settings:`
+    ? `Esse Claude Code não está conectado. Faça login uma vez em ${backend.slice(4)} e reabra as configurações:`
     : app
-      ? "This is the Claude app's own copy of Claude Code. The app signs it in only when the app itself runs it, so for Mochi it needs signing in once on its own. In a terminal, run this, then reopen the settings:"
-      : "This Claude Code isn't signed in. Sign it in once in a terminal, then reopen the settings:";
+      ? "Essa é a cópia do Claude Code que vem com o app do Claude. O app só faz o login quando ele mesmo a executa, então, para o Mochi, ela precisa de um login próprio, uma vez. Rode isto em um terminal e reabra as configurações:"
+      : "Esse Claude Code não está conectado. Faça login uma vez em um terminal e reabra as configurações:";
   const command = wsl ? "claude auth login" : `& "${cli}" auth login`;
   return h("div", { class: "notice warn" },
     h("div", { text: why }),
@@ -97,9 +97,9 @@ function accountRow(): HTMLElement {
     void save();
   });
   return h("div", { class: "row" },
-    h("label", { text: "Account folder" }),
+    h("label", { text: "Pasta da conta" }),
     field,
-    h("span", { class: "hint", text: "Optional. Another Claude Code config folder, for Mochi's chat and sessions. Empty = the default." }),
+    h("span", { class: "hint", text: "Opcional. Outra pasta de configuração do Claude Code, para o chat e as sessões do Mochi. Vazio = a padrão." }),
   );
 }
 
@@ -112,16 +112,16 @@ function idleOpenRow(cli: string | null): HTMLElement {
   );
   const term = select.options[1];
   term.disabled = !cli;
-  if (!cli) term.title = "Claude Code isn't installed on Windows.";
+  if (!cli) term.title = "O Claude Code não está instalado no Windows.";
   select.value = settings.idleOpen === "terminal" && cli ? "terminal" : "";
   select.addEventListener("change", () => {
     settings.idleOpen = select.value;
     void save();
   });
   return h("div", { class: "row" },
-    h("label", { text: "Idle button opens" }),
+    h("label", { text: "Botão em repouso abre" }),
     select,
-    h("span", { class: "hint", text: "With no session going. Terminal starts Claude Code in your home folder, on the account above." }),
+    h("span", { class: "hint", text: "Sem nenhuma sessão ativa. O Terminal inicia o Claude Code na sua pasta pessoal, na conta acima." }),
   );
 }
 
@@ -138,12 +138,12 @@ function mochiRow(backend: string, cli: string | null, missing: string): HTMLEle
     syncEngine();
   });
   const row = h("div", { class: "row" },
-    h("label", { text: "Use for Mochi" }),
+    h("label", { text: "Usar no Mochi" }),
     sw,
     h("span", {
       class: "hint",
       text: cli
-        ? "Mochi's chat answers through this Claude Code — your subscription, no API key."
+        ? "O chat do Mochi responde por esse Claude Code — sua assinatura, sem API key."
         : missing,
     }),
   );
@@ -156,7 +156,7 @@ function mochiRow(backend: string, cli: string | null, missing: string): HTMLEle
       // Leave a switch that is already on alone, so it can still be turned off.
       if (settings.chatBackend !== backend) {
         sw.disabled = true;
-        sw.title = "Sign this Claude Code in first";
+        sw.title = "Faça login nesse Claude Code primeiro";
       }
     });
   }
@@ -189,7 +189,7 @@ async function previewFlow(body: HTMLElement, install: boolean, ops: FlowOps) {
     clear(body);
     body.append(
       h("div", { class: "notice err", text: String(err).replace(/^Error:\s*/, "") }),
-      h("div", { class: "row" }, h("button", { text: "Back", onclick: ops.back })),
+      h("div", { class: "row" }, h("button", { text: "Voltar", onclick: ops.back })),
     );
     return;
   }
@@ -198,8 +198,8 @@ async function previewFlow(body: HTMLElement, install: boolean, ops: FlowOps) {
     h("div", {
       class: "hint",
       text: install
-        ? `This is exactly what will change in your ${ops.what}. Your own hooks are left untouched.`
-        : "This removes Coucou's entries only. Your own hooks are left untouched.",
+        ? `É exatamente isto que vai mudar no seu ${ops.what}. Seus próprios hooks ficam intactos.`
+        : "Isso remove só as entradas do Coucou. Seus próprios hooks ficam intactos.",
     }),
   );
   if (ops.extra) body.append(h("div", { class: "hint", text: ops.extra }));
@@ -211,7 +211,7 @@ async function previewFlow(body: HTMLElement, install: boolean, ops: FlowOps) {
   );
   const confirm = h("button", {
     class: install ? "primary" : "danger",
-    text: install ? "Back up and write" : "Back up and remove",
+    text: install ? "Fazer backup e gravar" : "Fazer backup e remover",
   });
   confirm.addEventListener("click", async () => {
     confirm.disabled = true;
@@ -220,15 +220,15 @@ async function previewFlow(body: HTMLElement, install: boolean, ops: FlowOps) {
       clear(body);
       body.append(h("div", {
         class: "notice ok",
-        text: `Done. Previous settings saved as ${backup}. Open a new Claude Code session to pick the hooks up.`,
+        text: `Pronto. Configurações anteriores salvas como ${backup}. Abra uma nova sessão do Claude Code para os hooks entrarem em ação.`,
       }));
       window.setTimeout(ops.done, 2600);
     } catch (err) {
       confirm.disabled = false;
-      body.append(h("div", { class: "notice err", text: `Could not write: ${String(err)}` }));
+      body.append(h("div", { class: "notice err", text: `Não foi possível gravar: ${String(err)}` }));
     }
   });
-  body.append(h("div", { class: "row" }, confirm, h("button", { text: "Cancel", onclick: ops.back })));
+  body.append(h("div", { class: "row" }, confirm, h("button", { text: "Cancelar", onclick: ops.back })));
 }
 
 // ── Claude Code section ───────────────────────────────────────────────────────
@@ -257,8 +257,8 @@ function claudeSection(status: HookStatus): HTMLElement {
       h("div", {
         class: "hint",
         text: status.installed
-          ? "Coucou is hooked into your Claude Code sessions. Tool calls, questions and permission requests show up in the island, and you can answer them there."
-          : "Install the hooks to see your Claude Code sessions in the island and approve permissions without leaving what you are doing.",
+          ? "O Coucou está conectado às suas sessões do Claude Code. Chamadas de ferramentas, perguntas e pedidos de permissão aparecem na ilha, e você responde por lá."
+          : "Instale os hooks para ver suas sessões do Claude Code na ilha e aprovar permissões sem sair do que está fazendo.",
       }),
       h("div", { class: "row" },
         h("label", { text: "settings.json" }),
@@ -269,7 +269,7 @@ function claudeSection(status: HookStatus): HTMLElement {
         h("span", { class: "path", text: status.hookPath }),
         statusDot(status.hookReady),
       ),
-      mochiRow("windows", status.claudeCli, "Claude Code isn't installed on Windows."),
+      mochiRow("windows", status.claudeCli, "O Claude Code não está instalado no Windows."),
       accountRow(),
       idleOpenRow(status.claudeCli),
     );
@@ -277,27 +277,27 @@ function claudeSection(status: HookStatus): HTMLElement {
     if (!status.hookReady) {
       body.append(h("div", {
         class: "notice warn",
-        text: "coucou-hook.exe is not in place yet. Restart Coucou; if it still fails, build it with `cargo build -p coucou-hook`.",
+        text: "O coucou-hook.exe ainda não está no lugar. Reinicie o Coucou; se continuar falhando, gere-o com `cargo build -p coucou-hook`.",
       }));
     }
 
     const actions = h("div", { class: "row" });
     const install = h("button", {
       class: "primary",
-      text: status.installed ? "Reinstall hooks…" : "Install hooks…",
+      text: status.installed ? "Reinstalar hooks…" : "Instalar hooks…",
       onclick: () => showPreview(true),
     });
     // Writing hook commands that point at a relay which isn't there would give
     // every Claude Code session a broken hook and nothing to show for it.
     if (!status.hookReady) {
       install.disabled = true;
-      install.title = "The relay isn't installed yet.";
+      install.title = "O relay ainda não está instalado.";
     }
     actions.append(install);
     if (status.installed) {
       actions.append(h("button", {
         class: "danger",
-        text: "Uninstall hooks…",
+        text: "Desinstalar hooks…",
         onclick: () => showPreview(false),
       }));
     }
@@ -331,7 +331,7 @@ function wslSection(hookReady: boolean): { section: HTMLElement; refresh: () => 
   const dot = statusDot(false);
   const body = h("div", { style: "display:flex;flex-direction:column;gap:14px" });
   const section = h("section", { id: "wsl" }, h("h2", {}, dot, h("span", { text: "WSL" })), body);
-  body.append(h("div", { class: "hint", text: "Open the settings to look for WSL distributions." }));
+  body.append(h("div", { class: "hint", text: "Abra as configurações para procurar distribuições WSL." }));
 
   let busy = false;
   let statuses: WslStatus[] = [];
@@ -341,7 +341,7 @@ function wslSection(hookReady: boolean): { section: HTMLElement; refresh: () => 
     busy = true;
     try {
       clear(body);
-      body.append(h("div", { class: "hint", text: "Looking for WSL distributions…" }));
+      body.append(h("div", { class: "hint", text: "Procurando distribuições WSL…" }));
       const names = (await Bridge.wslDistros()) ?? [];
       statuses = [];
       for (const name of names) {
@@ -366,11 +366,11 @@ function wslSection(hookReady: boolean): { section: HTMLElement; refresh: () => 
     body.append(h("div", {
       class: "hint",
       text: statuses.length
-        ? "Claude Code running inside WSL reaches Coucou through a small relay script in the distribution. Install it to see those sessions in the island and approve their permissions."
-        : "No WSL distribution found. Install one with `wsl --install`, then refresh.",
+        ? "O Claude Code rodando no WSL fala com o Coucou por um pequeno script relay na distribuição. Instale-o para ver essas sessões na ilha e aprovar as permissões."
+        : "Nenhuma distribuição WSL encontrada. Instale uma com `wsl --install` e atualize.",
     }));
     for (const st of statuses) body.append(distroBlock(st));
-    body.append(h("div", { class: "row" }, h("button", { text: "Refresh", onclick: () => void refresh() })));
+    body.append(h("div", { class: "row" }, h("button", { text: "Atualizar", onclick: () => void refresh() })));
   }
 
   function distroBlock(st: WslStatus): HTMLElement {
@@ -389,16 +389,16 @@ function wslSection(hookReady: boolean): { section: HTMLElement; refresh: () => 
         h("span", { class: "path", text: st.settingsPath }),
       ),
       h("div", { class: "row" },
-        h("label", { text: "Relay script" }),
+        h("label", { text: "Script relay" }),
         h("span", { class: "path", text: st.relayPath }),
         statusDot(st.relayReady),
       ),
-      mochiRow(`wsl:${st.distro}`, st.claudeCli, "Claude Code isn't installed in this distribution."),
+      mochiRow(`wsl:${st.distro}`, st.claudeCli, "O Claude Code não está instalado nessa distribuição."),
     );
     if (st.installed && !st.relayReady) {
       block.append(h("div", {
         class: "notice warn",
-        text: "The hooks are there but the relay script is missing or out of date. Reinstall to fix it.",
+        text: "Os hooks estão lá, mas o script relay está ausente ou desatualizado. Reinstale para corrigir.",
       }));
     }
 
@@ -411,26 +411,26 @@ function wslSection(hookReady: boolean): { section: HTMLElement; refresh: () => 
         apply: (fingerprint) => Bridge.wslHooksApply(st.distro, install, fingerprint),
         back,
         done: () => void refresh(),
-        what: `${st.distro} settings.json`,
+        what: `settings.json de ${st.distro}`,
         extra: install
-          ? `The relay script is written to ${st.relayPath} along with it.`
-          : `The relay script ${st.relayPath} is removed too.`,
+          ? `O script relay é gravado em ${st.relayPath} junto com ele.`
+          : `O script relay ${st.relayPath} também é removido.`,
       });
     };
 
     const install = h("button", {
       class: "primary",
-      text: st.installed ? "Reinstall hooks…" : "Install hooks…",
+      text: st.installed ? "Reinstalar hooks…" : "Instalar hooks…",
       onclick: () => show(true),
     });
     // Same rule as Windows: no hooks pointing at a relay that isn't there.
     if (!hookReady) {
       install.disabled = true;
-      install.title = "coucou-hook.exe isn't installed yet — restart Coucou.";
+      install.title = "O coucou-hook.exe ainda não está instalado — reinicie o Coucou.";
     }
     const actions = h("div", { class: "row" }, install);
     if (st.installed) {
-      actions.append(h("button", { class: "danger", text: "Uninstall hooks…", onclick: () => show(false) }));
+      actions.append(h("button", { class: "danger", text: "Desinstalar hooks…", onclick: () => show(false) }));
     }
     block.append(actions);
     return block;
@@ -449,27 +449,27 @@ const MODELS: [string, string][] = [
 
 function apiSection(hasKey: boolean): HTMLElement {
   const dot = statusDot(hasKey);
-  const state = h("span", { class: "hint", text: hasKey ? "Key saved in the Windows Credential Manager." : "No key yet — the chat needs one." });
+  const state = h("span", { class: "hint", text: hasKey ? "Chave salva no Gerenciador de Credenciais do Windows." : "Ainda sem chave — o chat precisa de uma." });
 
   const field = h("input", {
     type: "password",
-    placeholder: hasKey ? "••••••••••••  (stored)" : "sk-ant-...",
+    placeholder: hasKey ? "••••••••••••  (salva)" : "sk-ant-...",
     style: "flex:1 1 auto;min-width:0",
     autocomplete: "off",
     spellcheck: "false",
   }) as HTMLInputElement;
 
-  const saveBtn = h("button", { class: "primary", text: "Save key" });
-  const clearBtn = h("button", { class: "danger", text: "Remove" });
+  const saveBtn = h("button", { class: "primary", text: "Salvar chave" });
+  const clearBtn = h("button", { class: "danger", text: "Remover" });
   const feedback = h("div", {});
 
   async function refresh() {
     const present = (await Bridge.secretPresent("anthropic-api-key")) ?? false;
     dot.style.background = statusColor(present);
     state.textContent = present
-      ? "Key saved in the Windows Credential Manager."
-      : "No key yet — the chat needs one.";
-    field.placeholder = present ? "••••••••••••  (stored)" : "sk-ant-...";
+      ? "Chave salva no Gerenciador de Credenciais do Windows."
+      : "Ainda sem chave — o chat precisa de uma.";
+    field.placeholder = present ? "••••••••••••  (salva)" : "sk-ant-...";
     clearBtn.style.display = present ? "" : "none";
   }
 
@@ -480,10 +480,10 @@ function apiSection(hasKey: boolean): HTMLElement {
     try {
       await Bridge.secretSet("anthropic-api-key", value);
       field.value = "";
-      feedback.append(h("div", { class: "notice ok", text: "Saved. It never touches disk." }));
+      feedback.append(h("div", { class: "notice ok", text: "Salva. Nunca vai para o disco." }));
       await refresh();
     } catch (err) {
-      feedback.append(h("div", { class: "notice err", text: `Could not save: ${String(err)}` }));
+      feedback.append(h("div", { class: "notice err", text: `Não foi possível salvar: ${String(err)}` }));
     }
   });
 
@@ -491,10 +491,10 @@ function apiSection(hasKey: boolean): HTMLElement {
     clear(feedback);
     try {
       await Bridge.secretClear("anthropic-api-key");
-      feedback.append(h("div", { class: "notice ok", text: "Key removed." }));
+      feedback.append(h("div", { class: "notice ok", text: "Chave removida." }));
       await refresh();
     } catch (err) {
-      feedback.append(h("div", { class: "notice err", text: `Could not remove: ${String(err)}` }));
+      feedback.append(h("div", { class: "notice err", text: `Não foi possível remover: ${String(err)}` }));
     }
   });
 
@@ -516,8 +516,8 @@ function apiSection(hasKey: boolean): HTMLElement {
     const api = settings.chatBackend === "api";
     engine.className = api ? "hint" : "notice ok";
     engine.textContent = api
-      ? "Mochi answers with this key. To use your Claude subscription instead, turn on \"Use for Mochi\" on a Claude Code above."
-      : `Mochi answers through ${engineLabel(settings.chatBackend)}, on your subscription — the key below isn't used. The model is Claude Code's own.`;
+      ? "O Mochi responde com essa chave. Para usar sua assinatura do Claude, ative \"Usar no Mochi\" em um Claude Code acima."
+      : `O Mochi responde por ${engineLabel(settings.chatBackend)}, na sua assinatura — a chave abaixo não é usada. O modelo é o do próprio Claude Code.`;
   };
   engineListeners.push(drawEngine);
   drawEngine();
@@ -529,7 +529,7 @@ function apiSection(hasKey: boolean): HTMLElement {
     engine,
     state,
     h("div", { class: "row" }, h("label", { text: "API key" }), field, saveBtn, clearBtn),
-    h("div", { class: "row" }, h("label", { text: "Model" }), model),
+    h("div", { class: "row" }, h("label", { text: "Modelo" }), model),
     feedback,
   );
 }
@@ -556,17 +556,17 @@ function githubSetup(present: Record<string, boolean>): IntegrationSetup {
     spellcheck: "false",
   }) as HTMLInputElement;
 
-  const saveBtn = h("button", { class: "primary", text: "Save token" });
-  const clearBtn = h("button", { class: "danger", text: "Remove" });
-  const testBtn = h("button", { text: "Test connection" });
+  const saveBtn = h("button", { class: "primary", text: "Salvar token" });
+  const clearBtn = h("button", { class: "danger", text: "Remover" });
+  const testBtn = h("button", { text: "Testar conexão" });
   const feedback = h("div", {});
 
   function show(present: boolean) {
     dot.style.background = statusColor(present);
     state.textContent = present
-      ? "Token saved in the Windows Credential Manager."
-      : "No token yet — the GitHub pill needs one.";
-    field.placeholder = present ? "••••••••••••  (stored)" : "github_pat_…";
+      ? "Token salvo no Gerenciador de Credenciais do Windows."
+      : "Ainda sem token — a pílula do GitHub precisa de um.";
+    field.placeholder = present ? "••••••••••••  (salva)" : "github_pat_…";
     clearBtn.style.display = present ? "" : "none";
   }
 
@@ -586,7 +586,7 @@ function githubSetup(present: Record<string, boolean>): IntegrationSetup {
       void Bridge.refreshIntegration(GITHUB_ID);
       return true;
     } catch (err) {
-      feedback.append(h("div", { class: "notice err", text: `Could not save: ${String(err)}` }));
+      feedback.append(h("div", { class: "notice err", text: `Não foi possível salvar: ${String(err)}` }));
       return false;
     }
   }
@@ -595,7 +595,7 @@ function githubSetup(present: Record<string, boolean>): IntegrationSetup {
     if (!field.value.trim()) return;
     clear(feedback);
     if (await store()) {
-      feedback.append(h("div", { class: "notice ok", text: "Saved. It never touches disk — test it below." }));
+      feedback.append(h("div", { class: "notice ok", text: "Salvo. Nunca vai para o disco — teste abaixo." }));
     }
   });
 
@@ -603,10 +603,10 @@ function githubSetup(present: Record<string, boolean>): IntegrationSetup {
     clear(feedback);
     try {
       await Bridge.secretClear(GITHUB_KEY);
-      feedback.append(h("div", { class: "notice ok", text: "Token removed." }));
+      feedback.append(h("div", { class: "notice ok", text: "Token removido." }));
       await refresh();
     } catch (err) {
-      feedback.append(h("div", { class: "notice err", text: `Could not remove: ${String(err)}` }));
+      feedback.append(h("div", { class: "notice err", text: `Não foi possível remover: ${String(err)}` }));
     }
   });
 
@@ -616,20 +616,20 @@ function githubSetup(present: Record<string, boolean>): IntegrationSetup {
     clear(feedback);
     if (!(await store())) return;
     testBtn.disabled = true;
-    testBtn.textContent = "Testing…";
+    testBtn.textContent = "Testando…";
     try {
       feedback.append(githubResult(await Bridge.githubTest()));
     } catch (err) {
       feedback.append(h("div", { class: "notice err", text: String(err).replace(/^Error:\s*/, "") }));
     } finally {
       testBtn.disabled = false;
-      testBtn.textContent = "Test connection";
+      testBtn.textContent = "Testar conexão";
     }
   });
 
   const newToken = h("button", {
     class: "link",
-    text: "fine-grained token",
+    text: "token fine-grained",
     onclick: () => void Bridge.openUrl(GITHUB_NEW_TOKEN_URL),
   });
 
@@ -643,15 +643,15 @@ function githubSetup(present: Record<string, boolean>): IntegrationSetup {
     h(
       "div",
       { class: "hint" },
-      "Create a ", newToken, " with ",
-      h("b", { text: "Repository access: All repositories" }), ", then under ",
-      h("b", { text: "Repository permissions" }), " set ",
+      "Crie um ", newToken, " com ",
+      h("b", { text: "Repository access: All repositories" }), ", depois, em ",
+      h("b", { text: "Repository permissions" }), ", defina ",
       h("b", { text: "Actions" }), ", ", h("b", { text: "Contents" }), ", ",
-      h("b", { text: "Deployments" }), ", ", h("b", { text: "Issues" }), " and ",
+      h("b", { text: "Deployments" }), ", ", h("b", { text: "Issues" }), " e ",
       h("b", { text: "Pull requests" }),
-      " to Read-only (Metadata is added on its own). Under ",
+      " como Read-only (Metadata é adicionado automaticamente). Em ",
       h("b", { text: "Account permissions" }), ", ", h("b", { text: "Events" }),
-      " Read-only is optional and adds your private activity. Nothing else — Coucou only reads.",
+      " Read-only é opcional e inclui sua atividade privada. Nada além disso — o Coucou só lê.",
     ),
     h("div", { class: "row" }, testBtn),
     feedback,
@@ -671,7 +671,7 @@ function githubResult(account: GithubAccount): HTMLElement {
   return h(
     "div",
     { class: missing ? "notice warn" : "notice ok" },
-    h("div", { text: `Connected as ${who}.` }),
+    h("div", { text: `Conectado como ${who}.` }),
     h("div", { text: tokenExpiry(account.expiresAt) }),
     list,
   );
@@ -679,14 +679,14 @@ function githubResult(account: GithubAccount): HTMLElement {
 
 /** "2026-12-12 10:00:00 +0100" → a date, with a nudge when it is close. */
 function tokenExpiry(raw: string | null): string {
-  if (!raw) return "This token has no expiry date.";
+  if (!raw) return "Esse token não tem data de expiração.";
   const date = new Date(raw.slice(0, 10));
-  if (Number.isNaN(date.getTime())) return `Token expires ${raw}.`;
-  const when = date.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+  if (Number.isNaN(date.getTime())) return `O token expira em ${raw}.`;
+  const when = date.toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" });
   const days = Math.ceil((date.getTime() - Date.now()) / DAY_MS);
-  if (days < 0) return `This token expired on ${when}.`;
-  if (days <= EXPIRES_SOON_DAYS) return `Token expires on ${when} — in ${days} day${days === 1 ? "" : "s"}. Make a new one soon.`;
-  return `Token expires on ${when}.`;
+  if (days < 0) return `Esse token expirou em ${when}.`;
+  if (days <= EXPIRES_SOON_DAYS) return `O token expira em ${when} — em ${days} ${days === 1 ? "dia" : "dias"}. Crie um novo em breve.`;
+  return `O token expira em ${when}.`;
 }
 
 // ── Integrations section ──────────────────────────────────────────────────────
@@ -710,20 +710,20 @@ interface IntegrationSetup {
 
 const INTEGRATIONS: IntegrationDef[] = [
   { id: "integration_stripe", name: "Stripe", color: "#0570DE",
-    fields: [{ key: "stripe-api-key", label: "Secret key", placeholder: "sk_live_…", secret: true }] },
+    fields: [{ key: "stripe-api-key", label: "Chave secreta", placeholder: "sk_live_…", secret: true }] },
   { id: "integration_github", name: "GitHub", color: "#F4505E",
     fields: [], setup: githubSetup },
   { id: "integration_vercel", name: "Vercel", color: "#7C5CFF",
     fields: [{ key: "vercel-token", label: "Token", placeholder: "…", secret: true }] },
   { id: "integration_n8n", name: "n8n", color: "#F29B38",
     fields: [
-      { key: "n8n-url", label: "Instance URL", placeholder: "https://n8n.example.com", secret: false },
+      { key: "n8n-url", label: "URL da instância", placeholder: "https://n8n.example.com", secret: false },
       { key: "n8n-api-key", label: "API key", placeholder: "…", secret: true },
     ] },
   { id: "integration_resend", name: "Resend", color: "#22C55E",
     fields: [{ key: "resend-api-key", label: "API key", placeholder: "re_…", secret: true }] },
   { id: "integration_notion", name: "Notion", color: "#8C8C8C",
-    fields: [{ key: "notion-api-key", label: "Integration token", placeholder: "ntn_…", secret: true }] },
+    fields: [{ key: "notion-api-key", label: "Token de integração", placeholder: "ntn_…", secret: true }] },
   { id: "integration_calcom", name: "Cal.com", color: "#C9956A",
     fields: [{ key: "calcom-api-key", label: "API key", placeholder: "cal_…", secret: true }] },
 ];
@@ -736,7 +736,7 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
 
   function updateNote() {
     const used = settings.activeIntegrations.length;
-    note.textContent = `Pick up to ${MAX_ACTIVE} pills to show next to Mochi — ${used}/${MAX_ACTIVE} in use. Keys are stored in the Windows Credential Manager, never on disk.`;
+    note.textContent = `Escolha até ${MAX_ACTIVE} pílulas para mostrar ao lado do Mochi — ${used}/${MAX_ACTIVE} em uso. As chaves ficam no Gerenciador de Credenciais do Windows, nunca no disco.`;
   }
 
   for (const def of INTEGRATIONS) {
@@ -769,12 +769,12 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
     for (const field of def.fields) {
       const input = h("input", {
         type: field.secret ? "password" : "text",
-        placeholder: present[field.key] ? "••••••••  (stored)" : field.placeholder,
+        placeholder: present[field.key] ? "••••••••  (salva)" : field.placeholder,
         autocomplete: "off",
         spellcheck: "false",
         style: "flex:1 1 auto;min-width:0",
       }) as HTMLInputElement;
-      const saveBtn = h("button", { text: "Save" });
+      const saveBtn = h("button", { text: "Salvar" });
       const dotEl = statusDot(present[field.key] ?? false);
       saveBtn.addEventListener("click", async () => {
         const value = input.value.trim();
@@ -782,7 +782,7 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
           await Bridge.secretSet(field.key, value);
           present[field.key] = value.length > 0;
           input.value = "";
-          input.placeholder = value ? "••••••••  (stored)" : field.placeholder;
+          input.placeholder = value ? "••••••••  (salva)" : field.placeholder;
           dotEl.style.background = value ? "#22c55e" : "#f4505e";
         } catch {
           dotEl.style.background = "#f5a524";
@@ -808,7 +808,7 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
   }
 
   updateNote();
-  return h("section", {}, h("h2", {}, h("span", { text: "Integrations" })), note, list);
+  return h("section", {}, h("h2", {}, h("span", { text: "Integrações" })), note, list);
 }
 
 // ── General section ───────────────────────────────────────────────────────────
@@ -836,8 +836,8 @@ function generalSection(): HTMLElement {
 
   const screen = h("select", {}) as HTMLSelectElement;
   screen.append(
-    h("option", { value: "primary", text: "Main display" }),
-    h("option", { value: "cursor", text: "Display under the cursor" }),
+    h("option", { value: "primary", text: "Tela principal" }),
+    h("option", { value: "cursor", text: "Tela sob o cursor" }),
   );
   screen.value = settings.screen;
   screen.addEventListener("change", () => {
@@ -848,23 +848,23 @@ function generalSection(): HTMLElement {
   return h(
     "section",
     {},
-    h("h2", {}, h("span", { text: "General" })),
+    h("h2", {}, h("span", { text: "Geral" })),
     h("div", { class: "row" },
-      h("label", { text: "Sound" }),
+      h("label", { text: "Som" }),
       toggle(settings.soundEnabled, (v) => { settings.soundEnabled = v; void save(); }),
       volume,
     ),
     h("div", { class: "row" },
-      h("label", { text: "Auto-close" }),
+      h("label", { text: "Fechar sozinha" }),
       autoClose,
-      h("span", { class: "hint", text: "seconds after you leave the island" }),
+      h("span", { class: "hint", text: "segundos depois de você sair da ilha" }),
     ),
     h("div", { class: "row" },
-      h("label", { text: "Island lives on" }),
+      h("label", { text: "A ilha fica em" }),
       screen,
     ),
     h("div", { class: "row" },
-      h("label", { text: "Launch at startup" }),
+      h("label", { text: "Iniciar com o Windows" }),
       toggle(settings.autostart, (v) => { settings.autostart = v; void save(); }),
     ),
   );
@@ -903,7 +903,7 @@ async function main() {
     generalSection(),
     h("div", {
       class: "hint",
-      text: "No telemetry. Network requests only go to the services you configure yourself.",
+      text: "Sem telemetria. As requisições de rede só vão para os serviços que você mesmo configurar.",
     }),
   );
 

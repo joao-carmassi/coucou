@@ -38,14 +38,15 @@ let tab: Tab = "activity";
 
 /** Same colours as the pill badges: green check, red cross, amber for "going". */
 const BUILD_STYLE: Record<GithubBuild["state"], { color: string; label: string }> = {
-  success: { color: COLOR.pass, label: "passed" },
-  failure: { color: COLOR.red, label: "failed" },
-  running: { color: COLOR.amber, label: "running" },
-  neutral: { color: COLOR.grey, label: "stopped" },
+  success: { color: COLOR.pass, label: "passou" },
+  failure: { color: COLOR.red, label: "falhou" },
+  running: { color: COLOR.amber, label: "rodando" },
+  neutral: { color: COLOR.grey, label: "parado" },
 };
 
-/** "comment" or "comments", by how many there are. */
-const plural = (n: number, one: string, many = `${one}s`) => (n === 1 ? one : many);
+/** "comentário" or "comments", by how many there are. */
+const ptMany = (w: string) => (w.endsWith("ão") ? `${w.slice(0, -2)}ões` : w.endsWith("l") ? `${w.slice(0, -1)}is` : `${w}s`);
+const plural = (n: number, one: string, many = ptMany(one)) => (n === 1 ? one : many);
 
 /** "1 comment", "3 comments". */
 const counted = (n: number, one: string, many?: string) => `${n} ${plural(n, one, many)}`;
@@ -523,12 +524,12 @@ function stateMark(state: GithubBuild["state"], size: number): Element {
 function buildBadge(build: GithubBuild | null, repo: string): HTMLElement {
   if (!build) return h("span", { class: "gh-build none" });
   const style = BUILD_STYLE[build.state];
-  const where = build.branch ? ` on ${build.branch}` : "";
+  const where = build.branch ? ` em ${build.branch}` : "";
   const badge = h(
     "button",
     {
       class: "gh-build",
-      title: `${build.workflow}${where} · ${style.label} ${timeAgo(build.at)} ago`,
+      title: `${build.workflow}${where} · ${style.label} ${ago(build.at)}`,
       onclick: (e: Event) => {
         e.stopPropagation();
         openRun(repo, build.id, build.workflow, build.url);
@@ -566,7 +567,7 @@ function newsBell(repo: string): HTMLElement {
     clear(bell);
     bell.append(svg(quiet ? ICONS.bellOff : ICONS.bell, 10, { stroke: 2 }));
     bell.classList.toggle("off", quiet);
-    bell.title = quiet ? "Muted: no news from this project. Click to hear from it again." : "News from this project. Click to mute it.";
+    bell.title = quiet ? "Silenciado: sem novidades deste projeto. Clique para voltar a ouvir." : "Novidades deste projeto. Clique para silenciar.";
   };
   bell.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -591,7 +592,7 @@ function repoRow(repo: GithubRepo, login: string, onOpen: () => void): HTMLEleme
     { class: "gh-row", onclick: onOpen },
     dot(repo.languageColor ?? COLOR.blank, 6),
     h("span", { class: "gh-row-title", text: repoName(repo.fullName, login) }),
-    repo.private ? h("i", { class: "gh-lock", title: "Private" }, svg(ICONS.lock, 9, { stroke: 2.2 })) : null,
+    repo.private ? h("i", { class: "gh-lock", title: "Privado" }, svg(ICONS.lock, 9, { stroke: 2.2 })) : null,
     h("span", { class: "gh-row-where", text: repo.language ?? "" }),
     h(
       "span",
@@ -642,10 +643,10 @@ function dayDate(start: string, i: number): Date {
 }
 
 function dayLabel(date: Date, count: number): string {
-  const when = date.toLocaleDateString(undefined, {
+  const when = date.toLocaleDateString("pt-BR", {
     weekday: "short", day: "numeric", month: "short", timeZone: "UTC",
   });
-  const what = count === 0 ? "No contributions" : counted(count, "contribution");
+  const what = count === 0 ? "Nenhuma contribuição" : counted(count, "contribuição");
   return `${what} · ${when}`;
 }
 
@@ -726,7 +727,7 @@ function contributionGraph(c: GithubContributions, o: GraphOptions): HTMLElement
     // of the next one.
     if (month !== previousMonth && col > 0 && col < weeks - 2) {
       const label = h("span", {
-        text: dayDate(c.start, col * 7 - offset).toLocaleDateString(undefined, { month: "short", timeZone: "UTC" }),
+        text: dayDate(c.start, col * 7 - offset).toLocaleDateString("pt-BR", { month: "short", timeZone: "UTC" }),
       });
       label.style.gridColumn = String(col + 1);
       months.append(label);
@@ -759,8 +760,8 @@ function contributionGraph(c: GithubContributions, o: GraphOptions): HTMLElement
 
   const streak = currentStreak(c.counts);
   const summary =
-    `${c.total.toLocaleString()} ${plural(c.total, "contribution")} in the last year` +
-    (streak >= 2 ? ` · ${streak} days in a row` : "");
+    `${c.total.toLocaleString("pt-BR")} ${plural(c.total, "contribuição")} no último ano` +
+    (streak >= 2 ? ` · ${streak} dias seguidos` : "");
   const caption = h("span", { class: "gh-caption" });
   /** What the caption says when no day is hovered: the picked day, or the year. */
   const restCaption = () => {
@@ -769,13 +770,13 @@ function contributionGraph(c: GithubContributions, o: GraphOptions): HTMLElement
   };
   restCaption();
   // GitHub's key, so the colours read the same as on the profile page.
-  const legend = h("span", { class: "gh-legend" }, "Less");
+  const legend = h("span", { class: "gh-legend" }, "Menos");
   for (const color of GITHUB_LEVELS) {
     const swatch = h("i");
     swatch.style.setProperty("--c", color);
     legend.append(swatch);
   }
-  legend.append("More");
+  legend.append("Mais");
 
   // Hovering a day says what it holds and turns Mochi that day's green;
   // leaving the grid gives the year back, and Mochi the picked day's colour,
@@ -816,7 +817,7 @@ function contributionGraph(c: GithubContributions, o: GraphOptions): HTMLElement
  * repositories, as GitHub's profile lists them.
  */
 function daySection(pick: DayPick, login: string, onClose: () => void): HTMLElement {
-  const when = new Date(`${pick.date}T00:00:00Z`).toLocaleDateString(undefined, {
+  const when = new Date(`${pick.date}T00:00:00Z`).toLocaleDateString("pt-BR", {
     weekday: "long", day: "numeric", month: "long", timeZone: "UTC",
   });
   const section = h(
@@ -825,8 +826,8 @@ function daySection(pick: DayPick, login: string, onClose: () => void): HTMLElem
     h(
       "div",
       { class: "gh-day-head" },
-      h("span", { text: `Activity on ${when}` }),
-      h("button", { class: "int-back gh-day-close", title: "Back to recent activity", onclick: onClose }, svg(ICONS.xmark, 8)),
+      h("span", { text: `Atividade em ${when}` }),
+      h("button", { class: "int-back gh-day-close", title: "Voltar à atividade recente", onclick: onClose }, svg(ICONS.xmark, 8)),
     ),
   );
 
@@ -835,7 +836,7 @@ function daySection(pick: DayPick, login: string, onClose: () => void): HTMLElem
     return section;
   }
   if (!pick.data) {
-    if (pick.waiting) section.append(h("div", { class: "gh-loader-text shimmer", text: "Mochi is looking at that day…" }));
+    if (pick.waiting) section.append(h("div", { class: "gh-loader-text shimmer", text: "Mochi está olhando esse dia…" }));
     return section;
   }
 
@@ -847,12 +848,12 @@ function daySection(pick: DayPick, login: string, onClose: () => void): HTMLElem
         "div",
         { class: "gh-row muted" },
         h("i", { class: "gh-row-icon" }, svg(ICONS.lock, 10, { stroke: 2.2 })),
-        h("span", { class: "gh-row-where", text: `${counted(n, "contribution")} in private repositories` }),
+        h("span", { class: "gh-row-where", text: `${counted(n, "contribuição")} em repositórios privados` }),
       ),
     );
   }
   if (pick.data.items.length === 0 && pick.data.privateCount === 0) {
-    section.append(h("div", { class: "int-empty", text: "Nothing public that day." }));
+    section.append(h("div", { class: "int-empty", text: "Nada público nesse dia." }));
   }
   // The day's lines come in one by one the first time they are drawn — after a
   // wait, or at once from the cache.
@@ -883,10 +884,10 @@ function duration(fromIso: string | null, toMs: number): string | null {
   return Number.isFinite(ms) && ms >= 0 ? spoken(ms) : null;
 }
 
-/** "just now" stays as is; everything else reads "2h ago". */
+/** "agora" stays as is; everything else reads "há 2h". */
 function ago(iso: string): string {
   const t = timeAgo(iso);
-  return t === "just now" || t === "" ? t : `${t} ago`;
+  return t === "agora" || t === "" ? t : `há ${t}`;
 }
 
 function hostOf(url: string): string {
@@ -960,8 +961,8 @@ function notGranted(permission: string, what = permission): HTMLElement {
     h(
       "div",
       { class: "gh-block-text" },
-      h("div", { class: "gh-block-title" }, h("span", { text: `${what} aren't readable with this token` })),
-      h("div", { class: "gh-block-sub" }, h("span", { class: "txt", text: `Add “${permission}: Read-only” to it on GitHub.` })),
+      h("div", { class: "gh-block-title" }, h("span", { text: `${what}: sem permissão neste token` })),
+      h("div", { class: "gh-block-sub" }, h("span", { class: "txt", text: `Adicione “${permission}: Read-only” a ele no GitHub.` })),
     ),
   );
 }
@@ -978,10 +979,10 @@ function line(...pieces: (Node | string | null | false | undefined)[]): Node[] {
 }
 
 const RUN_VERB: Record<GithubBuild["state"], string> = {
-  success: "passed",
-  failure: "failed",
-  running: "is running",
-  neutral: "was stopped",
+  success: "passou",
+  failure: "falhou",
+  running: "está rodando",
+  neutral: "foi parado",
 };
 
 function ciBlock(p: GithubProject): HTMLElement {
@@ -990,8 +991,8 @@ function ciBlock(p: GithubProject): HTMLElement {
   if (!run) {
     return block({
       icon: roundIcon(COLOR.grey, svg(ICONS.dash, 9, { stroke: 3 })),
-      title: "No CI here yet",
-      sub: line("No GitHub Actions workflow has run in this repository."),
+      title: "Ainda sem CI aqui",
+      sub: line("Nenhum workflow do GitHub Actions rodou neste repositório."),
     });
   }
   const style = BUILD_STYLE[run.state];
@@ -1002,7 +1003,7 @@ function ciBlock(p: GithubProject): HTMLElement {
   // Oldest on the left, so the streak reads like a timeline.
   const history = [...p.runs].reverse();
   const passed = p.runs.filter((r) => r.state === "success").length;
-  const streak = h("span", { class: "gh-streak", title: `${passed} of the last ${p.runs.length} runs passed` });
+  const streak = h("span", { class: "gh-streak", title: `${passed} das últimas ${p.runs.length} execuções passaram` });
   for (const r of history) {
     const d = h("i");
     d.style.setProperty("--c", BUILD_STYLE[r.state].color);
@@ -1012,9 +1013,9 @@ function ciBlock(p: GithubProject): HTMLElement {
 
   return block({
     icon: roundIcon(style.color, stateMark(run.state, 9)),
-    title: `${run.workflow} ${RUN_VERB[run.state]}${run.branch ? ` on ${run.branch}` : ""}`,
-    right: run.state === "running" ? `for ${took ?? "a moment"}` : ago(run.updatedAt),
-    sub: line(run.title && `“${run.title}”`, run.actor, run.state !== "running" && took && `in ${took}`),
+    title: `${run.workflow} ${RUN_VERB[run.state]}${run.branch ? ` em ${run.branch}` : ""}`,
+    right: run.state === "running" ? `há ${took ?? "um instante"}` : ago(run.updatedAt),
+    sub: line(run.title && `“${run.title}”`, run.actor, run.state !== "running" && took && `em ${took}`),
     aside: streak,
     open: () => openRun(p.fullName, run.id, run.workflow, run.url),
   });
@@ -1039,7 +1040,7 @@ function pullBlock(p: GithubProject): HTMLElement {
   if (!pr) {
     return block({
       icon: roundIcon(COLOR.grey, svg(ICONS.pullRequest, 10, { stroke: 2 })),
-      title: "No pull request yet",
+      title: "Ainda sem pull request",
     });
   }
   const style = PULL_STYLE[pr.state];
@@ -1050,23 +1051,23 @@ function pullBlock(p: GithubProject): HTMLElement {
     " ",
     h("span", { class: "gh-del", text: `−${pr.deletions}` }),
   );
-  const review = pr.review ? h("span", { text: pr.review, style: `color:${REVIEW_COLOR[pr.review]}` }) : null;
-  const files = counted(pr.changedFiles, "file");
-  const comments = counted(pr.comments, "comment");
+  const review = pr.review ? h("span", { text: pt(pr.review), style: `color:${REVIEW_COLOR[pr.review]}` }) : null;
+  const files = counted(pr.changedFiles, "arquivo");
+  const comments = counted(pr.comments, "comentário");
   return block({
     icon: roundIcon(style.color, svg(style.icon, 10, { stroke: 2 })),
     title: `#${pr.number} ${pr.title}`,
     right: chip(pr.state, style.color),
-    sub: line(pr.author && `by ${pr.author}`, size, files, review, pr.comments > 0 && comments, ago(pr.at)),
+    sub: line(pr.author && `por ${pr.author}`, size, files, review, pr.comments > 0 && comments, ago(pr.at)),
     open: () => openTarget({ kind: "pull", repo: p.fullName, number: pr.number }, `#${pr.number}`, pr.url),
   });
 }
 
 const DEPLOY_STYLE: Record<GithubDeploy["state"], { color: string; say: (env: string) => string }> = {
-  success: { color: COLOR.pass, say: (env) => `Live on ${env}` },
-  failure: { color: COLOR.red, say: (env) => `Deploy to ${env} failed` },
-  running: { color: COLOR.amber, say: (env) => `Deploying to ${env}…` },
-  inactive: { color: COLOR.grey, say: (env) => `Was live on ${env}` },
+  success: { color: COLOR.pass, say: (env) => `No ar em ${env}` },
+  failure: { color: COLOR.red, say: (env) => `Deploy em ${env} falhou` },
+  running: { color: COLOR.amber, say: (env) => `Fazendo deploy em ${env}…` },
+  inactive: { color: COLOR.grey, say: (env) => `Esteve no ar em ${env}` },
 };
 
 /** Nothing at all for a repository that never deploys: most don't. */
@@ -1080,7 +1081,7 @@ function deployBlock(p: GithubProject): HTMLElement | null {
     title: style.say(d.environment),
     right: ago(d.at),
     sub: line(
-      d.creator && `by ${d.creator}`,
+      d.creator && `por ${d.creator}`,
       d.sha && h("span", { class: "gh-sha", text: d.sha }),
       d.url && h("span", { class: "gh-host", text: hostOf(d.url) }),
     ),
@@ -1112,7 +1113,7 @@ function languageBar(p: GithubProject): HTMLElement | null {
 const GHOSTS = 3;
 
 function sheetLoader(name: string): HTMLElement {
-  const loader = h("div", { class: "gh-loader" }, h("div", { class: "gh-loader-text shimmer", text: `Mochi is looking into ${name}…` }));
+  const loader = h("div", { class: "gh-loader" }, h("div", { class: "gh-loader-text shimmer", text: `Mochi está olhando ${name}…` }));
   for (let i = 0; i < GHOSTS; i++) {
     const ghost = h("div", { class: "gh-ghost" }, h("i"), h("div", {}, h("b"), h("span")));
     ghost.style.setProperty("--i", String(i));
@@ -1124,10 +1125,10 @@ function sheetLoader(name: string): HTMLElement {
 function projectSheet(p: GithubProject): HTMLElement {
   const facts = h("div", { class: "gh-facts" });
   const addFact = (...children: (Node | string)[]) => facts.append(h("span", {}, ...children));
-  if (p.private) addFact(svg(ICONS.lock, 9, { stroke: 2.2 }), "Private");
-  addFact(svg(ICONS.star, 9), `${compact(p.stars)} ${plural(p.stars, "star")}`);
+  if (p.private) addFact(svg(ICONS.lock, 9, { stroke: 2.2 }), "Privado");
+  addFact(svg(ICONS.star, 9), `${compact(p.stars)} ${plural(p.stars, "estrela")}`);
   if (p.forks > 0) addFact(`${compact(p.forks)} ${plural(p.forks, "fork")}`);
-  if (p.createdAt) addFact(`since ${new Date(p.createdAt).getFullYear()}`);
+  if (p.createdAt) addFact(`desde ${new Date(p.createdAt).getFullYear()}`);
   const homepage = p.homepage;
   if (homepage) {
     facts.append(h("button", { class: "gh-host", text: hostOf(homepage), onclick: () => void Bridge.openUrl(homepage) }));
@@ -1154,8 +1155,17 @@ function titleRow(title: string, ...chips: (HTMLElement | null)[]): HTMLElement 
   return h("div", { class: "gh-title" }, h("span", { text: title }), ...chips);
 }
 
+/** GitHub's own words (state, outcome, review, file status), shown in Portuguese. */
+const WORD_PT: Record<string, string> = {
+  open: "aberto", draft: "rascunho", merged: "merged", closed: "fechado", completed: "concluído", "not planned": "não planejado",
+  passed: "passou", failed: "falhou", running: "rodando", queued: "na fila", cancelled: "cancelado", skipped: "ignorado", waiting: "aguardando", "waiting for approval": "aguardando aprovação", success: "sucesso",
+  "pre-release": "pré-lançamento", approved: "aprovado", "changes requested": "mudanças pedidas", "review required": "revisão pendente",
+  added: "adicionado", removed: "removido", renamed: "renomeado", copied: "copiado", modified: "modificado", changed: "alterado",
+};
+const pt = (w: string) => WORD_PT[w] ?? w;
+
 function chip(text: string, color: string): HTMLElement {
-  const el = h("span", { class: "gh-chip", text });
+  const el = h("span", { class: "gh-chip", text: pt(text) });
   wear(el, color);
   return el;
 }
@@ -1182,7 +1192,7 @@ function description(body: string | null): HTMLElement | null {
   return body ? h("div", { class: "gh-desc long", text: body }) : null;
 }
 
-/** A small grey heading inside a sheet ("Files", "Commits"). */
+/** A small grey heading inside a sheet ("Arquivos", "Commits"). */
 function heading(text: string, aside?: Node): HTMLElement {
   return h("div", { class: "gh-heading" }, h("span", { text }), aside ?? null);
 }
@@ -1202,7 +1212,7 @@ const MODIFIED = { color: COLOR.amber };
  * is the news, and wears its colour.
  */
 function statusWord(file: GithubFile): HTMLElement {
-  const word = h("span", { class: "gh-file-status", text: file.status ?? "modified" });
+  const word = h("span", { class: "gh-file-status", text: pt(file.status ?? "modified") });
   const known = FILE_STATUS[file.status ?? ""];
   if (known) word.style.color = known.color;
   return word;
@@ -1221,7 +1231,7 @@ export function newsFacts(news: IntegrationNews): Node[] {
       case "repo":
         return h("span", { class: "nf strong" }, svg(ICONS.stack, 10), f.text ?? "");
       case "by":
-        return h("span", { class: "nf" }, `${f.verb ?? "by"} `, h("b", { text: f.text ?? "" }));
+        return h("span", { class: "nf" }, `${f.verb ?? "por"} `, h("b", { text: f.text ?? "" }));
       case "diff":
         return h("span", { class: "nf" }, plusMinus(f.additions ?? 0, f.deletions ?? 0));
       case "files":
@@ -1262,7 +1272,7 @@ function runBlock(build: GithubBuild | null, missing: string[], repo: string): H
   const style = BUILD_STYLE[build.state];
   return block({
     icon: roundIcon(style.color, stateMark(build.state, 9)),
-    title: `${build.workflow} ${RUN_VERB[build.state]}${build.branch ? ` on ${build.branch}` : ""}`,
+    title: `${build.workflow} ${RUN_VERB[build.state]}${build.branch ? ` em ${build.branch}` : ""}`,
     right: ago(build.at),
     open: () => openRun(repo, build.id, build.workflow, build.url),
   });
@@ -1278,10 +1288,10 @@ function runBlock(build: GithubBuild | null, missing: string[], repo: string): H
 const TALK_COLOR = COLOR.cyan;
 
 const VERDICT: Record<string, { say: string; color: string; icon: () => SVGSVGElement }> = {
-  approved: { say: "approved", color: COLOR.green, icon: () => svg(ICONS.check, 10, { stroke: 2.4 }) },
-  "changes requested": { say: "requested changes", color: COLOR.amber, icon: () => svg(ICONS.bang, 10) },
-  commented: { say: "reviewed", color: TALK_COLOR, icon: () => svg(ICONS.comment, 10, { stroke: 2 }) },
-  dismissed: { say: "review dismissed", color: COLOR.grey, icon: () => svg(ICONS.dash, 9, { stroke: 3 }) },
+  approved: { say: "aprovou", color: COLOR.green, icon: () => svg(ICONS.check, 10, { stroke: 2.4 }) },
+  "changes requested": { say: "pediu mudanças", color: COLOR.amber, icon: () => svg(ICONS.bang, 10) },
+  commented: { say: "revisou", color: TALK_COLOR, icon: () => svg(ICONS.comment, 10, { stroke: 2 }) },
+  dismissed: { say: "revisão dispensada", color: COLOR.grey, icon: () => svg(ICONS.dash, 9, { stroke: 3 }) },
 };
 
 /** Who, what they did if it has a word, and when. */
@@ -1301,7 +1311,7 @@ function remarkHead(r: GithubRemark, did?: { say: string; color?: string }): HTM
 function remarkBody(r: GithubRemark): (HTMLElement | null)[] {
   return [
     r.body ? h("div", { class: "gh-say-body", text: r.body }) : null,
-    r.cut ? h("button", { class: "gh-host", text: "The rest is on GitHub", onclick: () => void Bridge.openUrl(r.url) }) : null,
+    r.cut ? h("button", { class: "gh-host", text: "O resto está no GitHub", onclick: () => void Bridge.openUrl(r.url) }) : null,
   ];
 }
 
@@ -1313,7 +1323,7 @@ function sayRow(entry: Exclude<GithubEntry, { kind: "thread" }>): HTMLElement {
     : entry.kind === "description"
       ? roundIcon(COLOR.dim, svg(ICONS.pullRequest, 10, { stroke: 2.2 }))
       : roundIcon(TALK_COLOR, svg(ICONS.comment, 10, { stroke: 2 }));
-  const did = verdict ?? (entry.kind === "description" ? { say: "opened the pull request" } : undefined);
+  const did = verdict ?? (entry.kind === "description" ? { say: "abriu o pull request" } : undefined);
   return h(
     "div",
     { class: "gh-block gh-say" },
@@ -1334,7 +1344,7 @@ function dedent(code: GithubThread["code"]): GithubThread["code"] {
 
 /** The replies of a thread, one under the other. */
 function threadTalk(thread: GithubThread): HTMLElement {
-  const more = `${counted(thread.more, "more reply", "more replies")} on GitHub`;
+  const more = `${counted(thread.more, "resposta a mais", "respostas a mais")} no GitHub`;
   const last = thread.remarks[thread.remarks.length - 1];
   return h(
     "div",
@@ -1353,14 +1363,14 @@ function threadTalk(thread: GithubThread): HTMLElement {
  */
 function threadBlock(c: GithubCommentsDetail, thread: GithubThread): HTMLElement {
   const { dir, base } = splitPath(thread.path);
-  const state = thread.resolved ? "resolved" : thread.outdated ? "outdated" : null;
+  const state = thread.resolved ? "resolvido" : thread.outdated ? "desatualizado" : null;
   const found = threadFile(c, thread);
   const onLine = found?.file.patch != null && threadRow(found.file.patch, thread) != null;
   const head = h(
     "button",
     {
       class: "gh-thread-head",
-      title: !found ? "Open this thread on GitHub" : onLine ? `Open ${base} on this line` : `Open ${base}`,
+      title: !found ? "Abrir esta conversa no GitHub" : onLine ? `Abrir ${base} nesta linha` : `Abrir ${base}`,
       onclick: () => openThread(c, thread),
     },
     h("i", { class: "gh-row-icon" }, extBadge(thread.path)),
@@ -1377,7 +1387,7 @@ function threadBlock(c: GithubCommentsDetail, thread: GithubThread): HTMLElement
       "div",
       { class: "gh-thread resolved" },
       head,
-      h("div", { class: "gh-thread-sum", text: `${people.join(", ")} · ${counted(count, "comment")}` }),
+      h("div", { class: "gh-thread-sum", text: `${people.join(", ")} · ${counted(count, "comentário")}` }),
     );
   }
   const kind = fileKind(thread.path);
@@ -1402,16 +1412,16 @@ function commentsView(c: GithubCommentsDetail, login: string): HTMLElement {
     titleRow(`#${c.number} ${c.title}`),
     facts(
       c.repo, login,
-      said > 0 && counted(said, "comment"),
-      threads.length > 0 && `${threads.length} on the code`,
-      threads.length > 0 && (open === 0 ? "all resolved" : `${open} to resolve`),
+      said > 0 && counted(said, "comentário"),
+      threads.length > 0 && `${threads.length} no código`,
+      threads.length > 0 && (open === 0 ? "todas resolvidas" : `${open} a resolver`),
     ),
     c.earlier
-      ? h("button", { class: "gh-host", text: "Earlier ones are on GitHub", onclick: () => void Bridge.openUrl(c.url) })
+      ? h("button", { class: "gh-host", text: "Os anteriores estão no GitHub", onclick: () => void Bridge.openUrl(c.url) })
       : null,
     ...c.entries.map((entry) => (entry.kind === "thread" ? threadBlock(c, entry) : sayRow(entry))),
     said + threads.length === 0
-      ? h("div", { class: "int-empty", text: c.entries.length ? "Nobody has commented yet." : "No description, and nobody has commented yet." })
+      ? h("div", { class: "int-empty", text: c.entries.length ? "Ninguém comentou ainda." : "Sem descrição, e ninguém comentou ainda." })
       : null,
   );
 }
@@ -1421,26 +1431,26 @@ function commentsBlock(p: GithubPullDetail): HTMLElement {
   const total = p.comments + p.threads;
   return block({
     icon: roundIcon(total > 0 ? TALK_COLOR : COLOR.dim, svg(ICONS.comment, 10, { stroke: 2 })),
-    title: total === 0 ? "No comments yet" : counted(total, "comment"),
+    title: total === 0 ? "Ainda sem comentários" : counted(total, "comentário"),
     sub: total === 0
-      ? line("Its description is in here")
-      : line(p.comments > 0 && `${p.comments} in the conversation`, p.threads > 0 && `${p.threads} on the code`),
+      ? line("A descrição está aqui dentro")
+      : line(p.comments > 0 && `${p.comments} na conversa`, p.threads > 0 && `${p.threads} no código`),
     open: () => openComments(p),
   });
 }
 
 const REVIEW_TITLE: Record<string, string> = {
-  approved: "Approved",
-  "changes requested": "Changes requested",
-  "review required": "Waiting for a review",
+  approved: "Aprovado",
+  "changes requested": "Mudanças pedidas",
+  "review required": "Aguardando revisão",
 };
 
 function reviewBlock(p: GithubPullDetail): HTMLElement {
   const color = p.review ? REVIEW_COLOR[p.review] : COLOR.grey;
-  const who = p.reviewers.map((r) => `${r.login} ${r.state}`);
+  const who = p.reviewers.map((r) => `${r.login} ${pt(r.state)}`);
   return block({
     icon: roundIcon(color, svg(p.review === "approved" ? ICONS.check : ICONS.pullRequest, 10, { stroke: 2.4 })),
-    title: p.review ? REVIEW_TITLE[p.review] : p.reviewers.length ? "Reviewed" : "No review yet",
+    title: p.review ? REVIEW_TITLE[p.review] : p.reviewers.length ? "Revisado" : "Ainda sem revisão",
     sub: who.length ? line(...who) : undefined,
   });
 }
@@ -1458,7 +1468,7 @@ function ciJobs(screen: DetailScreen): HTMLElement[] {
   return run.jobs.map((job) => {
     const broke = job.steps.find((s) => s.state === "failure");
     const going = job.steps.find((s) => s.state === "running" && !WAITING.has(s.outcome));
-    const where = broke ? `at “${broke.name}”` : going ? going.name : job.runner;
+    const where = broke ? `em “${broke.name}”` : going ? going.name : job.runner;
     return timedRow(
       job, job.name, where, whole, now,
       () => openRun(run.repo, run.id, run.workflow, run.url),
@@ -1472,16 +1482,16 @@ function pullView(p: GithubPullDetail, login: string, screen: DetailScreen): HTM
   const branches = p.head && p.base ? h("span", { class: "gh-sha", text: `${p.head} → ${p.base}` }) : null;
   const when =
     p.state === "merged" && p.mergedAt
-      ? `merged ${ago(p.mergedAt)}${p.mergedBy ? ` by ${p.mergedBy}` : ""}`
+      ? `merged ${ago(p.mergedAt)}${p.mergedBy ? ` por ${p.mergedBy}` : ""}`
       : p.state === "closed" && p.closedAt
-        ? `closed ${ago(p.closedAt)}`
-        : p.createdAt && `opened ${ago(p.createdAt)}`;
+        ? `fechado ${ago(p.closedAt)}`
+        : p.createdAt && `aberto ${ago(p.createdAt)}`;
   const commits = counted(p.commits, "commit");
   return h(
     "div",
     { class: "gh-sheet" },
     titleRow(`#${p.number} ${p.title}`, chip(p.state, style.color)),
-    facts(p.repo, login, p.author && `by ${p.author}`, branches, when),
+    facts(p.repo, login, p.author && `por ${p.author}`, branches, when),
     labelChips(p.labels),
     runBlock(p.ci, p.missing, p.repo),
     ...ciJobs(screen),
@@ -1489,11 +1499,11 @@ function pullView(p: GithubPullDetail, login: string, screen: DetailScreen): HTM
     commentsBlock(p),
     block({
       icon: roundIcon(COLOR.dim, svg(ICONS.doc, 10)),
-      title: `${counted(p.changedFiles, "file")} changed`,
+      title: `${counted(p.changedFiles, "arquivo")} alterados`,
       right: plusMinus(p.additions, p.deletions),
       sub: line(commits),
     }),
-    ...fileList(p.files, p.url, "Files"),
+    ...fileList(p.files, p.url, "Arquivos"),
   );
 }
 
@@ -1505,20 +1515,20 @@ const ISSUE_COLOR: Record<GithubIssueDetail["state"], string> = {
 };
 
 function issueView(i: GithubIssueDetail, login: string): HTMLElement {
-  const when = i.closedAt ? `closed ${ago(i.closedAt)}` : i.createdAt && `opened ${ago(i.createdAt)}`;
+  const when = i.closedAt ? `fechado ${ago(i.closedAt)}` : i.createdAt && `aberto ${ago(i.createdAt)}`;
   return h(
     "div",
     { class: "gh-sheet" },
     titleRow(`#${i.number} ${i.title}`, chip(i.state, ISSUE_COLOR[i.state])),
     facts(
       i.repo, login,
-      i.author && `by ${i.author}`,
+      i.author && `por ${i.author}`,
       when,
-      i.comments > 0 && counted(i.comments, "comment"),
-      i.assignees.length > 0 && `assigned to ${i.assignees.join(", ")}`,
+      i.comments > 0 && counted(i.comments, "comentário"),
+      i.assignees.length > 0 && `atribuído a ${i.assignees.join(", ")}`,
     ),
     labelChips(i.labels),
-    description(i.body) ?? h("div", { class: "int-empty", text: "No description." }),
+    description(i.body) ?? h("div", { class: "int-empty", text: "Sem descrição." }),
   );
 }
 
@@ -1528,7 +1538,7 @@ function commitsView(c: GithubCommitsDetail, login: string, screen: DetailScreen
   const newest = c.commits[0];
   const title = single && newest
     ? newest.message
-    : `${counted(count, "commit")}${c.branch ? ` on ${c.branch}` : ""}`;
+    : `${counted(count, "commit")}${c.branch ? ` em ${c.branch}` : ""}`;
   const rows = c.commits.map((commit) => {
     // From a list, a commit opens its own sheet; alone, it is already open.
     const open = single
@@ -1547,17 +1557,17 @@ function commitsView(c: GithubCommitsDetail, login: string, screen: DetailScreen
       h("span", { class: "int-ago", text: commit.at ? timeAgo(commit.at) : "" }),
     );
   });
-  const more = count > c.commits.length ? h("div", { class: "int-empty", text: `and ${count - c.commits.length} more on GitHub` }) : null;
+  const more = count > c.commits.length ? h("div", { class: "int-empty", text: `e mais ${count - c.commits.length} no GitHub` }) : null;
   const changed = c.additions != null && c.deletions != null ? plusMinus(c.additions, c.deletions) : undefined;
   return h(
     "div",
     { class: "gh-sheet" },
     titleRow(title, single && newest ? chip(newest.sha, COLOR.blue) : null),
-    facts(c.repo, login, newest?.author && `by ${newest.author}`, newest?.at && ago(newest.at)),
+    facts(c.repo, login, newest?.author && `por ${newest.author}`, newest?.at && ago(newest.at)),
     runBlock(c.ci, c.missing, c.repo),
     ...ciJobs(screen),
     ...(single ? [] : [heading("Commits"), ...rows, more]).filter((n): n is HTMLElement => n != null),
-    ...(c.files.length ? [heading(single ? "Files" : "Latest commit", changed), ...c.files.map((f) => fileRow(f, newest?.url ?? c.url))] : []),
+    ...(c.files.length ? [heading(single ? "Arquivos" : "Último commit", changed), ...c.files.map((f) => fileRow(f, newest?.url ?? c.url))] : []),
   );
 }
 
@@ -1590,11 +1600,11 @@ function releaseView(r: GithubReleaseDetail, login: string): HTMLElement {
     titleRow(r.name, chip(r.tag, COLOR.cyan), r.prerelease ? chip("pre-release", COLOR.amber) : null),
     facts(
       r.repo, login,
-      r.author && `by ${r.author}`,
-      r.publishedAt && `published ${ago(r.publishedAt)}`,
+      r.author && `por ${r.author}`,
+      r.publishedAt && `publicado ${ago(r.publishedAt)}`,
       r.downloads > 0 && `${compact(r.downloads)} ${plural(r.downloads, "download")}`,
     ),
-    ...(assets.length ? [heading("Files"), ...assets] : []),
+    ...(assets.length ? [heading("Arquivos"), ...assets] : []),
     description(r.body),
   );
 }
@@ -1628,15 +1638,15 @@ function envelope(parts: GithubTimed[], now: number): Span | null {
 /** "2m 14s" — or, for what never ran, what it is: "queued", "skipped". */
 function took(t: GithubTimed, now: number): string {
   const span = spanOf(t, now);
-  return span ? spoken(span.to - span.from) : t.outcome;
+  return span ? spoken(span.to - span.from) : pt(t.outcome);
 }
 
 const WAITING = new Set(["queued", "waiting", "waiting for approval"]);
 
 /** "Took 3m 2s", "Running for 40s", "Queued". */
 function tookTitle(t: GithubTimed, now: number): string {
-  if (WAITING.has(t.outcome)) return t.outcome.charAt(0).toUpperCase() + t.outcome.slice(1);
-  return t.state === "running" ? `Running for ${took(t, now)}` : `Took ${took(t, now)}`;
+  if (WAITING.has(t.outcome)) { const w = pt(t.outcome); return w.charAt(0).toUpperCase() + w.slice(1); }
+  return t.state === "running" ? `Rodando há ${took(t, now)}` : `Levou ${took(t, now)}`;
 }
 
 /** A part's mark; a hollow circle for one still waiting for its turn. */
@@ -1664,7 +1674,7 @@ function bar(t: GithubTimed, whole: Span | null, now: number, job = false): HTML
   const length = Math.max(whole.to - whole.from, 1);
   const late = span.from - whole.from;
   const from = job && late < PICKUP_MS ? whole.from : span.from;
-  if (job && from > whole.from) track.title = `Started ${spoken(late)} after the first job`;
+  if (job && from > whole.from) track.title = `Começou ${spoken(late)} depois do primeiro job`;
   const segment = h("i", { class: t.state === "running" ? "live" : "" });
   segment.style.left = `${((from - whole.from) / length) * 100}%`;
   segment.style.width = `${((span.to - from) / length) * 100}%`;
@@ -1754,17 +1764,17 @@ function timedRow(
 function tally(parts: GithubTimed[]): string[] {
   const counts = new Map<string, number>();
   for (const p of parts) counts.set(p.outcome, (counts.get(p.outcome) ?? 0) + 1);
-  return [...counts].map(([word, n]) => `${n} ${word}`);
+  return [...counts].map(([word, n]) => `${n} ${pt(word)}`);
 }
 
 const EVENT_WORDS: Record<string, string> = {
-  push: "on push",
-  pull_request: "on a pull request",
-  pull_request_target: "on a pull request",
-  schedule: "on schedule",
-  workflow_dispatch: "started by hand",
-  release: "on a release",
-  merge_group: "in the merge queue",
+  push: "em push",
+  pull_request: "em um pull request",
+  pull_request_target: "em um pull request",
+  schedule: "agendado",
+  workflow_dispatch: "iniciado à mão",
+  release: "em um release",
+  merge_group: "na fila de merge",
 };
 
 function runView(r: GithubRunDetail, login: string, screen: DetailScreen): HTMLElement {
@@ -1780,9 +1790,9 @@ function runView(r: GithubRunDetail, login: string, screen: DetailScreen): HTMLE
       r.repo, login,
       r.branch && h("span", { class: "gh-sha", text: r.branch }),
       r.event && (EVENT_WORDS[r.event] ?? r.event),
-      r.actor && `by ${r.actor}`,
-      r.attempt > 1 && `attempt ${r.attempt}`,
-      r.startedAt && `started ${ago(r.startedAt)}`,
+      r.actor && `por ${r.actor}`,
+      r.attempt > 1 && `tentativa ${r.attempt}`,
+      r.startedAt && `iniciado ${ago(r.startedAt)}`,
     ),
     block({
       icon: roundIcon(style.color, svg(ICONS.timer, 11)),
@@ -1795,14 +1805,14 @@ function runView(r: GithubRunDetail, login: string, screen: DetailScreen): HTMLE
       // A failed job says where it broke; the others, what they ran on.
       const broke = job.steps.find((s) => s.state === "failure");
       return timedRow(
-        job, job.name, broke ? `at “${broke.name}”` : job.runner, whole, now,
+        job, job.name, broke ? `em “${broke.name}”` : job.runner, whole, now,
         () => openJob(screen, job),
         crewMember(r.id, job),
       );
     }),
-    r.moreJobs > 0 ? h("div", { class: "int-empty", text: `and ${r.moreJobs} more on GitHub` }) : null,
+    r.moreJobs > 0 ? h("div", { class: "int-empty", text: `e mais ${r.moreJobs} no GitHub` }) : null,
     r.jobs.length === 0
-      ? h("div", { class: "int-empty", text: r.state === "running" ? "Waiting for the first job…" : "No jobs to show." })
+      ? h("div", { class: "int-empty", text: r.state === "running" ? "Aguardando o primeiro job…" : "Nenhum job para mostrar." })
       : null,
   );
 }
@@ -1816,24 +1826,24 @@ function jobView(job: GithubJob, run: GithubRunDetail): HTMLElement {
     "div",
     { class: "gh-sheet" },
     titleRow(job.name, chip(job.outcome, style.color)),
-    h("div", { class: "gh-facts" }, ...line(run.workflow, job.runner, job.startedAt && `started ${ago(job.startedAt)}`)),
+    h("div", { class: "gh-facts" }, ...line(run.workflow, job.runner, job.startedAt && `iniciado ${ago(job.startedAt)}`)),
     block({
       icon: roundIcon(style.color, svg(ICONS.timer, 11)),
       title: tookTitle(job, now),
-      right: counted(job.steps.length, "step"),
-      sub: broke ? line(`broke at “${broke.name}”`) : job.steps.length ? line(...tally(job.steps)) : undefined,
+      right: counted(job.steps.length, "etapa"),
+      sub: broke ? line(`quebrou em “${broke.name}”`) : job.steps.length ? line(...tally(job.steps)) : undefined,
     }),
-    heading("Steps"),
+    heading("Etapas"),
     ...job.steps.map((step) => timedRow(step, step.name, null, whole, now)),
-    job.steps.length === 0 ? h("div", { class: "int-empty", text: "No steps yet." }) : null,
-    h("button", { class: "gh-host", text: "Its logs are on GitHub", onclick: () => void Bridge.openUrl(job.url) }),
+    job.steps.length === 0 ? h("div", { class: "int-empty", text: "Ainda sem etapas." }) : null,
+    h("button", { class: "gh-host", text: "Os logs estão no GitHub", onclick: () => void Bridge.openUrl(job.url) }),
   );
 }
 
 /** What a whole sheet is called when its permission's name doesn't say it. */
 const LOCKED_WHAT: Record<string, string> = {
-  Contents: "Commits and releases",
-  Actions: "Actions runs",
+  Contents: "Commits e releases",
+  Actions: "Execuções do Actions",
 };
 
 function detailView(d: GithubDetail, login: string, screen: DetailScreen): HTMLElement {
@@ -1855,7 +1865,7 @@ function detailView(d: GithubDetail, login: string, screen: DetailScreen): HTMLE
         "div",
         { class: "gh-sheet" },
         notGranted(d.permission, LOCKED_WHAT[d.permission]),
-        h("button", { class: "gh-host", text: "Open it on GitHub instead", onclick: () => void Bridge.openUrl(screen.url) }),
+        h("button", { class: "gh-host", text: "Abrir no GitHub", onclick: () => void Bridge.openUrl(screen.url) }),
       );
   }
 }
@@ -1904,7 +1914,7 @@ interface ScreenLook {
 function screenLook(screen: Screen): ScreenLook {
   if (screen.type === "project") {
     return {
-      label: "Project",
+      label: "Projeto",
       color: screen.data?.languages[0]?.color ?? COLOR.dim,
       icon: () => svg(ICONS.stack, 10),
     };
@@ -1912,7 +1922,7 @@ function screenLook(screen: Screen): ScreenLook {
   if (screen.type === "diff") {
     const status = FILE_STATUS[screen.file.status ?? ""] ?? MODIFIED;
     return {
-      label: "File",
+      label: "Arquivo",
       color: status.color,
       icon: () => svg(ICONS.doc, 10),
       mark: () => extBadge(screen.file.path),
@@ -1949,15 +1959,15 @@ function screenLook(screen: Screen): ScreenLook {
     case "release":
       return { label: "Release", color: COLOR.cyan, icon: () => svg(ICONS.tag, 10, { stroke: 2.2 }) };
     case "project":
-      return { label: "Project", color: COLOR.dim, icon: () => svg(ICONS.stack, 10) };
+      return { label: "Projeto", color: COLOR.dim, icon: () => svg(ICONS.stack, 10) };
     case "run":
       return {
-        label: "Run",
+        label: "Execução",
         color: d?.kind === "run" ? BUILD_STYLE[d.state].color : COLOR.dim,
         icon: () => svg(ICONS.timer, 11),
       };
     case "comments":
-      return { label: "Comments", color: TALK_COLOR, icon: () => svg(ICONS.comment, 10, { stroke: 2.2 }) };
+      return { label: "Comentários", color: TALK_COLOR, icon: () => svg(ICONS.comment, 10, { stroke: 2.2 }) };
   }
 }
 
@@ -1978,7 +1988,7 @@ function detailHead(screen: DetailScreen): string {
       // The workflow's name: the line that opened it said it already.
       return screen.label;
     case "comments":
-      return "Comments";
+      return "Comentários";
   }
 }
 
@@ -2018,7 +2028,7 @@ function diffView(file: GithubFile, url: string, thread?: GithubThread): HTMLEle
     return h(
       "div",
       { class: "gh-sheet gh-code-empty" },
-      h("div", { class: "int-empty", text: "No text diff for this file — binary, or too large for GitHub to show." }),
+      h("div", { class: "int-empty", text: "Sem diff de texto neste arquivo — binário, ou grande demais para o GitHub mostrar." }),
     );
   }
 
@@ -2052,10 +2062,10 @@ function diffView(file: GithubFile, url: string, thread?: GithubThread): HTMLEle
   // A thread with no line left in this diff heads it, and says why.
   if (thread && noted == null) {
     const why = thread.outdated
-      ? "On lines that have changed since"
+      ? "Em linhas que mudaram depois"
       : thread.line == null
-        ? "On the file as a whole"
-        : `On line ${thread.line}, further down than this diff goes`;
+        ? "No arquivo inteiro"
+        : `Na linha ${thread.line}, mais abaixo do que este diff mostra`;
     diff.prepend(
       h("div", { class: "gh-diff-note apart" }, h("div", { class: "gh-diff-note-why", text: why }), threadTalk(thread)),
     );
@@ -2065,7 +2075,7 @@ function diffView(file: GithubFile, url: string, thread?: GithubThread): HTMLEle
     { class: "gh-code" },
     diff,
     file.truncated
-      ? h("button", { class: "gh-host", text: "The rest of this diff is on GitHub", onclick: () => void Bridge.openUrl(url) })
+      ? h("button", { class: "gh-host", text: "O resto deste diff está no GitHub", onclick: () => void Bridge.openUrl(url) })
       : null,
   );
 }
@@ -2073,12 +2083,12 @@ function diffView(file: GithubFile, url: string, thread?: GithubThread): HTMLEle
 export function buildGithub(actions: ViewActions): ViewHost {
   const who = h("b", { text: "GitHub" });
   const sub = h("span", { class: "gh-sub" });
-  const refreshBtn = h("button", { class: "gh-icon", title: "Refresh" }, svg(ICONS.refresh, 12, { stroke: 2 }));
+  const refreshBtn = h("button", { class: "gh-icon", title: "Atualizar" }, svg(ICONS.refresh, 12, { stroke: 2 }));
   const openBtn = h(
     "button",
     {
       class: "gh-icon",
-      title: "Open on GitHub",
+      title: "Abrir no GitHub",
       // Whatever is on screen, on GitHub — the way out, never the way in.
       onclick: () => {
         const s = top();
@@ -2190,7 +2200,7 @@ export function buildGithub(actions: ViewActions): ViewHost {
       h("i", {}, svg(news.success ? ICONS.merge : ICONS.xmark, 11, news.success ? { stroke: 2.2 } : {})),
       h("b", { text: open?.title ?? news.label }),
       h("span", { class: "nfs" }, ...newsFacts(news)),
-      h("em", { text: open?.target ? "Open" : "Dismiss" }),
+      h("em", { text: open?.target ? "Abrir" : "Dispensar" }),
     );
     line.style.setProperty("--c", color);
     notice.append(line);
@@ -2215,8 +2225,8 @@ export function buildGithub(actions: ViewActions): ViewHost {
   }
 
   const TABS: Record<Tab, { label: string; icon: () => SVGSVGElement }> = {
-    activity: { label: "Activity", icon: () => svg(ICONS.pulse, 12, { stroke: 2 }) },
-    projects: { label: "Projects", icon: () => svg(ICONS.stack, 11) },
+    activity: { label: "Atividade", icon: () => svg(ICONS.pulse, 12, { stroke: 2 }) },
+    projects: { label: "Projetos", icon: () => svg(ICONS.stack, 11) },
   };
 
   /** Letters a name gets in the column before it is cut. */
@@ -2278,7 +2288,7 @@ export function buildGithub(actions: ViewActions): ViewHost {
       actions.blip();
       popTo(0);
     });
-    root.title = `Back to ${TABS[tab].label}`;
+    root.title = `Voltar para ${TABS[tab].label}`;
     const levels = [
       root,
       ...stack.map((s, i) => {
@@ -2289,7 +2299,7 @@ export function buildGithub(actions: ViewActions): ViewHost {
           actions.blip();
           popTo(i + 1);
         });
-        el.title = last ? whole : `Back to ${whole}`;
+        el.title = last ? whole : `Voltar para ${whole}`;
         return el;
       }),
     ];
@@ -2300,7 +2310,7 @@ export function buildGithub(actions: ViewActions): ViewHost {
     // The start, a mark for what is folded, and as many of the last as fit.
     const kept = TRAIL_ROOM - 2;
     const folded = step("", svg(ICONS.ellipsis, 12), false, null, null);
-    folded.title = counted(levels.length - 1 - kept, "more level");
+    folded.title = counted(levels.length - 1 - kept, "nível a mais", "níveis a mais");
     trail.append(levels[0], folded, ...levels.slice(-kept));
   }
 
@@ -2333,7 +2343,7 @@ export function buildGithub(actions: ViewActions): ViewHost {
       return section;
     }
     if (d.activity.length === 0) {
-      section.append(h("div", { class: "int-empty", text: "Nothing in the last 30 days." }));
+      section.append(h("div", { class: "int-empty", text: "Nada nos últimos 30 dias." }));
     }
     for (const a of d.activity) section.append(activityRow(a, d.login));
     return section;
@@ -2418,7 +2428,7 @@ export function buildGithub(actions: ViewActions): ViewHost {
       sub.textContent = kind(found?.run.workflow ?? "");
       if (screen.run.error) status.append(dot(COLOR.red, 5), h("span", { text: screen.run.error }));
       if (found) list.append(jobView(found.job, found.run));
-      else list.append(h("div", { class: "int-empty", text: "This job is gone from the run." }));
+      else list.append(h("div", { class: "int-empty", text: "Este job não está mais na execução." }));
     } else if (screen.type === "diff") {
       // As an editor heads a file: its name on the tab, its path on the right.
       who.textContent = splitPath(screen.file.path).base;
@@ -2518,7 +2528,7 @@ export function buildGithub(actions: ViewActions): ViewHost {
 
       // Under Mochi, as under a Claude Code session's: who, then through what.
       account.textContent = d && configured ? d.login : "GitHub";
-      accountSub.textContent = !configured ? "Not connected" : d ? "GitHub" : "Loading…";
+      accountSub.textContent = !configured ? "Não conectado" : d ? "GitHub" : "Carregando…";
 
       if (s && d && configured) {
         drawScreen(s, d.login);
@@ -2537,21 +2547,21 @@ export function buildGithub(actions: ViewActions): ViewHost {
       if (!configured) {
         status.append(
           dot(COLOR.red, 5),
-          h("span", { text: "No token yet" }),
+          h("span", { text: "Ainda sem token" }),
           h("button", {
             class: "link-btn",
             style: "color:var(--dim-2)",
-            text: "Settings…",
+            text: "Configurações…",
             onclick: () => actions.openSettingsWindow(),
           }),
         );
       } else if (error) {
         // What's below is the last good answer: say why, and how old it is.
         const when = d ? timeAgo(d.fetchedAt) : "";
-        const age = when && when !== "just now" ? ` · data from ${when} ago` : "";
+        const age = when && when !== "agora" ? ` · dados de há ${when}` : "";
         status.append(dot(COLOR.red, 5), h("span", { text: `${error}${age}` }));
       } else if (!d) {
-        status.append(h("span", { text: "Loading…" }));
+        status.append(h("span", { text: "Carregando…" }));
       }
 
       // A refresh lands while the list may be scrolled: stay where the reader was,
@@ -2585,7 +2595,7 @@ export function buildGithub(actions: ViewActions): ViewHost {
       }
       if (tab === "projects") {
         if (d.repos.length === 0) {
-          list.append(h("div", { class: "int-empty", text: "No repositories yet." }));
+          list.append(h("div", { class: "int-empty", text: "Ainda sem repositórios." }));
         }
         for (const repo of d.repos) {
           list.append(repoRow(repo, d.login, () => openProject(repo.fullName)));

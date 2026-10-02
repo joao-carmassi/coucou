@@ -251,10 +251,10 @@ pub fn send(
     let cwd = folder.clone().unwrap_or_else(|| inbox.to_string_lossy().into_owned());
 
     let mut cmd = match backend {
-        Backend::Api => return Err("Mochi is set to use the Claude API.".into()),
+        Backend::Api => return Err("O Mochi está configurado para usar a API do Claude.".into()),
         Backend::Windows => {
             let cli = windows_cli()
-                .ok_or("Claude Code isn't installed on Windows. Pick another engine in Settings.")?;
+                .ok_or("O Claude Code não está instalado no Windows. Escolha outro motor nas Configurações.")?;
             let mut c = Command::new(cli);
             c.args(&args).current_dir(&cwd);
             fresh_env(&mut c);
@@ -294,7 +294,7 @@ pub fn send(
         return Err(format!("Claude Code: {}", reply.text.chars().take(300).collect::<String>()));
     }
     if reply.text.trim().is_empty() {
-        return Err("No response text.".into());
+        return Err("Sem texto na resposta.".into());
     }
     Ok(ChatReply { text: reply.text.trim().to_string(), session: id })
 }
@@ -307,7 +307,7 @@ fn run(mut cmd: Command, prompt: &str, timeout: Duration) -> Result<(String, Str
         .stderr(Stdio::piped())
         .creation_flags(CREATE_NO_WINDOW)
         .spawn()
-        .map_err(|e| format!("Can't start Claude Code: {e}"))?;
+        .map_err(|e| format!("Não consegui iniciar o Claude Code: {e}"))?;
 
     if let Some(mut stdin) = child.stdin.take() {
         let _ = stdin.write_all(prompt.as_bytes());
@@ -333,7 +333,7 @@ fn run(mut cmd: Command, prompt: &str, timeout: Duration) -> Result<(String, Str
             Ok(Some(_)) => break,
             Ok(None) if Instant::now() >= deadline => {
                 let _ = child.kill();
-                return Err("Claude Code took too long to answer.".into());
+                return Err("O Claude Code demorou demais para responder.".into());
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(100)),
             Err(e) => return Err(e.to_string()),

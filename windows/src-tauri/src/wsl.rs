@@ -178,9 +178,9 @@ pub fn is_distro_name(name: &str) -> bool {
 /// starts the distro if it is not running.
 fn resolve(name: &str) -> Result<Distro, String> {
     if !distros().iter().any(|d| d == name) {
-        return Err(format!("{name} isn't an installed WSL distribution."));
+        return Err(format!("{name} não é uma distribuição WSL instalada."));
     }
-    let unreachable = || format!("Can't reach {name}. Start it once from a terminal, then refresh.");
+    let unreachable = || format!("Não consegui acessar {name}. Inicie-a uma vez por um terminal e atualize.");
 
     let home = run_wsl(&["-d", name, "--exec", "printenv", "HOME"])
         .map(|s| s.trim().to_string())
@@ -226,7 +226,7 @@ pub fn to_linux_path(name: &str, path: &str) -> Result<String, String> {
             let mut parts = rest.split('\\');
             let distro = parts.next().unwrap_or("");
             if !distro.eq_ignore_ascii_case(name) {
-                return Err(format!("That folder is in the {distro} distribution, not {name}."));
+                return Err(format!("Essa pasta está na distribuição {distro}, não em {name}."));
             }
             let linux: Vec<&str> = parts.filter(|p| !p.is_empty()).collect();
             return Ok(format!("/{}", linux.join("/")));
@@ -289,7 +289,7 @@ pub fn write(name: &str, install: bool, fingerprint: &str) -> Result<String, Str
             std::fs::create_dir_all(dir).map_err(|e| format!("Can't create {}: {e}", dir.display()))?;
         }
         std::fs::write(&relay, d.relay_script())
-            .map_err(|e| format!("Can't write the relay script: {e}"))?;
+            .map_err(|e| format!("Não consegui gravar o script de retransmissão: {e}"))?;
     }
     let backup = hooks::write_for(&d.target(), install, fingerprint)?;
     if !install {

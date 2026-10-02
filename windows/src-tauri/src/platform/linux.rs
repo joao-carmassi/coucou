@@ -162,7 +162,7 @@ pub fn left_button_down() -> bool {
 
 /// Window attach (Mochi dragged onto a window) is Windows-only for now.
 pub fn capture_under_cursor() -> Result<(String, u32, u32, Vec<u8>), String> {
-    Err("Window attach is Windows-only for now.".into())
+    Err("Anexar a uma janela só funciona no Windows por enquanto.".into())
 }
 
 // ── Island window ─────────────────────────────────────────────────────────────

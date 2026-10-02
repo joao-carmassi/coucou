@@ -25,9 +25,9 @@ pub fn inbox_dir() -> PathBuf {
 
 pub fn ingest(source: &str) -> Result<DroppedFile, String> {
     let src = Path::new(source);
-    let meta = std::fs::metadata(src).map_err(|e| format!("cannot read {source}: {e}"))?;
+    let meta = std::fs::metadata(src).map_err(|e| format!("não consegui ler {source}: {e}"))?;
     if meta.is_dir() {
-        return Err("Folders can't be dropped yet.".into());
+        return Err("Ainda não dá para soltar pastas.".into());
     }
 
     let dir = inbox_dir();
@@ -52,7 +52,7 @@ pub fn ingest(source: &str) -> Result<DroppedFile, String> {
         }
     }
 
-    std::fs::copy(src, &dest).map_err(|e| format!("cannot copy: {e}"))?;
+    std::fs::copy(src, &dest).map_err(|e| format!("não consegui copiar: {e}"))?;
     // CopyFileEx carries the source's timestamps across, so a file last edited
     // three years ago would arrive already older than the sweep window and be
     // deleted on the spot. The inbox ages from when *we* copied it.
@@ -79,13 +79,13 @@ pub fn save_capture(app: &str, w: u32, h: u32, rgb: &[u8]) -> Result<DroppedFile
     let secs = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let name = format!("{app}-{secs}.png");
     let dest = dir.join(&name);
-    let file = std::fs::File::create(&dest).map_err(|e| format!("cannot save capture: {e}"))?;
+    let file = std::fs::File::create(&dest).map_err(|e| format!("não consegui salvar a captura: {e}"))?;
     let mut enc = png::Encoder::new(std::io::BufWriter::new(file), w, h);
     enc.set_color(png::ColorType::Rgb);
     enc.set_depth(png::BitDepth::Eight);
     enc.write_header()
         .and_then(|mut writer| writer.write_image_data(&rgb))
-        .map_err(|e| format!("cannot save capture: {e}"))?;
+        .map_err(|e| format!("não consegui salvar a captura: {e}"))?;
     sweep(&dir);
 
     Ok(DroppedFile {

@@ -363,20 +363,20 @@ function lastPathComponent(p: string): string {
  * the rest of the island here.
  */
 const TOOL_LABELS: Record<string, string> = {
-  Bash: "Runs",
-  Read: "Reads",
-  Write: "Writes",
-  Edit: "Edits",
-  Glob: "Finds",
-  Grep: "Searches",
-  WebSearch: "Searches the web",
-  WebFetch: "Fetches",
-  TodoWrite: "Todos",
-  Task: "Agent",
-  LS: "Lists",
-  MultiEdit: "Edits",
+  Bash: "Executa",
+  Read: "Lê",
+  Write: "Escreve",
+  Edit: "Edita",
+  Glob: "Busca",
+  Grep: "Pesquisa",
+  WebSearch: "Pesquisa na web",
+  WebFetch: "Busca",
+  TodoWrite: "Tarefas",
+  Task: "Agente",
+  LS: "Lista",
+  MultiEdit: "Edita",
   NotebookEdit: "Notebook",
-  PowerShell: "Runs",
+  PowerShell: "Executa",
 };
 
 function stepLabel(tool: string, input: Record<string, unknown>): string {
@@ -470,7 +470,7 @@ function handleAgent(island: Island, payload: HookPayload, agent: string) {
 
     case "PostToolUseFailure":
       State.updateTask(agentId, "working");
-      State.appendStep(agentId, "⚠ failed");
+      State.appendStep(agentId, "⚠ falhou");
       break;
 
     case "Notification": {
@@ -507,11 +507,11 @@ function handleAgent(island: Island, payload: HookPayload, agent: string) {
       break;
 
     case "SubagentStart":
-      State.appendStep(agentId, "+ subagent");
+      State.appendStep(agentId, "+ subagente");
       break;
 
     case "SubagentStop":
-      State.appendStep(agentId, "• subagent done");
+      State.appendStep(agentId, "• subagente concluiu");
       break;
 
     case "PermissionRequest":
@@ -623,7 +623,7 @@ export function handleHook(island: Island, payload: HookPayload) {
       if (answeredElsewhere(session, payload)) dropPending(island, session);
       endStep(session, payload, "failed");
       session.state = "working";
-      say(session, "⚠ failed");
+      say(session, "⚠ falhou");
       break;
 
     case "Notification": {
@@ -659,20 +659,20 @@ export function handleHook(island: Island, payload: HookPayload) {
       break;
 
     case "StopFailure":
-      log(session, newStep("Error", "note", "The session stopped on an error.")).state = "failed";
+      log(session, newStep("Error", "note", "A sessão parou com um erro.")).state = "failed";
       session.state = "error";
       Sound.play("error");
       tell("error");
       break;
 
     case "SubagentStart":
-      say(session, "+ subagent");
-      log(session, newStep("Subagent", "note", "A subagent started."));
+      say(session, "+ subagente");
+      log(session, newStep("Subagent", "note", "Um subagente começou."));
       break;
 
     case "SubagentStop":
-      say(session, "• subagent done");
-      log(session, newStep("Subagent", "note", "A subagent finished."));
+      say(session, "• subagente concluiu");
+      log(session, newStep("Subagent", "note", "Um subagente terminou."));
       break;
 
     case "PermissionRequest": {
