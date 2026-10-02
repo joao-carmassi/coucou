@@ -436,6 +436,8 @@ function buildOverview(actions: ViewActions, onResize: () => void): ViewHost {
           task.id, detailOpen, task.state, task.steps.join("|"),
           info?.loaded, info?.error, info?.configured,
           JSON.stringify(info?.data ?? {}),
+          // The idle Claude card's button follows Settings ("Idle button opens").
+          State.clientName,
         ].join("~");
         if (key !== cardKey) {
           cardKey = key;
@@ -457,7 +459,8 @@ function buildOverview(actions: ViewActions, onResize: () => void): ViewHost {
       const others = State.otherTasks.slice(0, 4);
       // Nothing else active: the left card takes the full width.
       el.classList.toggle("solo", others.length === 0);
-      const pillKey = others.map((t) => `${t.id}:${t.pillBadge ?? ""}`).join("|");
+      // The Claude pill's name changes with Settings too, not only with a session.
+      const pillKey = others.map((t) => `${t.id}:${t.pillBadge ?? ""}`).join("|") + `|${State.clientName}`;
       if (pillKey !== pillIds) {
         pillIds = pillKey;
         clear(pills);
