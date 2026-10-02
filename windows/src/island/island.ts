@@ -1061,6 +1061,9 @@ export class Island {
       : settling ||
         !this.botCx.settled || !this.botCy.settled || !this.botSize.settled ||
         greetingActive || this.engine.busy || UploadSeq.isActive || this.tintSettling ||
+        // The auto-close countdown bar is only redrawn here; a stopped loop froze
+        // it and it caught up in jumps whenever something else animated.
+        (State.mode === "expanded" && !State.isPinned && this.homeCollapseAt != null) ||
         // A view showing something live keeps its Mochis moving: a run's crew
         // would otherwise freeze the moment the big one came to rest.
         this.viewState != null;
