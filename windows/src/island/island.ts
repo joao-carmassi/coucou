@@ -22,7 +22,7 @@ import { enterSessionPanel } from "../views/session";
 import { followNews } from "./integrations";
 import { h } from "../views/dom";
 import { usesSessions } from "../views/sessions";
-import { IslandStateMachine } from "./fsm";
+import { IslandStateMachine, type FsmState } from "./fsm";
 
 const BOT_OVERHANG = 40;
 /** Same margin as the Rust hit test (src-tauri/src/island.rs). */
@@ -106,6 +106,10 @@ export class Island {
   /** Drop sequence bookkeeping: last tick played, and whether the ✓ has fired. */
   private uploadTens = 0;
   private uploadDone = false;
+
+  /** Where the island was when a file drag first reached it, to go back on a cancel. */
+  private dragOrigin: { state: FsmState; view: IslandViewName } | null = null;
+  private abandonTimer: number | null = null;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -483,6 +487,8 @@ export class Island {
       case "enter":
       case "over": {
         if (State.fileDragOver) return;
+        this.cancelAbandon();
+        this.dragOrigin ??= { state: this.fsm.state, view: State.view };
         State.fileDragOver = true;
         this.engine.animateMorph(1);
         // enterZone must run before the island expands, so the sequence is
@@ -495,23 +501,23 @@ export class Island {
         if (!State.fileDragOver) return;
         State.fileDragOver = false;
         this.engine.animateMorph(0);
-        // The island deliberately stays open: the drag session is still alive.
+        // The island stays open while the drag session is alive — the file may
+        // come back. The button coming up ends it (the "end" case).
         UploadSeq.exitZone();
         State.notify();
         break;
       }
       case "end": {
-        // Released somewhere else (or Esc): give the drop zone back, unless a
-        // drop got here first — the end can race the drop by a few ms.
-        window.setTimeout(() => {
-          if (State.view !== "upload" || UploadSeq.dropped) return;
-          State.fileDragOver = false;
-          this.engine.animateMorph(0);
-          this.setView(State.defaultView());
-        }, 250);
+        // Released somewhere else (or Esc): the one way the island gets back to
+        // where it was. A short grace lets a drop that raced the end win.
+        State.fileDragOver = false;
+        this.engine.animateMorph(0);
+        this.scheduleAbandon();
         break;
       }
       case "drop": {
+        this.cancelAbandon();
+        this.dragOrigin = null;
         State.fileDragOver = false;
         const path = e.paths?.[0];
         if (!path) {
@@ -522,6 +528,45 @@ export class Island {
         this.swallow(path);
         break;
       }
+    }
+  }
+
+  /**
+   * The file went elsewhere (or the drag was cancelled). A short grace lets a
+   * late `drop` win, then the island goes back to where it was before the drag.
+   */
+  private scheduleAbandon() {
+    this.cancelAbandon();
+    this.abandonTimer = window.setTimeout(() => {
+      this.abandonTimer = null;
+      this.abandonDrag();
+    }, 250);
+  }
+
+  private cancelAbandon() {
+    if (this.abandonTimer != null) window.clearTimeout(this.abandonTimer);
+    this.abandonTimer = null;
+  }
+
+  private abandonDrag() {
+    const origin = this.dragOrigin;
+    this.dragOrigin = null;
+    if (!origin || State.fileDragOver || UploadSeq.dropped) return;
+    // The user moved on to something else in the meantime: leave it alone.
+    if (State.mode !== "expanded" || State.view !== "upload") return;
+    void Bridge.log(`drag abandoned, back to ${origin.state}/${origin.view}`);
+    UploadSeq.deactivate();
+    switch (origin.state) {
+      case "hidden":
+        // Still under the cursor (an Escape over the island): stay reachable.
+        if (this.wasInIsland) this.collapse();
+        else this.fsm.forceHidden();
+        break;
+      case "home":
+        this.setView(origin.view);
+        break;
+      default:
+        this.collapse();
     }
   }
 
@@ -879,7 +924,8 @@ export class Island {
     this.contentEl.classList.toggle("upload-active", uploadActive);
 
     tickMiniBots(dt);
-    this.views.get(State.view)?.tick?.(nowMs);
+    const view = this.views.get(State.view);
+    view?.tick?.(nowMs);
     if (UploadSeq.isActive) this.stepSequence();
     this.updateCountdown(nowMs);
 

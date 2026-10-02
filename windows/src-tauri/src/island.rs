@@ -228,7 +228,11 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
                     Ok(s) => (s.width as f64 / scale, s.height as f64 / scale),
                     Err(_) => (PANEL_W, PANEL_H),
                 };
-                if (x - last.0).abs() < 1.0 && (y - last.1).abs() < 1.0 {
+                // A button edge is handled even when the cursor stands still: a drag
+                // abandoned elsewhere usually ends that way, and the release has to
+                // reach the drag logic below (shield off, "file-drag" end).
+                let down = left_button_down();
+                if down == was_down && (x - last.0).abs() < 1.0 && (y - last.1).abs() < 1.0 {
                     continue;
                 }
                 last = (x, y);
@@ -302,6 +306,16 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
 
                 let _ = win.emit("cursor", CursorPayload { x, y });
             }
+
+            // Parked: the window is (or is about to be) the wake strip, which must
+            // take the mouse. The tick that was running when the island collapsed
+            // may just have made it click-through, and setters from this thread are
+            // queued to the event loop — so clear the flag from here, behind it.
+            // Otherwise the hidden island can only be woken by Claude Code events.
+            if let Some(win) = window(&app) {
+                let _ = win.set_ignore_cursor_events(false);
+            }
+            gate.forget_ignore_state();
         }
     });
 }
