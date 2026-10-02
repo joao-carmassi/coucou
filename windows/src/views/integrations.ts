@@ -73,7 +73,7 @@ function idleCard(task: AgentTask, openSettings: () => void): HTMLElement {
         // The app the last session ran in; Visual Studio Code until one has.
         text: State.session.client === "desktop" ? "Open Claude" : "Open Visual Studio Code",
         onclick: () =>
-          void (State.session.client === "desktop" ? Bridge.openClaudeApp() : Bridge.openInVSCode(task.sessionCwd ?? null)),
+          void (State.session.client === "desktop" ? Bridge.openClaudeApp() : Bridge.openInVSCode(State.session.cwd, State.session.wslDistro)),
       }),
     );
   } else if (task.id === "integration_n8n") {

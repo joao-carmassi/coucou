@@ -31,6 +31,10 @@ export interface HookPayload {
   request_id?: string;
   session_id?: string;
   cwd?: string;
+  /** Added by coucou-hook when the session runs under WSL. */
+  wsl_distro?: string;
+  /** Added by coucou-hook: its ancestor processes, nearest first. */
+  terminal_pids?: number[];
   message?: string;
   /** UserPromptSubmit carries `prompt`; `message` belongs to Notification/Stop. */
   prompt?: string;

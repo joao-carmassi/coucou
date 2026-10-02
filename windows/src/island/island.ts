@@ -21,6 +21,7 @@ import { githubData } from "../views/integrations";
 import { enterSessionPanel } from "../views/session";
 import { followNews } from "./integrations";
 import { h } from "../views/dom";
+import { usesSessions } from "../views/sessions";
 import { IslandStateMachine } from "./fsm";
 
 const BOT_OVERHANG = 40;
@@ -431,10 +432,13 @@ export class Island {
     else if (State.view === "approval" || State.view === "question") this.setView(State.defaultView());
   }
 
-  /** Where the session runs: the Claude app brought forward, or its folder in VS Code. */
+  /** Where the session runs: the Claude app brought forward, or its terminal (VS Code without WSL). */
   private openClient() {
     if (State.session.client === "desktop") void Bridge.openClaudeApp();
-    else void Bridge.openInVSCode(State.tasks.find((t) => t.id === CLAUDE_ID)?.sessionCwd ?? null);
+    else {
+      const s = State.session;
+      void Bridge.openTerminal(s.cwd, s.wslDistro, s.terminalPids);
+    }
   }
 
   collapse() {
@@ -507,6 +511,8 @@ export class Island {
     State.droppedFile = { name, path };
     State.promptContext = { kind: "file", name, path };
     State.chatHistory = [];
+    // A dropped file starts a new session (in the inbox, where the file lands).
+    State.activeSession = null;
     void Bridge.chatReset();
 
     UploadSeq.performDrop(State.uploadDuration);
@@ -572,7 +578,9 @@ export class Island {
     const proposal = State.pendingApproval?.proposal != null;
     // A view that knows how tall its content is has the last word.
     const fitted = this.views?.get(State.view)?.height ?? null;
-    const { w, h } = islandSize(State.mode, State.view, State.chatHistory.length, news, proposal, fitted);
+    // An open session menu wants the room: the chat grows to its tallest.
+    const chatCount = State.sessionsMenuOpen ? Infinity : State.chatHistory.length;
+    const { w, h } = islandSize(State.mode, State.view, chatCount, news, proposal, fitted);
     const r = State.mode === "expanded" ? EXPANDED_CORNER : ROUNDED_CORNER;
     return { w, h, r };
   }
@@ -876,7 +884,9 @@ export class Island {
   };
 
   private updateBotTargets() {
-    const p = botPosition(State.mode, State.view, this.height.value, State.uploadProgress);
+    const p = botPosition(
+      State.mode, State.view, this.height.value, State.uploadProgress, usesSessions(),
+    );
     this.botCx.target = p.cx;
     this.botCy.target = p.cy;
     this.botSize.target = p.diameter / 0.6;

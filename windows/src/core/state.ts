@@ -2,7 +2,7 @@
 
 import type { BotEmoteName, BotStateName, IslandMode, IslandViewName } from "./layout";
 import type { EyeShape } from "../mochi/engine";
-import type { IntegrationNews } from "./bridge";
+import type { ActiveSession, IntegrationNews, SessionInfo } from "./bridge";
 
 export type AgentSource = "claudeCode" | "n8n" | "agent";
 export type PillBadge = "approval" | "finished" | "error";
@@ -189,6 +189,10 @@ export interface ClaudeSession {
   news: PillBadge | null;
   /** When it was last heard from. */
   heardAt: number;
+  /** The WSL distribution it runs in, when Claude Code runs under WSL. */
+  wslDistro: string | null;
+  /** The relay's ancestor processes; one of them owns the session's window. */
+  terminalPids: number[];
 }
 
 /** What a session is called before its folder is known. */
@@ -198,7 +202,7 @@ export function newSession(id: string): ClaudeSession {
   return {
     id, client: null, title: null, project: SESSION_UNNAMED, cwd: null, state: "idle",
     lines: [], steps: [], asked: null, answer: null, answeredAt: 0,
-    approval: null, question: null, news: null, heardAt: 0,
+    approval: null, question: null, news: null, heardAt: 0, wslDistro: null, terminalPids: [],
   };
 }
 
@@ -273,6 +277,8 @@ export interface Settings {
   model: string;
   /** GitHub projects ("owner/name") whose news the pill keeps to itself. */
   githubMuted: string[];
+  /** Mochi's chat engine: "api", "windows" or "wsl:<distro>" (local Claude Code). */
+  chatBackend: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -288,6 +294,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hooksInstalled: false,
   model: "claude-opus-5",
   githubMuted: [],
+  chatBackend: "api",
 };
 
 type Listener = () => void;
@@ -327,6 +334,11 @@ class AppState {
   private readonly noSession = newSession("");
   /** What each session changed, by session id. */
   changes = new Map<string, ChangedFile[]>();
+  /** Mochi's session menu (local Claude Code only). */
+  chatSessions: SessionInfo[] = [];
+  activeSession: ActiveSession | null = null;
+  /** The session menu is open: the Ask view takes its full height for it. */
+  sessionsMenuOpen = false;
 
   integrations: Record<string, IntegrationInfo> = {};
 
