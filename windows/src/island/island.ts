@@ -27,6 +27,9 @@ import { IslandStateMachine, type FsmState } from "./fsm";
 import { activityLine } from "./activity";
 
 const BOT_OVERHANG = 40;
+/** The dragged Mochi's canvas: the body is 0.6 of the width, like the island's own. */
+const GHOST_W = 84;
+const GHOST_H = GHOST_W + BOT_OVERHANG;
 /** Same margin as the Rust hit test (src-tauri/src/island.rs). */
 const HIT_MARGIN = 14;
 
@@ -113,7 +116,8 @@ export class Island {
   private draggingGhost = false;
   private lastDown = false;
   private pressedOutside = false;
-  private ghostEl!: HTMLElement;
+  private ghostEl!: HTMLCanvasElement;
+  private ghostEngine = new BotEngine();
 
   private confusedRecovery: number | null = null;
   private prevViewBeforeConfused: IslandViewName = "overview";
@@ -652,14 +656,28 @@ export class Island {
    * A simple CSS Mochi (cream squircle + two eyes) that follows the cursor while
    * he is dragged out. The real canvas is hidden until the release.
    */
-  private buildGhost(): HTMLElement {
-    const eye = (left: string) => h("div", {
-      style: `position:absolute;top:20px;left:${left};width:9px;height:11px;border-radius:50%;background:#1A1412`,
-    });
-    return h("div", {
+  private buildGhost(): HTMLCanvasElement {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const c = h("canvas", {
       id: "bot-ghost",
-      style: "position:absolute;display:none;width:54px;height:48px;border-radius:46% 46% 48% 48%/58% 58% 42% 42%;background:radial-gradient(circle at 68% 22%,#FFFAF5 0%,#EAD9CC 78%,#DDCCBF 100%);box-shadow:0 6px 22px rgba(0,0,0,.5);z-index:60;pointer-events:none",
-    }, eye("15px"), eye("30px"));
+      style: `position:absolute;display:none;width:${GHOST_W}px;height:${GHOST_H}px;z-index:60;pointer-events:none;filter:drop-shadow(0 6px 14px rgba(0,0,0,.5))`,
+    }) as HTMLCanvasElement;
+    c.width = Math.round(GHOST_W * dpr);
+    c.height = Math.round(GHOST_H * dpr);
+    return c;
+  }
+
+  /** The dragged Mochi is the real model — his own engine, drawn at the cursor. */
+  private drawGhost(dt: number) {
+    const ctx = this.ghostEl.getContext("2d");
+    if (!ctx) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    this.ghostEngine.bodyColor = this.engine.bodyColor;
+    this.ghostEngine.particleOverhang = BOT_OVERHANG;
+    this.ghostEngine.update(dt);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    wipe(ctx);
+    this.ghostEngine.draw(ctx, GHOST_W, GHOST_H);
   }
 
   private startGhost(x: number, y: number) {
@@ -668,14 +686,17 @@ export class Island {
     this.cancelBotHover();
     this.botHovering = false;
     this.engine.triggerEmote("surprised");
+    this.ghostEngine.setState("idle", true);
+    this.ghostEngine.triggerEmote("surprised", 60);
     Sound.play("pop");
     this.moveGhost(x, y);
+    this.drawGhost(0);
     this.ghostEl.style.display = "block";
   }
 
   private moveGhost(x: number, y: number) {
-    this.ghostEl.style.left = `${x - 27}px`;
-    this.ghostEl.style.top = `${y - 30}px`;
+    this.ghostEl.style.left = `${x - GHOST_W / 2}px`;
+    this.ghostEl.style.top = `${y - BOT_OVERHANG / 2 - GHOST_H / 2}px`;
   }
 
   private endGhostHidden() {
@@ -1089,6 +1110,8 @@ export class Island {
     this.uploadCanvas.el.classList.toggle("on", uploadActive);
     this.viewsEl.classList.toggle("hidden-by-upload", uploadActive);
     this.contentEl.classList.toggle("upload-active", uploadActive);
+
+    if (this.draggingGhost) this.drawGhost(dt);
 
     tickMiniBots(dt);
     const view = this.views.get(State.view);
