@@ -58,8 +58,35 @@ export const PANEL_H = 320;
 // No notch on a PC: these are the hidden/compact sizes from docs/SPEC.md.
 export const NOTCH_W = 184;
 export const NOTCH_H = 32;
-export const COMPACT_W = 288; // NOTCH_W + 104
+export const COMPACT_W = 288; // NOTCH_W + 104 — only islandSize's default still uses it
 export const EXPANDED_W = 640;
+
+// The compact island fits its content: padding | bot | gap | (mini grid or text) | padding.
+export const COMPACT_PAD = 14;
+export const COMPACT_BOT_D = 22;
+export const COMPACT_BOT_CX = COMPACT_PAD + COMPACT_BOT_D / 2;
+export const COMPACT_GAP = 10;
+export const COMPACT_CONTENT_X = COMPACT_PAD + COMPACT_BOT_D + COMPACT_GAP;
+export const COMPACT_MAX_W = 360; // text gets an ellipsis beyond this
+export const MINI = 13;
+export const MINI_GAP = 3;
+
+/** Size of the mini grid for n other tasks (1 → 13×13, 2 → 29×13, 3-4 → 29×29). */
+export function miniGridSize(n: number): { w: number; h: number } {
+  if (n <= 0) return { w: 0, h: 0 };
+  const c = Math.min(2, n);
+  const r = n > 2 ? 2 : 1;
+  return { w: c * MINI + (c - 1) * MINI_GAP, h: r * MINI + (r - 1) * MINI_GAP };
+}
+
+/** Width of the compact island: bare when idle, grown for the grid or the status text. */
+export function compactWidth(others: number, textW: number): number {
+  const base = 2 * COMPACT_PAD + COMPACT_BOT_D;
+  if (others > 0) return base + COMPACT_GAP + miniGridSize(others).w;
+  // Snapped to 8 px so a pixel or two between labels doesn't make the island twitch.
+  if (textW > 0) return Math.min(COMPACT_MAX_W, base + COMPACT_GAP + Math.ceil((textW + 1) / 8) * 8);
+  return base;
+}
 
 export const ROUNDED_CORNER = 14; // hidden / compact
 export const EXPANDED_CORNER = 22;
@@ -153,14 +180,16 @@ export function islandSize(
   news = false,
   proposal = false,
   fitted: number | null = null,
+  compactW = COMPACT_W,
 ): { w: number; h: number } {
   switch (mode) {
     case "hidden":
       // No notch to hide inside on a PC: the island retracts to zero height and
       // slides into the top edge of the screen instead of sitting there as a bar.
-      return { w: NOTCH_W, h: 0 };
+      // Same width as compact, so opening and closing only move the height.
+      return { w: compactW, h: 0 };
     case "compact":
-      return { w: COMPACT_W, h: NOTCH_H };
+      return { w: compactW, h: NOTCH_H };
     case "expanded": {
       const h = fitted ?? (view === "prompt" ? chatPromptHeight(chatCount) : VIEW_LAYOUTS[view].height);
       const grown = news && (view === "finished" || view === "error") ? NEWS_LINE : 0;
@@ -195,9 +224,9 @@ export function botPosition(
 ): BotPlacement {
   switch (mode) {
     case "hidden":
-      return { cx: 46, cy: 16, diameter: 6, opacity: 0 };
+      return { cx: COMPACT_BOT_CX, cy: 16, diameter: 6, opacity: 0 };
     case "compact":
-      return { cx: 40, cy: 16, diameter: 20, opacity: 1 };
+      return { cx: COMPACT_BOT_CX, cy: 16, diameter: COMPACT_BOT_D, opacity: 1 };
     case "expanded": {
       const layout = VIEW_LAYOUTS[view];
       if (view === "prompt" && sessionsColumn) {

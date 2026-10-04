@@ -192,6 +192,30 @@ body {
   opacity: 0;
   transition: opacity 0.25s ease-in-out;
 }
+/* Each word is its own span so a new one can rise in as the old one leaves. */
+#activity-line span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: inherit;
+  /* Text shimmer: a bright band sweeps across the letters, clipped to them. */
+  color: transparent;
+  background-image: linear-gradient(90deg, transparent calc(50% - 32px), #fff, transparent calc(50% + 32px)),
+    linear-gradient(var(--dim), var(--dim));
+  background-size: 250% 100%, auto;
+  background-repeat: no-repeat, no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: activity-shimmer 2s linear infinite;
+}
+/* Don't burn frames shimmering while no status line is showing. */
+#activity-line:not(.on) span { animation-play-state: paused; }
+@keyframes activity-shimmer {
+  from { background-position: 100% center, 0 0; }
+  to { background-position: 0% center, 0 0; }
+}
 
 /* A mini Mochi: the slot is the body, the canvas is larger and overflows it so
    hands, badges and particles are not cut off. */

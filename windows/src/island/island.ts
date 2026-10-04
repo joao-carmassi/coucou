@@ -5,9 +5,9 @@ import { Tracked, Spring, clamp, mixColor } from "../core/anim";
 import { Bridge, IS_TAURI, onDragDrop } from "../core/bridge";
 import { wipe } from "../core/canvas";
 import {
-  EXPANDED_CORNER, EXPANDED_W, NOTCH_W, PANEL_H, PANEL_W,
+  COMPACT_BOT_CX, COMPACT_CONTENT_X, COMPACT_PAD, EXPANDED_CORNER, EXPANDED_W, PANEL_H, PANEL_W,
   ROUNDED_CORNER, VIEW_LAYOUTS, botGlowColor, botGlowOpacity, botPosition, chatPromptHeight,
-  islandSize,
+  compactWidth, islandSize, miniGridSize,
   type BotStateName, type IslandMode, type IslandViewName,
 } from "../core/layout";
 import { Sound } from "../core/sound";
@@ -63,10 +63,15 @@ export class Island {
   private views!: Map<IslandViewName, ViewHost>;
   private uploadCanvas!: UploadCanvas;
 
-  private width = new Tracked(NOTCH_W);
+  private width = new Tracked(compactWidth(0, 0));
+  private widthTarget = -1;
+  private gridH = 0;
+  private activityShown = false;
+  private measureCtx = document.createElement("canvas").getContext("2d")!;
+  private measured = { text: "", w: 0 };
   private height = new Tracked(0);
   private radius = new Tracked(ROUNDED_CORNER);
-  private botCx = new Spring(46);
+  private botCx = new Spring(COMPACT_BOT_CX);
   private botCy = new Spring(16);
   private botSize = new Spring(10);
 
@@ -746,13 +751,46 @@ export class Island {
     const fitted = this.views?.get(State.view)?.height ?? null;
     // An open session menu wants the room: the chat grows to its tallest.
     const chatCount = State.sessionsMenuOpen ? Infinity : State.chatHistory.length;
-    const { w, h } = islandSize(State.mode, State.view, chatCount, news, proposal, fitted);
+    const line = this.compactLine();
+    const cw = compactWidth(State.otherTasks.length, line ? this.textWidth(line) : 0);
+    const { w, h } = islandSize(State.mode, State.view, chatCount, news, proposal, fitted, cw);
     const r = State.mode === "expanded" ? EXPANDED_CORNER : ROUNDED_CORNER;
     return { w, h, r };
   }
 
+  /** What the compact island says: Claude's status, when no other integration is up. */
+  private compactLine(): string {
+    return State.otherTasks.length === 0 ? activityLine(State.session) : "";
+  }
+
+  /** New word rises from below while the old one leaves upward; instant if nothing was showing. */
+  private setActivityText(line: string) {
+    const cur = this.activityEl.lastElementChild as HTMLElement | null;
+    if (cur?.textContent === line) return;
+    const next = h("span", { text: line });
+    this.activityEl.append(next);
+    if (!cur || !this.activityShown) {
+      this.activityEl.querySelectorAll("span").forEach((s) => s !== next && s.remove());
+      return;
+    }
+    const opts = { duration: 260, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "forwards" as const };
+    next.animate([{ transform: "translateY(100%)", opacity: 0 }, { transform: "none", opacity: 1 }], opts);
+    cur.animate([{ transform: "none", opacity: 1 }, { transform: "translateY(-100%)", opacity: 0 }], opts).onfinish = () =>
+      cur.remove();
+  }
+
+  private textWidth(s: string): number {
+    if (s === this.measured.text) return this.measured.w;
+    const cs = getComputedStyle(this.activityEl);
+    this.measureCtx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    if ("letterSpacing" in this.measureCtx) this.measureCtx.letterSpacing = cs.letterSpacing;
+    this.measured = { text: s, w: this.measureCtx.measureText(s).width };
+    return this.measured.w;
+  }
+
   private animateGeometry(shrinking: boolean) {
     const { w, h, r } = this.targetSize();
+    this.widthTarget = w;
     if (shrinking) {
       this.width.curveTowards(w);
       this.height.curveTowards(h);
@@ -781,10 +819,12 @@ export class Island {
     this.islandEl.style.transform = `translateX(${-Math.round((w / 2) * dpr) / dpr}px)`;
     // These follow the island as it resizes, so they belong here rather than in
     // the state-driven DOM sync.
-    this.miniGrid.style.left = `${w - 40 - 14.5}px`;
-    this.miniGrid.style.top = `${hh / 2 - 14.5}px`;
-    this.activityEl.style.left = "61px";
-    this.activityEl.style.width = `${Math.max(0, w - 61 - 12)}px`;
+    this.miniGrid.style.left = `${COMPACT_CONTENT_X}px`;
+    this.miniGrid.style.top = `${hh / 2 - this.gridH / 2}px`;
+    this.activityEl.style.left = `${COMPACT_CONTENT_X}px`;
+    this.activityEl.style.width = `${Math.max(0, w - COMPACT_CONTENT_X - COMPACT_PAD)}px`;
+    // Growing reveals the text instead of flashing an ellipsis; it shows once settled.
+    this.activityEl.style.textOverflow = this.width.animating ? "clip" : "";
     this.activityEl.style.top = `${hh / 2 - 8}px`;
     this.greetingCanvas.style.left = `${(w - EXPANDED_W) / 2}px`;
     this.uploadCanvas.el.style.left = `${(w - EXPANDED_W) / 2}px`;
@@ -1245,6 +1285,10 @@ export class Island {
       const key = others.map((t) => t.id).join("|");
       if (this.miniGrid.dataset.key !== key) {
         this.miniGrid.dataset.key = key;
+        const g = miniGridSize(others.length);
+        this.miniGrid.style.width = `${g.w}px`;
+        this.miniGrid.style.height = `${g.h}px`;
+        this.gridH = g.h;
         this.miniGrid.replaceChildren();
         for (const t of others) {
           this.miniGrid.append(createMiniBot(t, 13));
@@ -1253,9 +1297,24 @@ export class Island {
       }
     }
 
-    const line = State.mode === "compact" && State.otherTasks.length === 0 ? activityLine(State.session) : "";
+    const line = State.mode === "compact" ? this.compactLine() : "";
     this.activityEl.style.opacity = line ? "1" : "0";
-    if (line && this.activityEl.textContent !== line) this.activityEl.textContent = line;
+    this.activityEl.classList.toggle("on", !!line);
+    if (line) this.setActivityText(line);
+    this.activityShown = !!line;
+
+    // Text or integrations changed while compact: the island follows, width only
+    // (height/radius belong to a running hidden→compact spring). Not while hidden:
+    // the window is collapsed and the frame loop must stay idle.
+    if (State.mode === "compact") {
+      const w = this.targetSize().w;
+      if (w !== this.widthTarget) {
+        this.widthTarget = w;
+        if (w < this.width.value) this.width.curveTowards(w);
+        else this.width.springTo(w);
+        this.ensureRunning();
+      }
+    }
 
     syncMiniBotStates(State.tasks);
     // A view's look fills in for a Mochi with nothing of his own to say: idle,

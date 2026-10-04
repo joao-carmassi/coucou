@@ -3,7 +3,7 @@
 
 import { wipe } from "../core/canvas";
 import { Sound } from "../core/sound";
-import { COMPACT_W, NOTCH_H, NOTCH_W } from "../core/layout";
+import { COMPACT_BOT_CX, NOTCH_H, NOTCH_W, compactWidth } from "../core/layout";
 
 // ── Timing (mirrors greeting-v2.html `T`) ─────────────────────────────────────
 
@@ -37,12 +37,12 @@ export const GREETING_END = T.end;
 const C0 = { x: 320, y: 90 };
 const HB = 58;
 const ASP = 1.34;
-const EAR_X = 40;
 const EAR_Y = 16;
 const EAR_HB = 17;
 const CARD = { x: 10, y: 36, w: 620, h: 104 };
 const CARD_R = 20;
-const SMALL_W = COMPACT_W;
+// The real compact island at rest: bare (no other tasks, no text), bot at its left.
+const SMALL_W = compactWidth(0, 0);
 const SMALL_H = NOTCH_H;
 
 // ── Easing ────────────────────────────────────────────────────────────────────
@@ -158,14 +158,14 @@ function greetPose(t: number): Pose {
 function smallPose(): Pose {
   return {
     hb: EAR_HB,
-    x: 320 - SMALL_W / 2 + EAR_X,
+    x: 320 - SMALL_W / 2 + COMPACT_BOT_CX,
     y: EAR_Y,
     sx: 1, sy: 1, tilt: 0,
     eye: "dot", open: 1, eyeRoll: 0,
     lookX: 0, lookY: 0,
     handL: 0, handR: 0, wave: -1,
     badge: 1, tint: 0.6, halo: 0.6, haloBlue: 1,
-    minis: 1, fx: 1,
+    minis: 0, fx: 1,
     header: 0, card: 0,
     iw: SMALL_W, ih: SMALL_H,
   };
@@ -199,7 +199,7 @@ function pose(t: number, tc: number): Pose {
   p.open = bk > 0 && bk < 1 ? 1 - Math.sin(Math.PI * bk) * 0.94 : 1;
   p.lookX = a.lookX * (1 - e);
   p.lookY = a.lookY * (1 - e);
-  p.minis = E.back(seg(t, tc + 0.24, tc + 0.42));
+  p.minis = 0; // bare compact island: no other task to show
   p.fx = 1 - seg(t, tc, tc + 0.2);
   return p;
 }
