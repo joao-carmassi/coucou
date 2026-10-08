@@ -54,6 +54,10 @@ async function main() {
 
   await onEvent<null>("screen-changed", () => void Bridge.reposition());
 
+  // A hidden page gets no animation frames: the island would be heard but not seen.
+  document.addEventListener("visibilitychange", () =>
+    void Bridge.log(`ui  visibility ${document.visibilityState}`));
+
   // The settings window writes preferences; apply them here without a restart.
   await onEvent<Settings>("settings-changed", (s) => {
     State.settings = { ...State.settings, ...s };
