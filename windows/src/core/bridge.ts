@@ -79,15 +79,24 @@ export const Bridge = {
   log: (message: string) => call<void>("log_line", { message }),
 
   // ── Claude Code hooks ─────────────────────────────────────────────────────
-  hooksStatus: () => call<HookStatus>("hooks_status"),
+  hooksStatus: (configDir?: string) => call<HookStatus>("hooks_status", { configDir }),
   /** Diff to show before anything is written. `install: false` previews removal. */
-  hooksPreview: (install: boolean) => callOrThrow<HookPreview>("hooks_preview", { install }),
+  hooksPreview: (install: boolean, configDir?: string) =>
+    callOrThrow<HookPreview>("hooks_preview", { install, configDir }),
   /**
    * Writes ~/.claude/settings.json — only ever after an explicit click, and only
    * when the file still matches the preview the user looked at.
    */
-  hooksApply: (install: boolean, fingerprint: string) =>
-    callOrThrow<string>("hooks_apply", { install, fingerprint }),
+  hooksApply: (install: boolean, fingerprint: string, configDir?: string) =>
+    callOrThrow<string>("hooks_apply", { install, fingerprint, configDir }),
+
+  // ── Claude profiles and managed sessions ──────────────────────────────────
+  claudeProfiles: () => call<ClaudeProfile[]>("claude_profiles"),
+  sessionsAll: () => call<ManagedSession[]>("sessions_all"),
+  sessionsLive: () => call<LiveSession[]>("sessions_live"),
+  sessionLaunch: (r: LaunchRequest) =>
+    callOrThrow<void>("session_launch", { profile: r.profile, cwd: r.cwd, resume: r.resume, attach: r.attach }),
+  sessionErase: (profile: string, id: string) => callOrThrow<void>("session_erase", { profile, id }),
 
   // ── Claude Code under WSL ─────────────────────────────────────────────────
   /** Installed distros. Listing them starts nothing. */
@@ -119,7 +128,7 @@ export const Bridge = {
   chatSend: (query: string, context: ChatContext | null) =>
     callOrThrow<{ text: string; session?: string }>("chat_send", { query, context }),
 
-  // ── Mochi's sessions (local Claude Code only) ─────────────────────────────
+  // ── Mochi's sessions (old chat mode, local Claude Code only) ──────────────
   sessionsList: () => callOrThrow<SessionInfo[]>("sessions_list"),
   sessionHistory: (id: string) => callOrThrow<HistoryItem[]>("session_history", { id }),
   sessionActive: () => call<ActiveSession>("session_active"),
@@ -131,6 +140,8 @@ export const Bridge = {
     callOrThrow<void>("resume_in_terminal", { id, cwd }),
   /** Folder picker, then a new session there. `null` when cancelled. */
   sessionNewInFolder: () => callOrThrow<string | null>("session_new_in_folder"),
+
+  // ── Chat ──────────────────────────────────────────────────────────────────
   chatReset: () => call<void>("chat_reset"),
   /** Copies a dropped file into the inbox. */
   ingestFile: (path: string) => callOrThrow<DroppedFile>("ingest_file", { path }),
@@ -599,6 +610,17 @@ export interface SessionInfo {
   /** Last change, ms since the epoch. */
   updated: number;
 }
+
+export interface ClaudeProfile { key: string; label: string; configDir: string; isDefault: boolean }
+
+export interface ManagedSession {
+  id: string; cwd: string; title: string; updated: number; profile: string;
+  status: "running" | "offline"; activity: string | null; pid: number | null;
+}
+
+export interface LiveSession { profile: string; id: string; pid: number; activity: string | null }
+
+export interface LaunchRequest { profile: string; cwd: string | null; resume: string | null; attach: string | null }
 
 export interface HistoryItem {
   role: "user" | "assistant";

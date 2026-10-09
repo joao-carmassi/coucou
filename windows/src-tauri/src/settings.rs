@@ -49,6 +49,13 @@ pub struct Settings {
     /// Seconds the minimized island waits before hiding. 0 = never hide.
     #[serde(default = "default_compact_hide")]
     pub compact_hide_interval: f64,
+    /// What the Ask tab is: "sessions" (the Sessions manager) or "mochi" (Mochi's chat).
+    #[serde(default = "default_ask_mode")]
+    pub ask_mode: String,
+}
+
+fn default_ask_mode() -> String {
+    "sessions".into()
 }
 
 fn default_compact_hide() -> f64 {
@@ -88,6 +95,7 @@ impl Default for Settings {
             idle_open: String::new(),
             mochi_session: None,
             compact_hide_interval: default_compact_hide(),
+            ask_mode: default_ask_mode(),
         }
     }
 }

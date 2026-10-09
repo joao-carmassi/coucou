@@ -7,7 +7,7 @@ import { Bridge, type ChatContext } from "../core/bridge";
 import { Sound } from "../core/sound";
 import { State, type ChatMessage } from "../core/state";
 import type { ViewHost } from "./views";
-import { buildSessionsPanel, usesSessions } from "./sessions";
+import { buildSessionsPanel, usesSessions } from "./sessionMenu";
 
 let nextId = 1;
 

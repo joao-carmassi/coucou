@@ -62,6 +62,9 @@ pub struct PollGate {
     pub rect: Mutex<IslandRect>,
     /// Mirrors the window flag so we only call into the OS when it changes.
     ignoring: AtomicBool,
+    /// Island geometry / ignore state changed: the poll must re-evaluate even
+    /// though the cursor stands still.
+    recheck: AtomicBool,
 }
 
 impl PollGate {
@@ -72,16 +75,19 @@ impl PollGate {
             collapsed: AtomicBool::new(true),
             rect: Mutex::new(IslandRect::default()),
             ignoring: AtomicBool::new(false),
+            recheck: AtomicBool::new(true),
         }
     }
 
     pub fn set_rect(&self, rect: IslandRect) {
         *self.rect.lock().unwrap() = rect;
+        self.recheck.store(true, Ordering::Relaxed);
     }
 
     /// Forces the next poll tick to re-apply the flag (after a window resize).
     pub fn forget_ignore_state(&self) {
         self.ignoring.store(false, Ordering::Relaxed);
+        self.recheck.store(true, Ordering::Relaxed);
     }
 
     pub fn set_active(&self, on: bool) {
@@ -190,6 +196,7 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
     std::thread::spawn(move || {
         let mut was_down = false;
         let mut pressed_outside = false;
+        let mut pressed_on_island = false;
         let mut shielded = false;
         let mut file_drag_seen = false;
         // Remembered across wakes so a display change while hidden is noticed the
@@ -199,6 +206,7 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
             gate.wait_until_active();
             let mut last = (f64::MIN, f64::MIN);
             let mut ticks: u32 = 0;
+            let mut last_phys: Option<(f64, f64)> = None;
             while gate.is_active() {
                 std::thread::sleep(Duration::from_millis(16));
 
@@ -219,10 +227,25 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
                     }
                 }
 
+                // Cheap gate: cursor and button are plain Win32 reads, while the window
+                // getters below are main-thread round-trips. Nothing moved, no button
+                // edge, not the periodic 30th tick and no geometry/ignore-state change
+                // flagged via `recheck` → nothing to re-evaluate.
+                let Some((cx, cy)) = cursor_physical() else { continue };
+                let down_now = left_button_down();
+                let recheck = gate.recheck.swap(false, Ordering::Relaxed);
+                if !recheck
+                    && ticks % 30 != 0
+                    && down_now == was_down
+                    && last_phys == Some((cx, cy))
+                {
+                    continue;
+                }
+                last_phys = Some((cx, cy));
+
                 let Some(win) = window(&app) else { continue };
                 let Ok(origin) = win.outer_position() else { continue };
                 let scale = win.scale_factor().unwrap_or(1.0);
-                let Some((cx, cy)) = cursor_physical() else { continue };
                 let x = (cx - origin.x as f64) / scale;
                 let y = (cy - origin.y as f64) / scale;
                 let size = match win.inner_size() {
@@ -232,7 +255,7 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
                 // A button edge is handled even when the cursor stands still: a drag
                 // abandoned elsewhere usually ends that way, and the release has to
                 // reach the drag logic below (shield off, "file-drag" end).
-                let down = left_button_down();
+                let down = down_now;
                 if down == was_down && (x - last.0).abs() < 1.0 && (y - last.1).abs() < 1.0 {
                     continue;
                 }
@@ -279,8 +302,16 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
                 // carries our own drop target (drop_target.rs). Released → back.
                 if down && !was_down_before {
                     pressed_outside = !(x >= 0.0 && x <= size.0 && y >= 0.0 && y <= size.1);
+                    pressed_on_island = on_island;
                 }
-                let file_drag = dragging && pressed_outside;
+                // A press inside the panel but off the island went to the window
+                // underneath (we were click-through) — a title-bar button, say.
+                // Taking the mouse mid-click sends that window a mouse-leave and
+                // its button cancels the click, so it keeps the mouse unless the
+                // drag actually reaches the island.
+                let pressed_under = !pressed_outside && !pressed_on_island;
+                let dragging = dragging && (!pressed_under || on_island);
+                let file_drag = dragging && !pressed_on_island;
                 if file_drag != shielded {
                     shielded = file_drag;
                     let handle = app.clone();

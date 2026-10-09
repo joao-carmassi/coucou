@@ -21,6 +21,7 @@ class SoundEngine {
   private buffers = new Map<string, AudioBuffer>();
   private loading: Promise<void> | null = null;
   private idleTimer: number | null = null;
+  private loaded = false;
 
   /** Creates the context and decodes every WAV. Safe to call more than once. */
   preload(): Promise<void> {
@@ -46,6 +47,8 @@ class SoundEngine {
           }
         }),
       );
+      this.loaded = true;
+      this.idle();
     })();
     return this.loading;
   }
@@ -56,7 +59,7 @@ class SoundEngine {
       window.clearTimeout(this.idleTimer);
       this.idleTimer = null;
     }
-    void this.ctx?.resume();
+    void this.ctx?.resume().then(() => this.idle());
   }
 
   /**
@@ -82,6 +85,8 @@ class SoundEngine {
 
   setEnabled(on: boolean) {
     this.enabled = on;
+    if (on) void this.preload();
+    else void this.ctx?.suspend();
   }
 
   play(name: SoundName | string) {
@@ -89,7 +94,11 @@ class SoundEngine {
     const ctx = this.ctx;
     const master = this.master;
     const buf = this.buffers.get(name);
-    if (!ctx || !master || !buf) return;
+    if (!ctx || !master || !buf) {
+      // Not loaded yet (first event after boot): load, then play once.
+      if (!this.loaded) void this.preload().then(() => this.loaded && this.buffers.has(name) && this.play(name));
+      return;
+    }
     if (this.idleTimer != null) {
       window.clearTimeout(this.idleTimer);
       this.idleTimer = null;
@@ -98,6 +107,7 @@ class SoundEngine {
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.connect(master);
+    src.onended = () => this.idle();
     src.start();
   }
 }

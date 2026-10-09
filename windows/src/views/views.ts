@@ -7,6 +7,7 @@ import { ICONS } from "./icons";
 import { CLAUDE_ID, State, TURN_DONE, turnSteps, type AgentTask, type ClaudeSession, type SessionStep } from "../core/state";
 import { CARD_AIR_MIN, VIEW_LAYOUTS, fittedHeight, washRGBA, type BotEmoteName, type BotStateName, type IslandViewName, type Wash } from "../core/layout";
 import { createMiniBot, pruneMiniBots } from "../mochi/minibots";
+import { buildSessionsView } from "./sessions";
 import { buildPrompt } from "./chat";
 import { buildChoose, buildUpload, buildUploading } from "./upload";
 import { renderIntegrationCard, type GithubOpening, type IntegrationCardHooks } from "./integrations";
@@ -16,7 +17,7 @@ import { diffLine, fileKind, plusMinus, readPatch } from "./code";
 import { markdown } from "./markdown";
 import { hasPreview, stepIcon, stepName, stepPreview } from "./step";
 import { COLOR } from "./palette";
-import type { IntegrationNews } from "../core/bridge";
+import { Bridge, type IntegrationNews } from "../core/bridge";
 
 export interface ViewActions {
   setView(v: IslandViewName): void;
@@ -163,6 +164,13 @@ export interface ViewHost {
 
 // ── Shared pieces ─────────────────────────────────────────────────────────────
 
+/** The pills openTarget() (island.ts) has somewhere to go for; the others' ↗ would do nothing. */
+const TARGETED = new Set([
+  CLAUDE_ID, "integration_n8n", "integration_github", "integration_resend",
+  "integration_vercel", "integration_stripe", "integration_notion", "integration_calcom",
+]);
+const hasTarget = (task: AgentTask | null) => !!task && TARGETED.has(task.id);
+
 function card(wash: Wash, ...children: (Node | string)[]): HTMLElement {
   const el = h("div", { class: wash ? "card wash" : "card" }, ...children);
   if (wash) el.style.setProperty("--wash", washRGBA(wash));
@@ -247,7 +255,7 @@ function airy(lines: HTMLElement, onResize: () => void): { fit(): void; readonly
 
 export function buildHeader(actions: ViewActions): ViewHost {
   const tabHome = h("button", { class: "tab", title: "Visão geral", onclick: () => go("overview") }, svg(ICONS.house, 13));
-  const tabChat = h("button", { class: "tab", title: "Perguntar", onclick: () => go("prompt") }, svg(ICONS.bubble, 13));
+  const tabChat = h("button", { class: "tab", title: askTitle(), onclick: () => go("prompt") }, svg(ICONS.bubble, 13));
   const tabDrop = h("button", { class: "tab", title: "Soltar", onclick: () => go("upload") }, svg(ICONS.plus, 13));
 
   const gearBtn = h("button", { title: "Configurações", onclick: () => go("settings") }, svg(ICONS.gear, 14));
@@ -272,12 +280,14 @@ export function buildHeader(actions: ViewActions): ViewHost {
       // The GitHub panel is reached from the overview and goes back to it.
       tabHome.classList.toggle("on", v === "overview" || v === "empty" || v === "github" || v === "session");
       tabChat.classList.toggle("on", v === "prompt");
+      tabChat.title = askTitle();
       tabDrop.classList.toggle("on", v === "upload");
       gearBtn.classList.toggle("on", v === "settings");
       clear(gearBtn);
       gearBtn.append(svg(v === "settings" ? ICONS.gearFill : ICONS.gear, 14));
       clear(soundBtn);
       soundBtn.append(svg(State.settings.soundEnabled ? ICONS.speakerOn : ICONS.speakerOff, 14));
+      soundBtn.title = State.settings.soundEnabled ? "Silenciar" : "Ativar som";
       el.style.opacity = v === "confused" ? "0" : "1";
     },
   };
@@ -448,14 +458,15 @@ function buildOverview(actions: ViewActions, onResize: () => void): ViewHost {
         }
       }
 
-      jump.style.display = detailOpen ? "none" : "";
+      jump.style.display = detailOpen || !hasTarget(task) ? "none" : "";
       if (mode !== sized) {
         sized = mode;
         onResize();
       }
 
       left.classList.toggle("opens", mode === "session");
-      left.title = mode === "session" ? "Abrir a sessão" : "";
+      // "Abrir" is the ↗'s, to where the session runs: the card leads to its panel.
+      left.title = mode === "session" ? "Ver a sessão" : "";
 
       const others = State.otherTasks.slice(0, 4);
       // Nothing else active: the left card takes the full width.
@@ -517,6 +528,19 @@ function lighten(hex: string, amount: number): string {
 // ── Empty ─────────────────────────────────────────────────────────────────────
 
 function buildEmpty(actions: ViewActions): ViewHost {
+  const ask = btn("Nova sessão", "primary", () => (mochiMode() ? actions.setView("prompt") : void newSession()));
+  // As the Sessões list's own "Nova sessão": the default profile, a fresh
+  // terminal. When it can't, the list is the way to see why and try again.
+  async function newSession() {
+    actions.blip();
+    try {
+      const profiles = (await Bridge.claudeProfiles()) ?? [];
+      const profile = (profiles.find((p) => p.isDefault) ?? profiles[0])?.key ?? "";
+      await Bridge.sessionLaunch({ profile, cwd: null, resume: null, attach: null });
+    } catch {
+      actions.setView("prompt");
+    }
+  }
   const body = h(
     "div",
     { class: "stack", style: "padding:0 18px 0 118px;flex-direction:row;align-items:center;gap:16px" },
@@ -527,9 +551,9 @@ function buildEmpty(actions: ViewActions): ViewHost {
       h("div", { class: "sub", text: "Solte um arquivo ou janela, ou pergunte qualquer coisa." }),
     ),
     h("div", { class: "grow" }),
-    btn("Perguntar ao Claude", "primary", () => actions.setView("prompt")),
+    ask,
   );
-  return { el: h("div", { class: "view" }, card(null, body)), sync() {} };
+  return { el: h("div", { class: "view" }, card(null, body)), sync() { ask.textContent = mochiMode() ? "Perguntar ao Claude" : "Nova sessão"; } };
 }
 
 // ── Approval ──────────────────────────────────────────────────────────────────
@@ -545,6 +569,14 @@ function buildApproval(actions: ViewActions, onResize: () => void): ViewHost {
   const air = airy(lines, onResize);
   let rowKey = "";
   let proposedKey = "";
+  // The N and Y on the buttons: their keys, while the card is on screen.
+  window.addEventListener("keydown", (e) => {
+    if (State.mode !== "expanded" || State.view !== "approval" || !State.pendingApproval) return;
+    if (e.repeat || e.ctrlKey || e.altKey || e.metaKey || (e.target as Element | null)?.closest("input, textarea")) return;
+    const key = e.key.toLowerCase();
+    if (key === "n") actions.decide(rowKey === "plan" ? "plan-keep" : "deny");
+    else if (key === "y") actions.decide(rowKey === "plan" ? "plan-auto" : "allow");
+  });
   return {
     el,
     // With a diff the island is as tall as the window allows, and the diff takes what is left.
@@ -898,10 +930,9 @@ function buildError(actions: ViewActions, onResize: () => void): ViewHost {
   const detail = h("div", { class: "detail" });
   // Where what stopped runs: n8n, the Claude app, a terminal — the pill's own way out.
   const openLabel = h("span");
-  const row = h("div", { class: "actions" },
-    btn("Retry", "primary", () => actions.setView(State.defaultView())),
-    h("button", { class: "btn secondary", onclick: () => actions.openTarget() }, openLabel),
-  );
+  const openBtn = h("button", { class: "btn primary", onclick: () => actions.openTarget() }, openLabel);
+  // Nothing here can run it again: OK folds the island, as on the finished card.
+  const row = h("div", { class: "actions" }, openBtn, btn("OK", "secondary", () => actions.collapse()));
   const facts = h("div", { class: "nfs news-facts" });
   const newsRow = newsActions(actions);
   const lines = stack(116, 16, who, title, detail, facts, row, newsRow);
@@ -930,8 +961,11 @@ function buildError(actions: ViewActions, onResize: () => void): ViewHost {
       who.append(task?.id === CLAUDE_ID ? sessionWho("Claude Code") : agentWho(task, task?.source === "n8n" ? "n8n" : "parou"));
       title.textContent = task?.source === "n8n" ? "Workflow parou." : "Sessão parou com um erro.";
       detail.textContent = task?.steps.at(-1) ?? "Sem detalhes.";
+      openBtn.style.display = hasTarget(task) ? "" : "none";
       openLabel.textContent =
-        task?.source === "n8n" ? "Abrir no n8n" : task?.id === CLAUDE_ID && State.session.client === "desktop" ? "Abrir Claude" : "Abrir terminal";
+        task?.source === "n8n" ? "Abrir no n8n"
+        : task?.id !== CLAUDE_ID ? "Abrir"
+        : State.session.client === "desktop" ? "Abrir Claude" : "Abrir terminal";
       air.fit();
     },
   };
@@ -1098,6 +1132,30 @@ function buildPlaceholder(title: string, sub: string): ViewHost {
   return { el: h("div", { class: "view" }, card(null, body)), sync() {} };
 }
 
+/** The setting that picks what the Ask tab is: Mochi's old chat or the sessions manager. */
+const mochiMode = () => State.settings.askMode === "mochi";
+const askTitle = () => (mochiMode() ? "Perguntar" : "Sessões");
+
+/** Both implementations stay built; the setting decides which one shows, live. */
+function buildAsk(onResize: () => void): ViewHost {
+  const sessions = buildSessionsView(onResize);
+  const mochi = buildPrompt(onResize);
+  const el = h("div", { class: "view" }, sessions.el, mochi.el);
+  const active = () => (mochiMode() ? mochi : sessions);
+  return {
+    el,
+    sync() {
+      const a = active();
+      sessions.el.classList.toggle("on", a === sessions);
+      mochi.el.classList.toggle("on", a === mochi);
+      a.sync();
+    },
+    focus() { active().focus?.(); },
+    tick(t) { active().tick?.(t); },
+    get height() { return active().height; },
+  };
+}
+
 // ── Registry ──────────────────────────────────────────────────────────────────
 
 export function buildViews(
@@ -1114,7 +1172,7 @@ export function buildViews(
   map.set("confused", buildConfused());
   map.set("note", buildNote());
   map.set("settings", buildSettings(actions));
-  map.set("prompt", buildPrompt(onChatHeightChange));
+  map.set("prompt", buildAsk(onChatHeightChange));
   map.set("upload", buildUpload());
   map.set("uploading", buildUploading());
   map.set("choose", buildChoose(actions));

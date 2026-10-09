@@ -1,5 +1,5 @@
-// Mochi's session manager: the Claude Code sessions of the Claude Code Mochi
-// uses (Settings → "Use for Mochi"), read straight from its transcripts.
+// Session manager: the Claude Code sessions of every profile (account), read
+// straight from transcripts; running ones come from `<config>/sessions`.
 //
 // Claude Code keeps one transcript per session, `~/.claude/projects/<project>/
 // <session-id>.jsonl`, every line a JSON record. Every session there is listed
@@ -20,12 +20,12 @@ use serde_json::Value;
 
 use crate::local_claude::Backend;
 
-/// The island's menu shows the most recent ones; older sessions stay on disk.
+/// Each profile lists its most recent sessions; older ones stay on disk.
 const MAX_LISTED: usize = 50;
+/// Head and tail read to find a session's folder and title without loading a
+/// transcript that can run to megabytes.
 /// The conversation view shows the end of a long session, not all of it.
 const MAX_HISTORY: usize = 40;
-/// Head and tail read to find a session's folder and title without loading a
-/// transcript that can run to megabytes — over 9P for WSL, that matters.
 const PEEK: u64 = 96 * 1024;
 
 #[derive(Serialize, Clone)]
@@ -46,18 +46,153 @@ pub struct HistoryItem {
     pub text: String,
 }
 
-/// `~/.claude/projects` of the Claude Code Mochi uses.
-fn projects_dir(backend: &Backend) -> Result<PathBuf, String> {
-    match backend {
-        Backend::Api => Err("As sessões precisam do Claude Code: ative \"Usar no Mochi\" nas Configurações.".into()),
-        Backend::Windows => match crate::settings::claude_config_dir() {
-            Some(dir) => Ok(dir.join("projects")),
-            None => std::env::var_os("USERPROFILE")
-                .map(|h| PathBuf::from(h).join(".claude").join("projects"))
-                .ok_or_else(|| "Sem perfil de usuário.".into()),
-        },
-        Backend::Wsl(distro) => Ok(crate::wsl::home_unc(distro)?.join(".claude").join("projects")),
+/// One Claude Code account: the same claude.exe with its own CLAUDE_CONFIG_DIR.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Profile {
+    /// `hooks::profile_key` of the folder; "" for the default `~/.claude`.
+    pub key: String,
+    pub label: String,
+    pub config_dir: String,
+    pub is_default: bool,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedSession {
+    pub id: String,
+    pub cwd: String,
+    pub title: String,
+    /// Last change, milliseconds since the epoch.
+    pub updated: u64,
+    pub profile: String,
+    /// "running" or "offline".
+    pub status: &'static str,
+    pub activity: Option<String>,
+    pub pid: Option<u32>,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveSession {
+    pub profile: String,
+    pub id: String,
+    pub pid: u32,
+    pub activity: Option<String>,
+}
+
+/// `~/.claude`, every `~/.claude-*` that holds `projects/`, and the folder set in
+/// "Account folder", deduplicated by key.
+pub fn profiles() -> Vec<Profile> {
+    let home = crate::platform::home_dir();
+    let mut dirs = vec![home.join(".claude")];
+    if let Ok(entries) = std::fs::read_dir(&home) {
+        let mut extra: Vec<PathBuf> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with(".claude-"))
+                    && p.join("projects").is_dir()
+            })
+            .collect();
+        extra.sort();
+        dirs.extend(extra);
     }
+    dirs.extend(crate::settings::claude_config_dir());
+    let mut out: Vec<Profile> = Vec::new();
+    for dir in dirs {
+        let shown = dir.to_string_lossy().into_owned();
+        let key = crate::hooks::profile_key(&shown);
+        if out.iter().any(|p| p.key == key) {
+            continue;
+        }
+        let label = if key.is_empty() {
+            "claude".to_string()
+        } else {
+            dir.file_name()
+                .map(|n| n.to_string_lossy().trim_start_matches('.').to_string())
+                .unwrap_or_else(|| shown.clone())
+        };
+        out.push(Profile { is_default: key.is_empty(), key, label, config_dir: shown });
+    }
+    out
+}
+
+/// A session Claude Code has registered in `<config>/sessions/<pid>.json`.
+/// Undocumented format: every field is best-effort.
+struct Entry {
+    pid: u32,
+    id: String,
+    proc_start: Option<u64>,
+    activity: Option<String>,
+}
+
+fn parse_entry(text: &str) -> Option<Entry> {
+    let v: Value = serde_json::from_str(text).ok()?;
+    let id = v.get("sessionId")?.as_str()?.to_string();
+    if !is_session_id(&id) {
+        return None;
+    }
+    let proc_start = match v.get("procStart") {
+        Some(Value::Number(n)) => n.as_u64(),
+        Some(Value::String(s)) => s.trim().parse().ok(),
+        _ => None,
+    };
+    Some(Entry {
+        pid: u32::try_from(v.get("pid")?.as_u64()?).ok()?,
+        id,
+        proc_start,
+        activity: v.get("status").and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_string),
+    })
+}
+
+/// Whether `pid` is a live process, and the one that registered (same start time).
+#[cfg(windows)]
+fn is_running(pid: u32, proc_start: Option<u64>) -> bool {
+    use windows::Win32::Foundation::{CloseHandle, FILETIME};
+    use windows::Win32::System::Threading::{GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    unsafe {
+        let Ok(h) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else { return false };
+        let ok = match proc_start {
+            None => true,
+            Some(want) => {
+                let (mut c, mut e, mut k, mut u) =
+                    (FILETIME::default(), FILETIME::default(), FILETIME::default(), FILETIME::default());
+                GetProcessTimes(h, &mut c, &mut e, &mut k, &mut u).is_ok()
+                    && (((c.dwHighDateTime as u64) << 32) | c.dwLowDateTime as u64) == want
+            }
+        };
+        let _ = CloseHandle(h);
+        ok
+    }
+}
+
+#[cfg(not(windows))]
+fn is_running(_: u32, _: Option<u64>) -> bool {
+    false
+}
+
+/// The sessions running right now, across every profile.
+pub fn live() -> Vec<LiveSession> {
+    let mut out = Vec::new();
+    for p in profiles() {
+        let Ok(files) = std::fs::read_dir(Path::new(&p.config_dir).join("sessions")) else { continue };
+        for f in files.flatten() {
+            let path = f.path();
+            if path.extension().is_none_or(|e| e != "json") {
+                continue;
+            }
+            let Some(e) = std::fs::read_to_string(&path).ok().and_then(|t| parse_entry(&t)) else { continue };
+            if is_running(e.pid, e.proc_start) {
+                out.push(LiveSession { profile: p.key.clone(), id: e.id, pid: e.pid, activity: e.activity });
+            }
+        }
+    }
+    out
+}
+
+fn projects_of(p: &Profile) -> PathBuf {
+    Path::new(&p.config_dir).join("projects")
 }
 
 /// Session ids are UUIDs; nothing else is ever turned into a path.
@@ -165,7 +300,7 @@ fn one_line(s: &str, max: usize) -> String {
     }
 }
 
-fn describe(path: &Path, updated: u64) -> Option<SessionInfo> {
+fn describe(path: &Path, updated: u64, profile: &str) -> Option<ManagedSession> {
     let id = path.file_stem()?.to_str()?.to_string();
     let head = peek(path, false);
     let mut cwd = None;
@@ -194,17 +329,82 @@ fn describe(path: &Path, updated: u64) -> Option<SessionInfo> {
         .or(first_prompt)
         .map(|t| one_line(&t, 60))
         .unwrap_or_else(|| "Sessão sem título".into());
-    Some(SessionInfo { id, cwd, title, updated })
+    Some(ManagedSession { id, cwd, title, updated, profile: profile.to_string(), status: "offline", activity: None, pid: None })
+}
+
+/// Every profile's 50 most recent sessions plus every running one, newest first.
+pub fn list_all() -> Vec<ManagedSession> {
+    let live = live();
+    let mut out = Vec::new();
+    for p in profiles() {
+        let mut files = transcripts(&projects_of(&p));
+        files.sort_by(|a, b| b.1.cmp(&a.1));
+        for (i, (path, t)) in files.iter().enumerate() {
+            let id = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+            let l = live.iter().find(|l| l.profile == p.key && l.id == id);
+            if i >= MAX_LISTED && l.is_none() {
+                continue;
+            }
+            if let Some(mut s) = describe(path, *t, &p.key) {
+                if let Some(l) = l {
+                    s.status = "running";
+                    s.activity = l.activity.clone();
+                    s.pid = Some(l.pid);
+                }
+                out.push(s);
+            }
+        }
+    }
+    out.sort_by(|a, b| b.updated.cmp(&a.updated));
+    out
+}
+
+/// Erases a session's transcript, and the folder Claude Code keeps beside it
+/// for that session (subagents, tool output) if there is one.
+pub fn erase(profile: &str, id: &str) -> Result<(), String> {
+    let p = profiles().into_iter().find(|p| p.key == profile).ok_or("Perfil desconhecido.")?;
+    if !is_session_id(id) {
+        return Err("ID de sessão inválido.".into());
+    }
+    if live().iter().any(|l| l.profile == p.key && l.id == id) {
+        return Err("Essa sessão está aberta.".into());
+    }
+    let file = transcripts(&projects_of(&p))
+        .into_iter()
+        .map(|(f, _)| f)
+        .find(|f| f.file_stem().and_then(|s| s.to_str()) == Some(id))
+        .ok_or("Essa sessão não existe mais.")?;
+    std::fs::remove_file(&file).map_err(|e| format!("Não foi possível apagar a sessão: {e}"))?;
+    let side = file.with_extension("");
+    if side.is_dir() && side.file_name().and_then(|s| s.to_str()) == Some(id) {
+        let _ = std::fs::remove_dir_all(side);
+    }
+    Ok(())
+}
+
+/// `~/.claude/projects` of the Claude Code Mochi uses.
+fn mochi_projects_dir(backend: &Backend) -> Result<PathBuf, String> {
+    match backend {
+        Backend::Api => Err("As sessões precisam do Claude Code: ative \"Usar no Mochi\" nas Configurações.".into()),
+        Backend::Windows => match crate::settings::claude_config_dir() {
+            Some(dir) => Ok(dir.join("projects")),
+            None => std::env::var_os("USERPROFILE")
+                .map(|h| PathBuf::from(h).join(".claude").join("projects"))
+                .ok_or_else(|| "Sem perfil de usuário.".into()),
+        },
+        Backend::Wsl(distro) => Ok(crate::wsl::home_unc(distro)?.join(".claude").join("projects")),
+    }
 }
 
 /// The most recent sessions, newest first.
 pub fn list(backend: &Backend) -> Result<Vec<SessionInfo>, String> {
-    let mut files = transcripts(&projects_dir(backend)?);
+    let mut files = transcripts(&mochi_projects_dir(backend)?);
     files.sort_by(|a, b| b.1.cmp(&a.1));
     Ok(files
         .into_iter()
         .take(MAX_LISTED)
-        .filter_map(|(p, t)| describe(&p, t))
+        .filter_map(|(p, t)| describe(&p, t, ""))
+        .map(|s| SessionInfo { id: s.id, cwd: s.cwd, title: s.title, updated: s.updated })
         .collect())
 }
 
@@ -212,7 +412,7 @@ fn find(backend: &Backend, id: &str) -> Result<PathBuf, String> {
     if !is_session_id(id) {
         return Err("ID de sessão inválido.".into());
     }
-    let projects = projects_dir(backend)?;
+    let projects = mochi_projects_dir(backend)?;
     transcripts(&projects)
         .into_iter()
         .map(|(p, _)| p)
@@ -248,7 +448,7 @@ pub fn history(backend: &Backend, id: &str) -> Result<Vec<HistoryItem>, String> 
 /// for that session (subagents, tool output) if there is one.
 pub fn delete(backend: &Backend, id: &str) -> Result<(), String> {
     let file = find(backend, id)?;
-    let projects = projects_dir(backend)?;
+    let projects = mochi_projects_dir(backend)?;
     if !file.starts_with(&projects) {
         return Err("Recusei apagar fora da pasta de projetos do Claude Code.".into());
     }
@@ -342,28 +542,32 @@ mod tests {
 
         let files = transcripts(&dir);
         assert_eq!(files.len(), 1, "only files named after a session id count");
-        let info = describe(&files[0].0, files[0].1).unwrap();
+        let info = describe(&files[0].0, files[0].1, "").unwrap();
         assert_eq!(info.cwd, "/home/me/proj");
         assert_eq!(info.title, "Fix login bug");
 
-        // History without tool calls, thinking or meta lines; one reply per turn.
         let text = std::fs::read_to_string(&files[0].0).unwrap();
-        let mut seen = Vec::new();
-        for rec in records(&text) {
-            match rec.get("type").and_then(Value::as_str) {
-                Some("user") => seen.extend(user_text(&rec).map(|t| ("user", t))),
-                Some("assistant") => seen.extend(assistant_text(&rec).map(|t| ("assistant", t))),
-                _ => {}
-            }
-        }
-        assert_eq!(
-            seen,
-            vec![
-                ("user", "Fix the login bug please".to_string()),
-                ("assistant", "Found it.".to_string()),
-                ("assistant", "Fixed in auth.ts.".to_string()),
-            ]
-        );
+        let said: Vec<_> = records(&text).filter_map(|r| assistant_text(&r)).collect();
+        assert_eq!(said, ["Found it.", "Fixed in auth.ts."]);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_registry_entry_parses_and_junk_is_skipped() {
+        let id = "b015262a-3d5d-46cc-b71d-8f56527dee84";
+        let e = parse_entry(&format!(r#"{{"pid":42,"sessionId":"{id}","procStart":"133","status":"busy"}}"#)).unwrap();
+        assert_eq!((e.pid, e.id.as_str(), e.proc_start, e.activity.as_deref()), (42, id, Some(133), Some("busy")));
+        assert!(parse_entry(&format!(r#"{{"pid":1,"sessionId":"{id}"}}"#)).unwrap().proc_start.is_none());
+        assert!(parse_entry("not json").is_none());
+        assert!(parse_entry(r#"{"pid":1,"sessionId":"../x"}"#).is_none());
+    }
+
+    #[test]
+    fn profile_keys_ignore_case_and_slashes() {
+        let home = crate::platform::home_dir();
+        let plain = home.join(".claude-qf").to_string_lossy().into_owned();
+        let odd = plain.to_uppercase().replace('\\', "/");
+        assert_eq!(crate::hooks::profile_key(&odd), crate::hooks::profile_key(&plain));
+        assert_eq!(crate::hooks::profile_key(&home.join(".claude").to_string_lossy()), "");
     }
 }

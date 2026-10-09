@@ -27,6 +27,7 @@ pub fn line(message: impl AsRef<str>) {
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
     if let Ok(mut file) = options.open(path) {
-        let _ = writeln!(file, "{stamp} {}", message.as_ref());
+        // One write_all: separate writes from two threads interleave their lines.
+        let _ = file.write_all(format!("{stamp} {}\n", message.as_ref()).as_bytes());
     }
 }

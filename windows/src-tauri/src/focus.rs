@@ -3,27 +3,27 @@
 // The relay reports the processes above it (`terminal_pids`, nearest first).
 // One of them owns the window the session runs in: WindowsTerminal.exe for a WSL
 // or PowerShell tab, Code.exe for VS Code's integrated terminal, a conhost for a
-// bare console. "Open terminal" brings that window forward. Without one, any
-// terminal window will do; only when there is none does it open a new one.
+// bare console. "Open terminal" brings that window forward; without one it opens
+// a new terminal in the session folder.
 
 use windows::core::BOOL;
 use windows::Win32::Foundation::{HWND, LPARAM};
+use windows::Win32::System::Console::{
+    AttachConsole, FreeConsole, GetConsoleWindow, GetStdHandle, SetConsoleCtrlHandler, SetStdHandle,
+    STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_MENU,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetClassNameW, GetForegroundWindow, GetWindow, GetWindowLongW,
+    EnumWindows, GetAncestor, GetForegroundWindow, GetWindow, GetWindowLongW,
     GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
-    SetForegroundWindow, ShowWindow, GWL_EXSTYLE, GW_OWNER, SW_RESTORE, WS_EX_TOOLWINDOW,
+    SetForegroundWindow, ShowWindow, GA_ROOTOWNER, GWL_EXSTYLE, GW_OWNER, SW_RESTORE, WS_EX_TOOLWINDOW,
 };
-
-/// Windows Terminal, then the classic console.
-const TERMINAL_CLASSES: &[&str] = &["CASCADIA_HOSTING_WINDOW_CLASS", "ConsoleWindowClass"];
 
 struct Candidate {
     hwnd: HWND,
     pid: u32,
-    class: String,
 }
 
 /// Every window a user would call "a window", front to back (EnumWindows walks
@@ -37,9 +37,7 @@ fn app_windows() -> Vec<Candidate> {
         if visible && !owned && !tool && GetWindowTextLengthW(hwnd) > 0 {
             let mut pid = 0u32;
             GetWindowThreadProcessId(hwnd, Some(&mut pid));
-            let mut buf = [0u16; 64];
-            let len = GetClassNameW(hwnd, &mut buf).max(0) as usize;
-            out.push(Candidate { hwnd, pid, class: String::from_utf16_lossy(&buf[..len]) });
+            out.push(Candidate { hwnd, pid });
         }
         BOOL(1)
     }
@@ -50,25 +48,60 @@ fn app_windows() -> Vec<Candidate> {
     out
 }
 
-/// The session's own window if one of its ancestors has one, else any terminal
-/// window. Brings it forward and says whether there was one: a window Windows
+/// The session's own window, if one of its ancestors has one. Never another
+/// terminal: that may be a different session's. Brings it forward and says whether there was one: a window Windows
 /// would not let us raise still flashes in the taskbar, and opening a second
 /// terminal on top of that would only add to the confusion.
 pub fn existing_terminal(pids: &[u32]) -> bool {
-    let windows = app_windows();
-    let ours = pids
-        .iter()
-        .find_map(|pid| windows.iter().find(|w| w.pid == *pid));
-    let any = || {
-        TERMINAL_CLASSES
-            .iter()
-            .find_map(|class| windows.iter().find(|w| w.class == *class))
-    };
-    let Some(w) = ours.or_else(any) else { return false };
-    if !bring_forward(w.hwnd) {
-        crate::log::line(format!("could not bring the {} window forward", w.class));
+    // The console a process is attached to names its window exactly. Matching by
+    // process id cannot: Windows Terminal hosts every window in one process, and
+    // consoles Coucou launches get handed to it outside the process chain.
+    let hwnd = pids.iter().find_map(|p| console_window(*p)).or_else(|| {
+        let windows = app_windows();
+        let me = std::process::id();
+        pids.iter()
+            .filter(|p| **p != me)
+            .find_map(|pid| windows.iter().find(|w| w.pid == *pid))
+            .map(|w| w.hwnd)
+    });
+    let Some(hwnd) = hwnd else { return false };
+    if !bring_forward(hwnd) {
+        crate::log::line("could not bring the terminal window forward".to_string());
     }
     true
+}
+
+static CONSOLE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// The top-level window of the console `pid` is attached to, found by briefly
+/// attaching to it (a process has one console, so this is serialized). None on
+/// any failure, e.g. an elevated process.
+fn console_window(pid: u32) -> Option<HWND> {
+    let _guard = CONSOLE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        // Already have our own console (debug build): cannot attach to another.
+        if !GetConsoleWindow().is_invalid() {
+            return None;
+        }
+        // Ctrl+C typed in the attached console must not kill us.
+        let _ = SetConsoleCtrlHandler(None, true);
+        // Attaching rewrites the standard handles and FreeConsole leaves them
+        // dangling, which makes the next spawn fail with "invalid handle" (os error 6).
+        let std = [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE].map(|k| (k, GetStdHandle(k).ok()));
+        let found = if AttachConsole(pid).is_ok() {
+            let h = GetConsoleWindow();
+            let _ = FreeConsole();
+            for (k, old) in std {
+                let _ = SetStdHandle(k, old.unwrap_or_default());
+            }
+            Some(h).filter(|h| !h.is_invalid())
+        } else {
+            None
+        };
+        let _ = SetConsoleCtrlHandler(None, false);
+        let root = GetAncestor(found?, GA_ROOTOWNER);
+        (!root.is_invalid() && IsWindowVisible(root).as_bool()).then_some(root)
+    }
 }
 
 fn bring_forward(hwnd: HWND) -> bool {

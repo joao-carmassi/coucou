@@ -574,6 +574,8 @@ fn read_event() -> Option<Event> {
         // Set when Claude Code runs under WSL and calls us through interop. It
         // only reaches us if the caller lists it in WSLENV (coucou-hook-wsl.sh).
         ("wsl_distro", "WSL_DISTRO_NAME"),
+        // Which Claude account (profile) this session belongs to.
+        ("config_dir", "CLAUDE_CONFIG_DIR"),
     ] {
         if !map.contains_key(key) {
             let value = std::env::var(var).unwrap_or_default();

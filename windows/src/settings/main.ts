@@ -125,6 +125,25 @@ function idleOpenRow(cli: string | null): HTMLElement {
   );
 }
 
+/** What the Ask/Sessions tab is: the sessions manager or Mochi's old chat. */
+function askModeRow(): HTMLElement {
+  const select = h("select", {}) as HTMLSelectElement;
+  select.append(
+    h("option", { value: "sessions", text: "Gerenciar sessões" }),
+    h("option", { value: "mochi", text: "Mochi (chat antigo)" }),
+  );
+  select.value = settings.askMode === "mochi" ? "mochi" : "sessions";
+  select.addEventListener("change", () => {
+    settings.askMode = select.value === "mochi" ? "mochi" : "sessions";
+    void save();
+  });
+  return h("div", { class: "row" },
+    h("label", { text: "Modo do botão Perguntar/Sessões" }),
+    select,
+    h("span", { class: "hint", text: "Gerenciar sessões: lista as sessões do Claude Code de todas as contas e abre cada uma no terminal. Mochi: o chat antigo, com a conversa dentro da ilha." }),
+  );
+}
+
 function mochiRow(backend: string, cli: string | null, missing: string): HTMLElement {
   const sw = h("button", { class: settings.chatBackend === backend ? "switch on" : "switch" });
   engineSwitches.push({ backend, el: sw });
@@ -272,6 +291,7 @@ function claudeSection(status: HookStatus): HTMLElement {
       mochiRow("windows", status.claudeCli, "O Claude Code não está instalado no Windows."),
       accountRow(),
       idleOpenRow(status.claudeCli),
+      askModeRow(),
     );
 
     if (!status.hookReady) {
@@ -281,33 +301,45 @@ function claudeSection(status: HookStatus): HTMLElement {
       }));
     }
 
-    const actions = h("div", { class: "row" });
-    const install = h("button", {
-      class: "primary",
-      text: status.installed ? "Reinstalar hooks…" : "Instalar hooks…",
-      onclick: () => showPreview(true),
+    // One row per Claude Code profile (~/.claude, ~/.claude-qf…). The default
+    // profile passes no configDir; every one goes through the same reviewed diff.
+    void Bridge.claudeProfiles().then((list) => {
+      const profiles = list && list.length ? list : [null];
+      for (const p of profiles) {
+        const dir = p && !p.isDefault ? p.configDir : undefined;
+        const actions = h("div", { class: "row" });
+        if (p && profiles.length > 1) actions.append(h("label", { text: p.label }));
+        body.append(actions);
+        void (async () => {
+          const st = dir ? ((await Bridge.hooksStatus(dir)) ?? status) : status;
+          const install = h("button", {
+            class: "primary",
+            text: st.installed ? "Reinstalar hooks…" : "Instalar hooks…",
+            onclick: () => showPreview(true, dir),
+          });
+          // Writing hook commands that point at a relay which isn't there would give
+          // every Claude Code session a broken hook and nothing to show for it.
+          if (!status.hookReady) {
+            install.disabled = true;
+            install.title = "O relay ainda não está instalado.";
+          }
+          actions.append(install);
+          if (st.installed) {
+            actions.append(h("button", {
+              class: "danger",
+              text: "Desinstalar hooks…",
+              onclick: () => showPreview(false, dir),
+            }));
+          }
+        })();
+      }
     });
-    // Writing hook commands that point at a relay which isn't there would give
-    // every Claude Code session a broken hook and nothing to show for it.
-    if (!status.hookReady) {
-      install.disabled = true;
-      install.title = "O relay ainda não está instalado.";
-    }
-    actions.append(install);
-    if (status.installed) {
-      actions.append(h("button", {
-        class: "danger",
-        text: "Desinstalar hooks…",
-        onclick: () => showPreview(false),
-      }));
-    }
-    body.append(actions);
   }
 
-  function showPreview(install: boolean) {
+  function showPreview(install: boolean, configDir?: string) {
     void previewFlow(body, install, {
-      preview: () => Bridge.hooksPreview(install),
-      apply: (fingerprint) => Bridge.hooksApply(install, fingerprint),
+      preview: () => Bridge.hooksPreview(install, configDir),
+      apply: (fingerprint) => Bridge.hooksApply(install, fingerprint, configDir),
       back: () => { clear(body); draw(); },
       done: () => void rebuild(),
       what: "settings.json",

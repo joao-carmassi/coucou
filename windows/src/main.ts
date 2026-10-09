@@ -12,8 +12,6 @@ async function main() {
   const root = document.getElementById("root");
   if (!root) return;
 
-  void Sound.preload();
-
   const island = new Island(root);
 
   const boot = await Bridge.boot();

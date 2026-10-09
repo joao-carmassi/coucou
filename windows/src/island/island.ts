@@ -22,7 +22,7 @@ import { githubData } from "../views/integrations";
 import { enterSessionPanel } from "../views/session";
 import { followNews } from "./integrations";
 import { h } from "../views/dom";
-import { usesSessions } from "../views/sessions";
+import { usesSessions } from "../views/sessionMenu";
 import { IslandStateMachine, type FsmState } from "./fsm";
 import { activityLine } from "./activity";
 
@@ -119,6 +119,11 @@ export class Island {
   private ghostEl!: HTMLCanvasElement;
   private ghostEngine = new BotEngine();
 
+  // Compact island nudged sideways so what's under it can be clicked; glides home.
+  private offsetX = new Spring(0, 0.45, 1);
+  private nudge: { x: number; off: number; moved: boolean } | null = null;
+  private nudgeTimer: number | null = null;
+
   private confusedRecovery: number | null = null;
   private prevViewBeforeConfused: IslandViewName = "overview";
   private lastSyncedView: IslandViewName | null = null;
@@ -130,6 +135,7 @@ export class Island {
   /** Where the island was when a file drag first reached it, to go back on a cancel. */
   private dragOrigin: { state: FsmState; view: IslandViewName } | null = null;
   private abandonTimer: number | null = null;
+  private noteTimer: number | null = null;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -277,6 +283,11 @@ export class Island {
     // the header, which stays visible on top of it exactly as on macOS.
     this.uploadCanvas = new UploadCanvas({
       ask: () => {
+        // Sessions: a new terminal session takes the file, at the user's word — Cancelar can still drop it.
+        if (State.settings.askMode !== "mochi") {
+          if (State.droppedFile) this.launchWith(State.droppedFile.path);
+          return;
+        }
         State.promptContext = State.droppedFile
           ? { kind: "file", name: State.droppedFile.name, path: State.droppedFile.path }
           : null;
@@ -335,10 +346,14 @@ export class Island {
           if (from === "coucou") State.view = State.defaultView();
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
-        case "home":
-          this.expand(State.defaultView());
+        case "home": {
+          // A request still waiting (its card folded away by ↗) comes back with the island, as setFocus does.
+          const card = State.focusId !== CLAUDE_ID ? null
+            : State.pendingQuestion ? "question" : State.pendingApproval ? "approval" : null;
+          this.expand(card ?? State.defaultView());
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
+        }
         case "coucou":
           this.expand("greeting");
           this.greeting.start();
@@ -358,6 +373,10 @@ export class Island {
     const prev = State.mode;
     if (mode === prev) return;
     State.mode = mode;
+    // Any change of mode sends a nudged island home.
+    this.nudge = null;
+    this.clearNudgeTimer();
+    this.offsetX.target = 0;
     // Whatever asked for a tint is no longer under the mouse.
     this.tintRequest = null;
     this.viewState = null;
@@ -508,8 +527,11 @@ export class Island {
   private cancelDrop() {
     State.droppedFile = null;
     State.promptContext = null;
-    State.chatHistory = [];
-    void Bridge.chatReset();
+    // Only Mochi's chat was reset by the drop (swallow); in sessions mode it is left alone.
+    if (State.settings.askMode === "mochi") {
+      State.chatHistory = [];
+      void Bridge.chatReset();
+    }
     this.setView(State.defaultView());
   }
 
@@ -612,10 +634,12 @@ export class Island {
     const name = path.split(/[\\/]/).pop() || "file";
     State.droppedFile = { name, path };
     State.promptContext = { kind: "file", name, path };
-    State.chatHistory = [];
-    // A dropped file starts a new session (in the inbox, where the file lands).
-    State.activeSession = null;
-    void Bridge.chatReset();
+    if (State.settings.askMode === "mochi") {
+      State.chatHistory = [];
+      // A dropped file starts a new session (in the inbox, where the file lands).
+      State.activeSession = null;
+      void Bridge.chatReset();
+    }
 
     UploadSeq.performDrop(State.uploadDuration);
     this.uploadTens = 0;
@@ -643,11 +667,30 @@ export class Island {
       });
   }
 
+  /** A new terminal session, in the front session's profile and folder, with the file attached. */
+  private launchWith(path: string) {
+    const front = State.session;
+    // Shown at once: it also takes the choose card down, so a second click can't launch twice.
+    this.showNote("Abrindo no terminal…");
+    Bridge.sessionLaunch({ profile: front.profile, cwd: front.cwd, resume: null, attach: path })
+      .then(() => Sound.play("attach"))
+      .catch((err) => this.showError(err));
+  }
+
   private showError(err: unknown) {
-    State.noteMessage = String(err).replace(/^Error:\s*/, "");
-    this.setView("note");
+    this.showNote(String(err).replace(/^Error:\s*/, ""));
     Sound.play("error");
-    window.setTimeout(() => this.setView(State.defaultView()), 2400);
+  }
+
+  /** A line on the note card for a moment, then back — unless the island moved on meanwhile. */
+  private showNote(message: string) {
+    State.noteMessage = message;
+    this.setView("note");
+    if (this.noteTimer != null) window.clearTimeout(this.noteTimer);
+    this.noteTimer = window.setTimeout(() => {
+      this.noteTimer = null;
+      if (State.mode === "expanded" && State.view === "note") this.setView(State.defaultView());
+    }, 2400);
   }
 
   // ── Mochi drag-out → window attach ──────────────────────────────────────────
@@ -718,13 +761,15 @@ export class Island {
         .then((file) => {
           State.droppedFile = { name: file.name, path: file.path };
           State.promptContext = { kind: "file", name: file.name, path: file.path };
-          State.chatHistory = [];
-          // Like a dropped file: a new session, in the inbox where the print lives.
-          State.activeSession = null;
-          void Bridge.chatReset();
-          Sound.play("attach");
           this.engine.triggerEmote("wink");
-          this.setView("prompt");
+          if (State.settings.askMode === "mochi") {
+            State.chatHistory = [];
+            // Like a dropped file: a new session, in the inbox where the print lives.
+            State.activeSession = null;
+            void Bridge.chatReset();
+            Sound.play("attach");
+            this.setView("prompt");
+          } else this.launchWith(file.path);
         })
         .catch((err) => this.showError(err));
     } else if (this.botPress) {
@@ -732,6 +777,11 @@ export class Island {
       this.cancelBotHover();
       // A Mochi with news to tell takes you to it; any other gets his slap.
       if (!followNews(this)) this.engine.slap();
+    } else if (this.nudge) {
+      const moved = this.nudge.moved;
+      this.nudge = null;
+      if (moved) this.scheduleNudgeReturn();
+      else this.fsm.click();
     }
   }
 
@@ -837,7 +887,8 @@ export class Island {
     // that fraction once the island had settled: its text stayed smeared until
     // it was drawn again.
     const dpr = window.devicePixelRatio || 1;
-    this.islandEl.style.transform = `translateX(${-Math.round((w / 2) * dpr) / dpr}px)`;
+    const off = this.offset(w);
+    this.islandEl.style.transform = `translateX(${Math.round((off - w / 2) * dpr) / dpr}px)`;
     // These follow the island as it resizes, so they belong here rather than in
     // the state-driven DOM sync.
     this.miniGrid.style.left = `${COMPACT_CONTENT_X}px`;
@@ -850,7 +901,7 @@ export class Island {
     this.greetingCanvas.style.left = `${(w - EXPANDED_W) / 2}px`;
     this.uploadCanvas.el.style.left = `${(w - EXPANDED_W) / 2}px`;
 
-    const rect = { x: (PANEL_W - w) / 2, y: 0, w, h: hh };
+    const rect = { x: (PANEL_W - w) / 2 + off, y: 0, w, h: hh };
     const p = this.pushedRect;
     if (Math.abs(p.x - rect.x) > 0.5 || Math.abs(p.w - rect.w) > 0.5 || Math.abs(p.h - rect.h) > 0.5) {
       this.pushedRect = rect;
@@ -862,7 +913,29 @@ export class Island {
   private islandRect(): { x: number; y: number; w: number; h: number } {
     const w = this.width.value;
     const hh = this.height.value;
-    return { x: (PANEL_W - w) / 2, y: 0, w, h: hh };
+    return { x: (PANEL_W - w) / 2 + this.offset(w), y: 0, w, h: hh };
+  }
+
+  /** Sideways nudge, kept inside the window whatever the island's width. */
+  private offset(w: number): number {
+    const m = Math.max(0, (PANEL_W - w) / 2);
+    return clamp(this.offsetX.value, -m, m);
+  }
+
+  private clearNudgeTimer() {
+    if (this.nudgeTimer != null) window.clearTimeout(this.nudgeTimer);
+    this.nudgeTimer = null;
+  }
+
+  /** A nudged island glides back 10 s after the release, never from under the cursor. */
+  private scheduleNudgeReturn() {
+    this.clearNudgeTimer();
+    this.nudgeTimer = window.setTimeout(() => {
+      this.nudgeTimer = null;
+      if (this.wasInIsland || this.nudge) return this.scheduleNudgeReturn();
+      this.offsetX.target = 0;
+      this.ensureRunning();
+    }, 10_000);
   }
 
   // ── Window collapse (hidden → tiny wake strip, zero polling) ────────────────
@@ -901,7 +974,9 @@ export class Island {
       Sound.resume();
       State.lastActivity = performance.now();
       if (State.mode !== "expanded") {
-        this.fsm.click();
+        // Compact opens on the release: a press that travels is a sideways nudge.
+        if (State.mode === "compact") this.nudge = { x: e.clientX, off: this.offset(this.width.value), moved: false };
+        else this.fsm.click();
         return;
       }
       // The slap (or news) waits for the release: past 7 px this is a drag-out.
@@ -948,6 +1023,12 @@ export class Island {
     const released = this.lastDown && !down;
     const pressed = down && !this.lastDown;
     this.lastDown = down;
+    if (this.nudge && down && (this.nudge.moved || Math.abs(x - this.nudge.x) > 5)) {
+      this.nudge.moved = true;
+      const m = Math.max(0, (PANEL_W - this.width.value) / 2);
+      this.offsetX.set(clamp(this.nudge.off + x - this.nudge.x, -m, m)); // x only, never y
+      this.ensureRunning();
+    }
     if (this.botPress && down && Math.hypot(x - this.botPress.x, y - this.botPress.y) > 7) {
       this.startGhost(x, y);
     }
@@ -967,7 +1048,7 @@ export class Island {
       if (!inRect && State.mode === "expanded" && !State.isPinned) this.collapse();
     }
     // A stale press (released off the island) must not turn a later drag into a ghost.
-    if (released && this.botPress) this.onMouseUp(x, y);
+    if (released && (this.botPress || this.nudge)) this.onMouseUp(x, y);
 
     // Windows sends no cursor position with an OLE drag, so the drop sequence is
     // fed from the Win32 cursor poll instead — it runs throughout the drag.
@@ -1079,6 +1160,7 @@ export class Island {
     this.width.step(dt, nowMs);
     this.height.step(dt, nowMs);
     this.radius.step(dt, nowMs);
+    this.offsetX.step(dt);
     this.applyGeometry();
 
     if (this.dirty) {
@@ -1126,7 +1208,7 @@ export class Island {
     // sweep — so a hidden island went on burning frames in exactly the states it
     // spends most of its life in. Geometry still has to finish retracting.
     const settling =
-      this.width.animating || this.height.animating || this.radius.animating;
+      this.width.animating || this.height.animating || this.radius.animating || !this.offsetX.settled;
     const busy = State.mode === "hidden"
       ? settling
       : settling ||

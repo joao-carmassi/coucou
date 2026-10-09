@@ -199,8 +199,22 @@ async fn handle(app: AppHandle, mut pipe: impl Relay) {
         .unwrap_or_default()
         .to_string();
 
+    // The relay forwards CLAUDE_CONFIG_DIR as typed; the island matches profiles
+    // by their normalised key.
+    if let Some(dir) = payload.get("config_dir").and_then(Value::as_str) {
+        payload["config_dir"] = json!(crate::hooks::profile_key(dir));
+    }
+    let sid: String = payload
+        .get("session_id")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .chars()
+        .take(8)
+        .collect();
+    let cfg = payload.get("config_dir").and_then(Value::as_str).unwrap_or_default().to_string();
+
     if event != "PermissionRequest" {
-        log::line(format!("hook {event}"));
+        log::line(format!("hook {event} sid={sid} cfg={cfg}"));
         let _ = app.emit_to(WINDOW_LABEL, "hook", payload);
         pipe.finish();
         return;
@@ -213,7 +227,7 @@ async fn handle(app: AppHandle, mut pipe: impl Relay) {
         pending.0.lock().unwrap().insert(id.clone(), tx);
     }
     payload["request_id"] = json!(id);
-    log::line(format!("hook PermissionRequest id={id}"));
+    log::line(format!("hook PermissionRequest id={id} sid={sid} cfg={cfg}"));
     let _ = app.emit_to(WINDOW_LABEL, "hook", payload);
 
     let decision = wait_for_decision(&id, &mut rx).await;

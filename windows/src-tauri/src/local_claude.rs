@@ -147,11 +147,11 @@ fn version_key(name: &str) -> Vec<u64> {
 /// find nothing. Same for the parent's terminal identity (WT_SESSION, TERM…),
 /// which describe a window this process is not in, and NO_COLOR/FORCE_COLOR,
 /// which Claude Code sets for the commands it runs (a white, colorless claude).
-/// CLAUDE_CONFIG_DIR is the user's own choice and stays.
+/// CLAUDE_CONFIG_DIR goes too: callers set the profile they mean, explicitly.
 pub fn fresh_env(cmd: &mut Command) {
     for (key, _) in std::env::vars_os() {
         let name = key.to_string_lossy().to_ascii_uppercase();
-        let inherited = (name.starts_with("CLAUDE") && name != "CLAUDE_CONFIG_DIR")
+        let inherited = name.starts_with("CLAUDE")
             || matches!(
                 name.as_str(),
                 "WT_SESSION"

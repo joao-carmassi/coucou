@@ -52,11 +52,15 @@ pub(crate) fn emit(app: &AppHandle, update: IntegrationUpdate) {
     let _ = app.emit_to(WINDOW_LABEL, "integration", update);
 }
 
+/// Shared so polls reuse pooled connections instead of a new TLS handshake each tick.
 fn client() -> reqwest::Client {
-    reqwest::Client::builder()
-        .timeout(TIMEOUT)
-        .build()
-        .unwrap_or_default()
+    static HTTP: std::sync::LazyLock<reqwest::Client> = std::sync::LazyLock::new(|| {
+        reqwest::Client::builder()
+            .timeout(TIMEOUT)
+            .build()
+            .unwrap_or_default()
+    });
+    HTTP.clone()
 }
 
 /// Set from the tray's Pause item. While it is on, nothing reaches the network:
@@ -556,9 +560,8 @@ async fn poll_calcom(app: AppHandle) {
 // ── n8n ───────────────────────────────────────────────────────────────────────
 
 async fn poll_n8n(app: AppHandle) {
-    let (Some(key), Some(raw_base)) = (secrets::get("n8n-api-key"), secrets::get("n8n-url")) else {
-        return;
-    };
+    let Some(key) = secrets::get("n8n-api-key") else { return };
+    let Some(raw_base) = secrets::get("n8n-url") else { return };
     let base = raw_base.trim_end_matches('/').to_string();
     let http = client();
 

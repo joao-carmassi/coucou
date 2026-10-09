@@ -76,8 +76,25 @@ pub struct Target {
 impl Target {
     /// Claude Code for Windows: `%USERPROFILE%\.claude\settings.json`.
     pub fn windows() -> Self {
-        Self { settings_path: settings_path(), hook: Box::new(hook_entry) }
+        Self::for_config_dir(None)
     }
+
+    /// Claude Code with `CLAUDE_CONFIG_DIR` = `dir` (a second account); None = the default.
+    pub fn for_config_dir(dir: Option<&Path>) -> Self {
+        let settings_path = match dir {
+            Some(d) => d.join("settings.json"),
+            None => settings_path(),
+        };
+        Self { settings_path, hook: Box::new(hook_entry) }
+    }
+}
+
+/// A config folder as a stable key: lowercase, `\` separators, no trailing one.
+/// "" for the default `~/.claude`.
+pub fn profile_key(dir: &str) -> String {
+    let norm = |s: &str| s.trim().to_lowercase().replace('/', "\\").trim_end_matches('\\').to_string();
+    let key = norm(dir);
+    if key == norm(&platform::home_dir().join(".claude").to_string_lossy()) { String::new() } else { key }
 }
 
 
@@ -279,10 +296,15 @@ pub fn installed_at(path: &Path) -> bool {
 }
 
 pub fn status() -> HookStatus {
+    status_in(None)
+}
+
+pub fn status_in(dir: Option<&Path>) -> HookStatus {
     let hook_path = settings::hook_exe_path();
+    let path = Target::for_config_dir(dir).settings_path;
     HookStatus {
-        installed: installed_at(&settings_path()),
-        settings_path: settings_path().to_string_lossy().to_string(),
+        installed: installed_at(&path),
+        settings_path: path.to_string_lossy().to_string(),
         hook_ready: hook_path.exists(),
         hook_path: hook_path.to_string_lossy().to_string(),
         claude_cli: crate::local_claude::windows_cli().map(|p| p.to_string_lossy().to_string()),
@@ -290,7 +312,11 @@ pub fn status() -> HookStatus {
 }
 
 pub fn preview(install: bool) -> Result<HookPreview, String> {
-    preview_for(&Target::windows(), install)
+    preview_in(None, install)
+}
+
+pub fn preview_in(dir: Option<&Path>, install: bool) -> Result<HookPreview, String> {
+    preview_for(&Target::for_config_dir(dir), install)
 }
 
 pub fn preview_for(target: &Target, install: bool) -> Result<HookPreview, String> {
@@ -312,7 +338,11 @@ pub fn preview_for(target: &Target, install: bool) -> Result<HookPreview, String
 /// and make them look at a fresh diff, because the only thing worse than not
 /// installing the hooks is silently reverting somebody else's edit.
 pub fn write(install: bool, fingerprint: &str) -> Result<String, String> {
-    write_for(&Target::windows(), install, fingerprint)
+    write_in(None, install, fingerprint)
+}
+
+pub fn write_in(dir: Option<&Path>, install: bool, fingerprint: &str) -> Result<String, String> {
+    write_for(&Target::for_config_dir(dir), install, fingerprint)
 }
 
 pub fn write_for(target: &Target, install: bool, fingerprint: &str) -> Result<String, String> {
@@ -640,6 +670,27 @@ mod tests {
         let stop = after["hooks"]["Stop"].as_array().unwrap();
         assert_eq!(stop.len(), 1, "the old entry must be replaced, not kept next to the new one");
         assert_eq!(stop[0]["hooks"][0]["args"], json!(["Stop"]));
+    }
+
+    #[test]
+    fn old_shell_form_entry_is_replaced_on_any_platform() {
+        let old = json!({ "hooks": { "Stop": [
+            { "hooks": [{ "type": "command", "command": "\"C:/x/coucou-hook.exe\" Stop" }] }
+        ] } });
+        let exec = |e: &str| json!({ "type": "command", "command": "C:\\x\\coucou-hook.exe", "args": [e] });
+        let after = merged(&old, &exec);
+        let stop = after["hooks"]["Stop"].as_array().unwrap();
+        assert_eq!(stop.len(), 1);
+        assert_eq!(stop[0]["hooks"][0]["args"], json!(["Stop"]));
+    }
+
+    #[test]
+    fn profile_key_normalises_and_blanks_the_default() {
+        let home = platform::home_dir();
+        assert_eq!(profile_key(&home.join(".claude").to_string_lossy()), "");
+        assert_eq!(profile_key(&format!("{}/.CLAUDE/", home.to_string_lossy())), "");
+        assert_eq!(profile_key("C:/Users/Me/.Claude-Work//"), "c:\\users\\me\\.claude-work");
+        assert_eq!(profile_key(""), "");
     }
 
     #[test]

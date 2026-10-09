@@ -2,7 +2,7 @@
 
 import type { BotEmoteName, BotStateName, IslandMode, IslandViewName } from "./layout";
 import type { EyeShape } from "../mochi/engine";
-import type { ActiveSession, IntegrationNews, SessionInfo } from "./bridge";
+import type { ActiveSession, IntegrationNews, ManagedSession, SessionInfo } from "./bridge";
 
 export type AgentSource = "claudeCode" | "n8n" | "agent";
 export type PillBadge = "approval" | "finished" | "error";
@@ -170,6 +170,8 @@ export function turnSteps(session: ClaudeSession): SessionStep[] {
  */
 export interface ClaudeSession {
   id: string;
+  /** The Claude profile (normalised config dir key) it belongs to; "" = default. */
+  profile: string;
   client: ClaudeClient | null;
   /** The conversation's title, when Claude Code has given it one. */
   title: string | null;
@@ -207,7 +209,7 @@ export const SESSION_UNNAMED = "Sessão";
 
 export function newSession(id: string): ClaudeSession {
   return {
-    id, client: null, title: null, project: SESSION_UNNAMED, cwd: null, state: "idle",
+    id, profile: "", client: null, title: null, project: SESSION_UNNAMED, cwd: null, state: "idle",
     lines: [], steps: [], asked: null, answer: null, answeredAt: 0,
     approval: null, question: null, news: null, heardAt: 0, wslDistro: null, terminalPids: [],
     agentsRunning: 0, agentsLaunched: 0,
@@ -293,6 +295,8 @@ export interface Settings {
   claudeConfigDir: string;
   /** What the idle Claude card opens: "" = Visual Studio Code, "terminal" = Claude Code in a terminal. */
   idleOpen: string;
+  /** What the Ask tab is: "sessions" (sessions manager) or "mochi" (the old chat). */
+  askMode: "sessions" | "mochi";
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -312,6 +316,7 @@ export const DEFAULT_SETTINGS: Settings = {
   chatBackend: "api",
   claudeConfigDir: "",
   idleOpen: "",
+  askMode: "sessions",
 };
 
 type Listener = () => void;
@@ -353,6 +358,8 @@ class AppState {
   changes = new Map<string, ChangedFile[]>();
   /** Mochi's session menu (local Claude Code only). */
   chatSessions: SessionInfo[] = [];
+  /** Every session of every Claude profile, running or not. */
+  managedSessions: ManagedSession[] = [];
   activeSession: ActiveSession | null = null;
   /** The session menu is open: the Ask view takes its full height for it. */
   sessionsMenuOpen = false;

@@ -31,6 +31,8 @@ export interface HookPayload {
   request_id?: string;
   session_id?: string;
   cwd?: string;
+  /** The Claude profile (CLAUDE_CONFIG_DIR) the session runs under. */
+  config_dir?: string;
   /** Added by coucou-hook when the session runs under WSL. */
   wsl_distro?: string;
   /** Added by coucou-hook: its ancestor processes, nearest first. */
@@ -183,6 +185,7 @@ function sessionOf(island: Island, payload: HookPayload): ClaudeSession {
     makeRoom(island, session);
   }
   session.client = clientOf(payload);
+  session.profile = payload.config_dir ?? session.profile;
   if (payload.session_title) session.title = payload.session_title;
   if (payload.cwd) {
     session.cwd = payload.cwd;
@@ -534,6 +537,14 @@ export function handleHook(island: Island, payload: HookPayload) {
   const agent = validateAgent(payload.coucou_agent);
   if (agent && !State.paused) return handleAgent(island, payload, agent);
 
+  // A session that ended must be forgotten even while paused, or it stays "working".
+  if (payload.hook_event_name === "SessionEnd") {
+    const over = State.sessions.find((s) => s.id === (payload.session_id || ANONYMOUS));
+    if (over) forget(island, over);
+    State.notify();
+    return;
+  }
+
   // Paused, or a session nobody is sitting in front of: the island does not look.
   if (State.paused || isAutomated(payload)) {
     // Silence here used to cost Claude Code nearly two minutes: the relay waited
@@ -544,13 +555,6 @@ export function handleHook(island: Island, payload: HookPayload) {
   }
 
   const name = payload.hook_event_name ?? "";
-
-  if (name === "SessionEnd") {
-    const over = State.sessions.find((s) => s.id === (payload.session_id || ANONYMOUS));
-    if (over) forget(island, over);
-    State.notify();
-    return;
-  }
 
   const session = sessionOf(island, payload);
   if (takesFront(session, name)) State.bringForward(session.id);

@@ -201,16 +201,30 @@ own model, in Coucou's inbox folder where dropped files land. Mochi only gets
 read-only tools (Read, WebSearch, WebFetch), and its runs never show up in the
 island: hooks are switched off for them.
 
-With Claude Code behind it, the **Ask** tab also manages sessions. On the left,
-under Mochi, a menu lists your Claude Code sessions, terminal ones included,
-with their folder and title, read from that Claude Code's own transcripts
-(`~/.claude/projects`). Picking one makes it the active session: the
-conversation shows on the right, and Mochi carries it on in its folder
-(`claude -p --resume`, still read-only). A new session starts from a dropped
-file, as before, or in a folder you pick (**New in a folder…**). Deleting a
-session erases its transcript, after a second click. Carrying on a session that
-is still open in a terminal adds to the same transcript, as a second
-`claude --resume` would.
+With Claude Code behind it, the **Ask** tab becomes a **Sessions** management
+view. It lists your Claude Code sessions across every profile, running or
+offline, with their folder and title (read from each profile's own transcripts,
+`<config dir>/projects`). From there you can start a **new session** (opens in your home folder),
+**resume** an offline one, or **focus** the terminal of a running one.
+Sessions open in a real terminal, run by Coucou.
+
+### Multiple Claude profiles (claude / claude-qf)
+
+Profiles are discovered automatically: `~/.claude` and every `~/.claude-*`
+folder. **Settings… → Claude Code** shows one *Install hooks…* row per profile,
+each writing to that profile's own `settings.json` through the same reviewed
+diff, dated backup and explicit click. Coucou launches `claude.exe` itself with
+`CLAUDE_CONFIG_DIR` set to the profile; it never calls your PowerShell function.
+If you want the same in your own shell, a function like this works:
+
+```powershell
+function claude-qf { $env:CLAUDE_CONFIG_DIR="$HOME\.claude-qf"; try { & claude.exe @args } finally { Remove-Item Env:CLAUDE_CONFIG_DIR } }
+```
+
+### Dropping files and windows
+
+Dropping a file on the island, or dragging Mochi onto a window, opens a new
+terminal session with that file (or a screenshot of the window) attached.
 
 **Settings… → Claude** takes your Anthropic API key. Keys live in the **Windows
 Credential Manager**, never on disk and never in the interface — the island can
@@ -369,8 +383,7 @@ problems. It stays on your machine.
   VS Code sessions.
 - The [session panel](#watching-a-session), answering Claude's questions and the
   diff on a permission request are Windows-only for now.
-- Not in this version: sending a file by email, dragging Mochi onto a window to
-  attach it as context, and jumping to a specific terminal window — "Open
+- Not in this version: sending a file by email, and jumping to a specific terminal window — "Open
   terminal" opens the working folder in VS Code when `code` is on your `PATH`
   (with WSL set up, it brings the session's terminal forward instead; see above).
 - Cal.com shows the next bookings as a list rather than the Mac's calendar.
@@ -409,5 +422,5 @@ What changes on Linux:
 - **Files**: preferences in `~/.config/coucou/`, the log at
   `~/.local/share/coucou/coucou.log`.
 - What the Windows build leaves out, this one does too: sending a file by
-  email, dragging Mochi onto a window, and jumping to a specific terminal
+  email, and jumping to a specific terminal
   window — "Open terminal" opens the folder in VS Code.

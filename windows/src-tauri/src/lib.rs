@@ -65,7 +65,7 @@ fn boot(app: AppHandle, shared: State<Shared>) -> BootInfo {
     // The real state of ~/.claude/settings.json wins over whatever we stored.
     // WSL is taken on trust from the last write or refresh: asking every distro
     // here would start their VMs just to draw a dot.
-    settings.hooks_installed = hooks::status().installed || !settings.wsl_hooks.is_empty();
+    settings.hooks_installed = any_hooks_installed() || !settings.wsl_hooks.is_empty();
     let screen = island::screen_info(&app, &settings.screen);
     BootInfo {
         settings,
@@ -85,6 +85,9 @@ fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
         settings.wsl_hooks = current.wsl_hooks.clone();
         settings.wsl_prompted = current.wsl_prompted;
         settings.mochi_session = current.mochi_session.clone();
+        if !matches!(settings.ask_mode.as_str(), "sessions" | "mochi") {
+            settings.ask_mode = "sessions".into();
+        }
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
         *current = settings.clone();
@@ -144,6 +147,8 @@ fn reposition(app: AppHandle, shared: State<Shared>) {
     let pref = shared.settings.lock().unwrap().screen.clone();
     let collapsed = shared.gate.collapsed.load(Ordering::Relaxed);
     island::apply_geometry(&app, &pref, collapsed);
+    // The cursor poll skips idle ticks: tell it the window moved under a still cursor.
+    island::refresh_click_through(&app, &shared.gate);
 }
 
 #[tauri::command]
@@ -164,8 +169,6 @@ fn open_claude_app() {
     platform::open_url(CLAUDE_APP_URL);
 }
 
-/// "Open terminal" opens the working folder in VS Code when `code` is on PATH,
-/// and falls back to the file manager otherwise.
 /// "Open Visual Studio Code" (integration card) opens the working folder in VS
 /// Code when `code` is on PATH, and falls back to the file manager otherwise.
 ///
@@ -217,28 +220,24 @@ fn open_in_vscode(path: Option<String>, wsl_distro: Option<String>) -> bool {
     false
 }
 
-/// "Open terminal" and the ↗ button, once WSL is set up (Settings → WSL): bring
-/// the session's terminal window forward (any terminal window if that one is
-/// gone), or open one in the session folder — Windows Terminal when installed, a
-/// plain console otherwise; a WSL session gets a shell in its own distro.
-/// Without WSL they keep their original job: the folder in VS Code.
+/// "Open terminal" and the ↗ button: bring the session's own terminal window
+/// forward, or open one in the session folder — Windows Terminal when installed,
+/// a PowerShell console otherwise; a WSL session gets a shell in its own distro.
 #[tauri::command]
 fn open_terminal(
-    shared: State<Shared>,
     path: Option<String>,
     wsl_distro: Option<String>,
     terminal_pids: Option<Vec<u32>>,
 ) -> bool {
-    // The session's own window first, WSL or not; the VS Code fallback without
-    // WSL is only for when no terminal window can be found.
     if focus::existing_terminal(&terminal_pids.unwrap_or_default()) {
         return true;
     }
-    if shared.settings.lock().unwrap().wsl_hooks.is_empty() {
-        return open_in_vscode(path, wsl_distro);
-    }
     let path = path.filter(|p| !p.is_empty());
     let wsl = wsl_target(wsl_distro, path.as_deref());
+    // Same check as above: a Windows path must be an existing folder.
+    if wsl.is_none() && path.as_deref().is_some_and(|p| !(std::path::Path::new(p).is_absolute() && std::path::Path::new(p).is_dir())) {
+        return false;
+    }
 
     // Same rule as above: no shell in between, every value is its own argument.
     // wt still reads `;` as "next command", so a `;` in a folder name is escaped.
@@ -263,18 +262,21 @@ fn open_terminal(
             cmd
         }
         (None, p) => {
-            let mut cmd = Command::new("powershell.exe");
-            cmd.arg("-NoExit");
-            if let Some(p) = p {
-                cmd.current_dir(p);
-            }
-            cmd
+            // PowerShell 7 when installed, Windows PowerShell otherwise.
+            let shell = |exe: &str| {
+                let mut cmd = Command::new(exe);
+                cmd.arg("-NoExit").creation_flags(CREATE_NEW_CONSOLE);
+                if let Some(p) = p {
+                    cmd.current_dir(p);
+                }
+                cmd
+            };
+            return shell("pwsh.exe").spawn().or_else(|_| shell("powershell.exe").spawn()).is_ok();
         }
     };
     console.creation_flags(CREATE_NEW_CONSOLE).spawn().is_ok()
 }
 
-/// The distro and Linux folder of a WSL session, or `None` for a Windows one.
 /// Idle "Open terminal": a fresh console running Claude Code in the home folder,
 /// on the account from "Account folder". Never reuses a window. Spawned
 /// directly rather than through wt.exe, which may hand the tab to a running
@@ -292,37 +294,74 @@ fn resume_in_terminal(id: String, cwd: Option<String>) -> Result<(), String> {
         .map(std::path::PathBuf::from)
         .filter(|p| p.is_absolute() && p.is_dir())
         .unwrap_or_else(files::inbox_dir);
-    claude_console(&cli, &["--resume", &id], &dir)
+    let config = settings::claude_config_dir();
+    claude_console(&cli, &["--resume".to_string(), id], &dir, config.as_deref(), None)
         .map_err(|e| format!("Não foi possível iniciar o Claude Code: {e}"))
 }
 
 #[tauri::command]
 fn start_claude_terminal() -> bool {
     let Some(cli) = local_claude::windows_cli() else { return false };
-    claude_console(&cli, &[], &platform::home_dir()).is_ok()
+    let config = settings::claude_config_dir();
+    claude_console(&cli, &[], &platform::home_dir(), config.as_deref(), None).is_ok()
+}
+
+/// Single-quoted PowerShell literal; `'` and the typographic quotes PowerShell
+/// also reads as quotes are doubled.
+fn ps_quote(s: &str) -> String {
+    let mut out = String::from("'");
+    for c in s.chars() {
+        out.push(c);
+        if matches!(c, '\'' | '\u{2018}' | '\u{2019}') {
+            out.push(c);
+        }
+    }
+    out.push('\'');
+    out
 }
 
 /// Claude Code in a new console, inside PowerShell 7 so the window stays a
 /// shell once Claude exits; straight claude.exe when pwsh isn't installed.
-/// `args` are ours (flags and a checked session id), never user text.
-fn claude_console(cli: &std::path::Path, args: &[&str], dir: &std::path::Path) -> std::io::Result<()> {
+/// `config_dir` is the profile's CLAUDE_CONFIG_DIR (None = the default one).
+/// `prompt` travels in the environment, never in the command string.
+fn claude_console(
+    cli: &std::path::Path,
+    args: &[String],
+    dir: &std::path::Path,
+    config_dir: Option<&std::path::Path>,
+    prompt: Option<&str>,
+) -> std::io::Result<()> {
     let prepare = |cmd: &mut Command| {
         cmd.current_dir(dir);
         local_claude::fresh_env(cmd);
-        if let Some(config) = settings::claude_config_dir() {
+        if let Some(config) = config_dir {
             cmd.env("CLAUDE_CONFIG_DIR", config);
         }
         cmd.creation_flags(CREATE_NEW_CONSOLE);
     };
+    let mut script = String::new();
+    if prompt.is_some() {
+        script.push_str("$p=$env:COUCOU_PROMPT; Remove-Item Env:COUCOU_PROMPT; ");
+    }
+    script.push_str(&format!("& {}", ps_quote(&cli.display().to_string())));
+    // The prompt goes first: `--add-dir` is variadic and would swallow it as one more folder.
+    if prompt.is_some() {
+        script.push_str(" $p");
+    }
+    for a in args {
+        script.push(' ');
+        script.push_str(&ps_quote(a));
+    }
     let mut pwsh = Command::new("pwsh.exe");
-    let cli_quoted = cli.display().to_string().replace('\'', "''");
-    pwsh.args(["-NoLogo", "-NoExit", "-Command"])
-        .arg(format!("& '{cli_quoted}' {}", args.join(" ")));
+    pwsh.args(["-NoLogo", "-NoExit", "-Command"]).arg(script);
     prepare(&mut pwsh);
+    if let Some(p) = prompt {
+        pwsh.env("COUCOU_PROMPT", p);
+    }
     match pwsh.spawn() {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             let mut direct = Command::new(cli);
-            direct.args(args);
+            direct.args(prompt).args(args);
             prepare(&mut direct);
             direct.spawn().map(|_| ())
         }
@@ -350,15 +389,32 @@ fn set_paused(paused: bool) {
 
 // ── Claude Code hooks ─────────────────────────────────────────────────────────
 
+/// `config_dir` from the interface → the folder of a known profile (None = the
+/// default one). Anything that is not a profile is refused.
+fn profile_dir(config_dir: Option<String>) -> Result<Option<std::path::PathBuf>, String> {
+    let Some(dir) = config_dir.filter(|d| !d.trim().is_empty()) else { return Ok(None) };
+    let key = hooks::profile_key(&dir);
+    let p = sessions::profiles().into_iter().find(|p| p.key == key).ok_or("Perfil desconhecido.")?;
+    Ok((!p.is_default).then(|| std::path::PathBuf::from(p.config_dir)))
+}
+
+/// Whether any profile has the hooks.
+fn any_hooks_installed() -> bool {
+    sessions::profiles().iter().any(|p| {
+        let dir = (!p.is_default).then(|| std::path::PathBuf::from(&p.config_dir));
+        hooks::status_in(dir.as_deref()).installed
+    })
+}
+
 #[tauri::command]
-fn hooks_status() -> HookStatus {
-    hooks::status()
+fn hooks_status(config_dir: Option<String>) -> Result<HookStatus, String> {
+    Ok(hooks::status_in(profile_dir(config_dir)?.as_deref()))
 }
 
 /// Returns the diff the user has to look at before anything is written.
 #[tauri::command]
-fn hooks_preview(install: bool) -> Result<HookPreview, String> {
-    hooks::preview(install)
+fn hooks_preview(install: bool, config_dir: Option<String>) -> Result<HookPreview, String> {
+    hooks::preview_in(profile_dir(config_dir)?.as_deref(), install)
 }
 
 /// Only ever called from an explicit click in the settings window.
@@ -368,13 +424,14 @@ fn hooks_apply(
     shared: State<Shared>,
     install: bool,
     fingerprint: String,
+    config_dir: Option<String>,
 ) -> Result<String, String> {
     // The fingerprint comes from the preview the user actually looked at, so a
     // settings.json that changed in between is refused rather than overwritten.
-    let backup = hooks::write(install, &fingerprint)?;
+    let backup = hooks::write_in(profile_dir(config_dir)?.as_deref(), install, &fingerprint)?;
     let updated = {
         let mut current = shared.settings.lock().unwrap();
-        current.hooks_installed = install || !current.wsl_hooks.is_empty();
+        current.hooks_installed = any_hooks_installed() || !current.wsl_hooks.is_empty();
         let _ = settings::save(&current);
         current.clone()
     };
@@ -439,7 +496,7 @@ fn remember_wsl_hooks(app: &AppHandle, distro: &str, installed: bool) {
         } else {
             current.wsl_hooks.retain(|d| d != distro);
         }
-        current.hooks_installed = hooks::status().installed || !current.wsl_hooks.is_empty();
+        current.hooks_installed = any_hooks_installed() || !current.wsl_hooks.is_empty();
         let _ = settings::save(&current);
         current.clone()
     };
@@ -631,6 +688,86 @@ async fn session_new_in_folder(app: AppHandle) -> Result<Option<String>, String>
     Ok(picked)
 }
 
+#[tauri::command]
+fn claude_profiles() -> Vec<sessions::Profile> {
+    sessions::profiles()
+}
+
+#[tauri::command]
+async fn sessions_all() -> Result<Vec<sessions::ManagedSession>, String> {
+    blocking(sessions::list_all).await
+}
+
+#[tauri::command]
+async fn sessions_live() -> Result<Vec<sessions::LiveSession>, String> {
+    blocking(sessions::live).await
+}
+
+/// Opens Claude Code in a new console: a new session in `cwd`, `resume` one that
+/// is not running, and/or `attach` a file from the inbox. Everything the
+/// interface sends is validated here; none of it reaches a command line unchecked.
+#[tauri::command]
+async fn session_launch(
+    profile: String,
+    cwd: Option<String>,
+    resume: Option<String>,
+    attach: Option<String>,
+) -> Result<(), String> {
+    blocking(move || {
+        let p = sessions::profiles()
+            .into_iter()
+            .find(|p| p.key == profile)
+            .ok_or("Perfil desconhecido.")?;
+        let mut args: Vec<String> = Vec::new();
+        if let Some(id) = &resume {
+            if !sessions::is_session_id(id) {
+                return Err("ID de sessão inválido.".to_string());
+            }
+            if sessions::live().iter().any(|l| l.profile == p.key && &l.id == id) {
+                return Err("Essa sessão já está aberta.".into());
+            }
+            args.push("--resume".into());
+            args.push(id.clone());
+        }
+        let mut prompt = None;
+        if let Some(file) = &attach {
+            let inbox = files::inbox_dir().canonicalize().map_err(|e| e.to_string())?;
+            let path = std::path::Path::new(file)
+                .canonicalize()
+                .ok()
+                .filter(|f| f.is_file() && f.starts_with(&inbox))
+                .ok_or("Arquivo fora da caixa de entrada do Coucou.")?;
+            args.push("--add-dir".into());
+            args.push(strip_verbatim(&inbox));
+            prompt = Some(format!(
+                "Arquivo anexado: @\"{}\". Dê uma olhada e aguarde minhas instruções.",
+                strip_verbatim(&path)
+            ));
+        }
+        let dir = cwd
+            .map(std::path::PathBuf::from)
+            .filter(|d| d.is_absolute() && d.is_dir())
+            .unwrap_or_else(platform::home_dir);
+        let cli = local_claude::windows_cli().ok_or("O Claude Code não está instalado no Windows.")?;
+        let config = (!p.is_default).then(|| std::path::PathBuf::from(&p.config_dir));
+        claude_console(&cli, &args, &dir, config.as_deref(), prompt.as_deref())
+            .map_err(|e| format!("Não foi possível iniciar o Claude Code: {e}"))
+    })
+    .await?
+}
+
+/// `\\?\C:\x` → `C:\x`: what canonicalize returns is not what Claude Code expects.
+fn strip_verbatim(p: &std::path::Path) -> String {
+    let s = p.to_string_lossy();
+    s.strip_prefix(r"\\?\").unwrap_or(&s).to_string()
+}
+
+/// Erases a session's transcript — the island has already asked twice.
+#[tauri::command]
+async fn session_erase(profile: String, id: String) -> Result<(), String> {
+    blocking(move || sessions::erase(&profile, &id)).await?
+}
+
 /// Copies a dropped file into the inbox and reports its name back.
 #[tauri::command]
 fn ingest_file(path: String) -> Result<DroppedFile, String> {
@@ -751,6 +888,33 @@ fn settings_page_url(app: &AppHandle) -> WebviewUrl {
     WebviewUrl::App("settings.html".into())
 }
 
+/// Tauri's hide() does not tell WebView2 the page is hidden. While hidden, mark
+/// the webview invisible and ask for a low memory target; restore both before
+/// show(). Errors are ignored (older runtimes lack ICoreWebView2_19).
+#[cfg(windows)]
+fn set_settings_webview_low(win: &tauri::WebviewWindow, low: bool) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
+        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+    };
+    use windows_core_062::Interface;
+    let _ = win.with_webview(move |w| unsafe {
+        let _ = w.controller().SetIsVisible(!low);
+        if let Ok(core) = w.controller().CoreWebView2() {
+            if let Ok(core) = core.cast::<ICoreWebView2_19>() {
+                let _ = core.SetMemoryUsageTargetLevel(if low {
+                    COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
+                } else {
+                    COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL
+                });
+            }
+        }
+    });
+}
+
+#[cfg(not(windows))]
+fn set_settings_webview_low(_win: &tauri::WebviewWindow, _low: bool) {}
+
 /// The settings window is created hidden at launch and only ever shown and
 /// hidden afterwards. A WebView2 window created later — on the main thread or
 /// not — silently comes up blank in this app, so the window that works is the
@@ -768,12 +932,14 @@ fn create_settings_window(app: &AppHandle) {
         .build()
     {
         Ok(win) => {
+            set_settings_webview_low(&win, true);
             // Closing it must only hide it, or it could never be reopened.
             let hidden = win.clone();
             win.on_window_event(move |event| {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     let _ = hidden.hide();
+                    set_settings_webview_low(&hidden, true);
                 }
             });
         }
@@ -793,6 +959,7 @@ fn show_settings_section(app: &AppHandle, section: &str) {
         return;
     };
     *app.state::<Shared>().settings_section.lock().unwrap() = section.to_string();
+    set_settings_webview_low(&win, false);
     let _ = win.unminimize();
     let _ = win.show();
     let _ = win.set_focus();
@@ -847,6 +1014,17 @@ pub fn run() {
             open_terminal,
             start_claude_terminal,
             resume_in_terminal,
+            sessions_list,
+            session_history,
+            session_active,
+            session_select,
+            session_delete,
+            session_new_in_folder,
+            claude_profiles,
+            sessions_all,
+            sessions_live,
+            session_launch,
+            session_erase,
             quit_app,
             hooks_status,
             hooks_preview,
@@ -875,12 +1053,6 @@ pub fn run() {
             refresh_integration,
             open_n8n,
             open_settings_window,
-            sessions_list,
-            session_history,
-            session_active,
-            session_select,
-            session_delete,
-            session_new_in_folder,
             take_settings_section,
             set_paused,
         ])

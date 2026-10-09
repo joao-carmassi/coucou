@@ -32,6 +32,7 @@ windows = { version = "0.61", features = [
   "Win32_Graphics_Dwm",
   "Win32_Graphics_Gdi",
   "Win32_System_Com",
+  "Win32_System_Console",
   "Win32_System_Com_StructuredStorage",
   "Win32_System_Ole",
   "Win32_System_SystemServices",
@@ -43,6 +44,10 @@ windows = { version = "0.61", features = [
 ] }
 # `#[implement]` (drop_target.rs) expands to paths in windows-core.
 windows-core = "0.61"
+# Same version wry resolves; ICoreWebView2_19 (memory target) for the hidden settings webview.
+webview2-com = "0.39"
+# webview2-com 0.39 is built on windows-core 0.62 (its Interface trait is needed for cast()).
+windows-core-062 = { package = "windows-core", version = "0.62" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Secret Service (GNOME Keyring, KWallet) over D-Bus, encrypted in transit.
