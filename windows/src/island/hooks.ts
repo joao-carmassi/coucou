@@ -189,6 +189,9 @@ function sessionOf(island: Island, payload: HookPayload): ClaudeSession {
   if (payload.session_title) session.title = payload.session_title;
   if (payload.cwd) {
     session.cwd = payload.cwd;
+    // The distro goes with the folder: a Windows session after a WSL one clears it.
+    session.wslDistro = payload.wsl_distro || null;
+    session.terminalPids = Array.isArray(payload.terminal_pids) ? payload.terminal_pids : [];
     session.project = aliasProjectName(lastPathComponent(payload.cwd) || SESSION_UNNAMED);
   }
   session.heardAt = Date.now();
