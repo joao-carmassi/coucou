@@ -260,8 +260,8 @@ fn open_settings_window(app: AppHandle) {
 
 pub fn run() {
     platform::prepare_environment();
-    let mut loaded = settings::load();
-    if settings::migrate_modules(&mut loaded) {
+    let (mut loaded, ok) = settings::load();
+    if settings::migrate_modules(&mut loaded) && ok {
         let _ = settings::save(&loaded);
     }
     let gate = Arc::new(PollGate::new());

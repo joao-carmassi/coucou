@@ -59,17 +59,23 @@ fn settings_path() -> PathBuf {
     config_dir().join("settings.json")
 }
 
-pub fn load() -> Settings {
+/// The bool is false when the file exists but could not be read or parsed: the caller must not save over it.
+pub fn load() -> (Settings, bool) {
     match std::fs::read(settings_path()) {
-        Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_else(|_| {
-            // Keep the unreadable file for the user; the original is not touched here.
-            let ts = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| d.as_secs());
-            let _ = std::fs::copy(settings_path(), config_dir().join(format!("settings.json.corrupt-{ts}")));
-            Settings::default()
-        }),
-        Err(_) => Settings::default(),
+        Ok(bytes) => match serde_json::from_slice(&bytes) {
+            Ok(s) => (s, true),
+            Err(_) => {
+                // Keep the unreadable file for the user; the original is not touched here.
+                let ts = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |d| d.as_secs());
+                if let Err(e) = std::fs::copy(settings_path(), config_dir().join(format!("settings.json.corrupt-{ts}"))) {
+                    crate::core::log::line(format!("[settings] corrupt backup failed: {e}"));
+                }
+                (Settings::default(), false)
+            }
+        },
+        Err(e) => (Settings::default(), e.kind() == std::io::ErrorKind::NotFound),
     }
 }
 
@@ -114,6 +120,21 @@ mod tests {
         for (k, v) in want.as_object().unwrap() {
             assert_eq!(back.get(k), Some(v), "key {k}");
         }
+    }
+
+    #[test]
+    fn load_invalid_json_flags_and_keeps_file() {
+        let dir = std::env::temp_dir().join(format!("coucou-settings-test-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Coucou")).unwrap();
+        std::env::set_var("APPDATA", &dir);
+        let file = dir.join("Coucou").join("settings.json");
+        std::fs::write(&file, "{ not json").unwrap();
+        let (_, ok) = load();
+        assert!(!ok);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "{ not json");
+        std::fs::remove_file(&file).unwrap();
+        assert!(load().1, "missing file is a normal first run");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

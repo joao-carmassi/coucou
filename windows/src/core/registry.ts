@@ -13,26 +13,35 @@ import { MODULES } from "../modules/index";
 
 /** Disposers, run in reverse; one failing never blocks the rest. */
 export class Scope {
-  private items: Disposer[] = [];
+  private items = new Set<Disposer>();
   add(d: Disposer): Disposer {
-    this.items.push(d);
+    this.items.add(d);
     return d;
   }
+  remove(d: Disposer) {
+    this.items.delete(d);
+  }
   dispose() {
-    for (const d of this.items.reverse()) {
+    for (const d of [...this.items].reverse()) {
       try { d(); } catch (err) { console.error("[coucou] dispose failed", err); }
     }
-    this.items = [];
+    this.items.clear();
   }
 }
 
 function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
   const timeout = (fn: () => void, ms: number): Disposer => {
-    const t = window.setTimeout(fn, ms);
-    return scope.add(() => window.clearTimeout(t));
+    const d: Disposer = () => window.clearTimeout(t);
+    const t = window.setTimeout(() => { scope.remove(d); fn(); }, ms);
+    return scope.add(d);
   };
-  /** The resolvers check ttl at draw time: redraw once it has passed. */
-  const expire = (ttlMs?: number) => { if (ttlMs != null) timeout(() => host.redraw(), ttlMs + 20); };
+  /** The resolvers check ttl at draw time: redraw once it has passed. One timer per kind. */
+  const expiry: Record<"status" | "avatar", Disposer | null> = { status: null, avatar: null };
+  const expire = (kind: "status" | "avatar", ttlMs?: number) => {
+    expiry[kind]?.();
+    if (expiry[kind]) scope.remove(expiry[kind]!);
+    expiry[kind] = ttlMs != null ? timeout(() => { expiry[kind] = null; host.redraw(); }, ttlMs + 20) : null;
+  };
 
   return {
     id,
@@ -56,13 +65,13 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
     status: {
       set(line: StatusLine | null) {
         if (Compact.set(id, line)) host.redraw();
-        expire(line?.ttlMs);
+        expire("status", line?.ttlMs);
       },
     },
     avatar: {
       publish(sig: AvatarSignal | null) {
         if (Avatar.publish(id, sig)) host.redraw();
-        expire(sig?.ttlMs);
+        expire("avatar", sig?.ttlMs);
       },
       emote: (e) => host.avatarEmote(e),
       morph: (v) => host.avatarMorph(v),

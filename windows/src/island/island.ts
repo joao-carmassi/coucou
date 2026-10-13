@@ -312,10 +312,10 @@ export class Island implements IslandHost {
     this.expand(view);
     if (!pinMs) return;
     this.clearPinTimer();
-    State.isPinned = this.fsm.pinned = true;
+    this.fsm.pinned = true;
     this.pinTimer = window.setTimeout(() => {
       this.pinTimer = null;
-      State.isPinned = this.fsm.pinned = false;
+      this.fsm.pinned = State.isPinned;
       if (this.fsm.state === "home" && !this.wasInIsland) this.fsm.mouseLeft();
       State.notify();
     }, pinMs);
@@ -979,8 +979,8 @@ export class Island implements IslandHost {
   }
 
   addView(def: ViewDef, ctx: ViewContext): Disposer {
-    const offLayout = registerLayout(def.name, def.layout);
     const host = def.build(ctx);
+    const offLayout = registerLayout(def.name, def.layout);
     this.views.set(def.name, host);
     this.viewDefs.set(def.name, def);
     this.viewsEl.append(host.el);

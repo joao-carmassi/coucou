@@ -170,6 +170,7 @@ impl ModuleHost {
             (false, Some(ctx)) => {
                 log::line(format!("[module] stop {id}"));
                 running.remove(m.id());
+                drop(running); // stop/unlisten/end may block or call back into the host
                 ctx.stop.store(true, Ordering::SeqCst);
                 m.stop(&ctx);
                 for l in std::mem::take(&mut *ctx.listeners.lock().unwrap()) {

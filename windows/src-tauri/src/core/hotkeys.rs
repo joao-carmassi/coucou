@@ -14,6 +14,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GetMessageW, PeekMessageW, PostThreadMessageW, MSG, PM_NOREMOVE, WM_HOTKEY, WM_QUIT, WM_USER,
 };
 
+/// Handlers run on the main thread (never the hotkey thread), so they may call `set`/`clear`.
 pub type Handler = fn(&AppHandle);
 
 #[derive(Clone)]
@@ -142,7 +143,8 @@ fn hotkey_loop(app: AppHandle, entries: Vec<Entry>) {
         while GetMessageW(&mut msg, None, 0, 0).0 > 0 {
             if msg.message == WM_HOTKEY {
                 if let Some(e) = entries.get((msg.wParam.0 as usize).wrapping_sub(1)) {
-                    (e.on)(&app);
+                    let (app, on) = (app.clone(), e.on);
+                    let _ = app.clone().run_on_main_thread(move || on(&app));
                 }
             }
         }
