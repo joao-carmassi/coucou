@@ -39,7 +39,10 @@ pub struct BootInfo {
 
 #[tauri::command]
 fn boot(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>) -> BootInfo {
-    let settings = shared.settings.lock().unwrap().clone();
+    let mut settings = shared.settings.lock().unwrap().clone();
+    if host.is_enabled("claude") {
+        modules::claude::cfg::refresh_hooks_installed(&mut settings);
+    }
     let screen = island::screen_info(&app, &settings.screen);
     BootInfo {
         settings,
@@ -58,6 +61,7 @@ fn save_settings(app: AppHandle, shared: State<Shared>, mut settings: Settings) 
         if settings.modules_enabled.is_empty() {
             settings.modules_enabled = current.modules_enabled.clone();
         }
+        modules::claude::cfg::keep_rust_owned(&current, &mut settings);
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
         *current = settings.clone();
@@ -233,7 +237,7 @@ pub fn show_settings_window(app: &AppHandle) {
 
 /// Shows the settings window and tells it which section to scroll to ("" for
 /// none). The window also refreshes what is slow to compute (WSL) on this cue.
-fn show_settings_section(app: &AppHandle, section: &str) {
+pub(crate) fn show_settings_section(app: &AppHandle, section: &str) {
     let Some(win) = app.get_webview_window("settings") else {
         log::line("settings window missing");
         return;
@@ -271,6 +275,7 @@ pub fn run() {
             let _ = app.emit_to(island::WINDOW_LABEL, "tray", "open".to_string());
         }))
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
+        .manage(modules::claude::pipe::Pending::default())
         .manage(ModuleHost::new(modules::CATALOG, modules::registry()))
         .manage(Shared {
             settings: Mutex::new(loaded.clone()),
@@ -290,6 +295,28 @@ pub fn run() {
             open_settings_window,
             take_settings_section,
             set_paused,
+            modules::claude::commands::open_claude_app,
+            modules::claude::commands::open_in_vscode,
+            modules::claude::commands::open_terminal,
+            modules::claude::commands::start_claude_terminal,
+            modules::claude::commands::resume_in_terminal,
+            modules::claude::commands::claude_profiles,
+            modules::claude::commands::sessions_all,
+            modules::claude::commands::sessions_live,
+            modules::claude::commands::session_launch,
+            modules::claude::commands::session_erase,
+            modules::claude::commands::hooks_status,
+            modules::claude::commands::hooks_preview,
+            modules::claude::commands::hooks_apply,
+            modules::claude::commands::wsl_distros,
+            modules::claude::commands::wsl_status,
+            modules::claude::commands::wsl_hooks_preview,
+            modules::claude::commands::wsl_hooks_apply,
+            modules::claude::commands::approval_decision,
+            modules::claude::commands::approval_ack,
+            modules::claude::commands::approval_decline,
+            modules::claude::commands::approval_answer,
+            modules::claude::commands::ingest_file,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();

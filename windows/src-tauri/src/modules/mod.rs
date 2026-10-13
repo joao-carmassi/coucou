@@ -1,5 +1,7 @@
 // Feature modules. The host (core/host.rs) starts and stops them from settings.
 
+pub mod claude;
+
 use crate::core::host::{Module, ModuleInfo};
 
 pub const CATALOG: &[ModuleInfo] = &[
@@ -12,5 +14,20 @@ pub const CATALOG: &[ModuleInfo] = &[
 ];
 
 pub fn registry() -> Vec<Box<dyn Module>> {
-    vec![] // M5 adds one entry per ported module
+    vec![Box::new(claude::Claude)] // M5 adds one entry per ported module
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::core::host::Module;
+
+    // Calling registry() would link all of tauri into the test exe, which cannot start without a
+    // manifest (see core/host.rs tests): check the id statically and the entry in the source.
+    #[test]
+    fn claude_is_registered() {
+        assert_eq!(super::claude::Claude.id(), "claude");
+        assert!(super::CATALOG.iter().any(|m| m.id == "claude"));
+        let src = include_str!("mod.rs");
+        assert!(src.contains("vec![Box::new(claude::Claude)"), "registry() lost the claude entry");
+    }
 }
