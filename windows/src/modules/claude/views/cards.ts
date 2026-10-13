@@ -114,6 +114,35 @@ export function btn(
   );
 }
 
+/** The two buttons of a card that tells a module's news instead of a session's result. */
+function newsActions(c: Claude): HTMLElement {
+  return h("div", { class: "actions" },
+    btn("Abrir", "primary", () => void c.api.call("followNews")),
+    // OK only folds the island: the news stays on the pill until it is opened or gets old.
+    btn("OK", "secondary", () => c.api.island.close()),
+  );
+}
+
+/**
+ * What a pill's news (hook `taskNews`) puts on a result card: who and what kind of news, the news
+ * itself, the facts that go with it. Returns false, and leaves the card to its session, when the
+ * front pill has none; `hidden` are the parts of the session's version.
+ */
+function tellNews(
+  c: Claude, task: AgentTask | null, who: HTMLElement, title: HTMLElement, facts: HTMLElement,
+  hidden: HTMLElement[], newsRow: HTMLElement,
+): boolean {
+  const news = task ? c.api.call("taskNews", task.id) : undefined;
+  for (const el of hidden) el.style.display = news ? "none" : "";
+  newsRow.style.display = news ? "" : "none";
+  facts.style.display = news ? "" : "none";
+  if (!news) return false;
+  who.replaceChildren(agentWho(task, news.says));
+  title.textContent = news.title;
+  facts.replaceChildren(...news.facts);
+  return true;
+}
+
 /** AgentWho — coloured dot + task name + grey label. */
 function agentWho(task: AgentTask | null, label: string): HTMLElement {
   const row = h("div", { class: "who-row" });
@@ -317,8 +346,10 @@ function buildOverview(c: Claude, ctx: ViewContext): ViewHost {
         }
         syncNow(session);
       } else if (task) {
+        // A card a module drew for its own pill (integrations); it says when it must be redrawn.
+        const own = c.api.call("taskCard", task.id);
         const key = [
-          task.id, task.state, store.agentSteps.get(task.id)?.join("|"),
+          task.id, task.state, store.agentSteps.get(task.id)?.join("|"), own?.key,
           // The idle Claude card's button follows Settings ("Idle button opens").
           store.clientName, claudeSettings().hooksInstalled, claudeSettings().idleOpen, store.session.client,
         ].join("~");
@@ -326,7 +357,7 @@ function buildOverview(c: Claude, ctx: ViewContext): ViewHost {
           cardKey = key;
           mode = "card";
           clear(leftBody);
-          leftBody.append(task.id === CLAUDE_ID ? idleCard(c, task) : otherCard(c, task));
+          leftBody.append(own ? own.build() : task.id === CLAUDE_ID ? idleCard(c, task) : otherCard(c, task));
         }
       }
 
@@ -769,7 +800,9 @@ function buildError(c: Claude, ctx: ViewContext): ViewHost {
   const openBtn = h("button", { class: "btn primary", onclick: () => c.openClient() }, openLabel);
   // Nothing here can run it again: OK folds the island, as on the finished card.
   const row = h("div", { class: "actions" }, openBtn, btn("OK", "secondary", () => c.api.island.close()));
-  const lines = stack(116, 16, who, title, detail, row);
+  const facts = h("div", { class: "nfs news-facts" });
+  const newsRow = newsActions(c);
+  const lines = stack(116, 16, who, title, detail, facts, row, newsRow);
   const el = h("div", { class: "view" }, card("red", lines));
   const air = airy(lines, onResize);
   return {
@@ -780,6 +813,11 @@ function buildError(c: Claude, ctx: ViewContext): ViewHost {
     sync() {
       const task = State.focusTask;
       const claude = task?.id === CLAUDE_ID;
+      // A module's pill with news to tell (integrations) puts it here in place of a session's result.
+      if (tellNews(c, task, who, title, facts, [row, detail], newsRow)) {
+        air.fit();
+        return;
+      }
       // A Claude Code session is named by its conversation; a third-party agent's pill by its own name.
       who.replaceChildren(claude ? sessionWho(c, "Claude Code") : agentWho(task, "parou"));
       title.textContent = "Sessão parou com um erro.";
@@ -810,7 +848,9 @@ function buildFinished(c: Claude, ctx: ViewContext): ViewHost {
     changesBtn,
     btn("OK", "secondary", () => c.api.island.close()),
   );
-  const lines = stack(116, 16, who, title, row);
+  const facts = h("div", { class: "nfs news-facts" });
+  const newsRow = newsActions(c);
+  const lines = stack(116, 16, who, title, facts, row, newsRow);
   const el = h("div", { class: "view" }, card("green", lines));
   const air = airy(lines, onResize);
   return {
@@ -820,6 +860,11 @@ function buildFinished(c: Claude, ctx: ViewContext): ViewHost {
     },
     sync() {
       const task = State.focusTask;
+      if (tellNews(c, task, who, title, facts, [row], newsRow)) {
+        title.classList.remove("said");
+        air.fit();
+        return;
+      }
       // A third-party agent's pill has no session behind it: its name, its last step, and OK.
       const claude = task?.id === CLAUDE_ID;
       who.replaceChildren(claude ? sessionWho(c, "terminou") : agentWho(task, "terminou"));

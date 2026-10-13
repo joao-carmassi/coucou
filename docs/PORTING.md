@@ -1,15 +1,18 @@
 # Porting status (branch refactor/modules)
 
-The core is the island + the Mochi avatar. Everything else was removed from the tree and
-lives in git tag `m3-ok` (read it with `git show m3-ok:<path>`). A module is "ported" when it
-runs on the module API (docs/MODULES-CONTRACT.md) and its folder exists under
-`windows/src/modules/<id>/` and `windows/src-tauri/src/modules/<id>/`.
+The core is the island + the Mochi avatar. Everything else is a module on the module API
+(docs/MODULES-CONTRACT.md). The pre-refactor code lives in git tag `m3-ok`
+(`git show m3-ok:<path>`).
 
-| Module | Status | Notes / old code to port (at m3-ok) |
-|---|---|---|
-| claude | ported (M5, unreviewed: Gate D pending) | Backend `modules/claude/*.rs`, frontend `src/modules/claude/**`. NOT ported yet: integration news on finished/error cards, GitHub panel entry points, integration cards in the overview (they belong to `integrations`) |
-| timer | ported (M5, unreviewed: Gate D pending) | `src/modules/timer/**`, default OFF |
-| media | not ported | rust: modules/media/{media,capture}.rs + `attach_window`; ts: modules/media/view.ts + media.css |
-| upload | ported (M5) | ts: modules/upload/{canvas,sequence,view}.ts + upload.css; island.ts drag/drop flow (provides on `file-drag`; uses claude's `launchFile` hook) |
-| voice | not ported | rust: modules/voice/voice.rs; ts: modules/voice/view.ts |
-| integrations | rust ported (m5-int-rs; TS pending) | rust: modules/integrations/*.rs; ts: modules/integrations/** (github, vercel, stripe, n8n, resend, calcom, notion). Must provide the `openTarget`/`followNews` hooks and its own views; must not register a view named `overview` |
+| Module | Default | Status | Notes |
+|---|---|---|---|
+| claude | ON | ported (M5) | backend `src-tauri/src/modules/claude`, frontend `src/modules/claude`. Integration news on its finished/error cards comes through the `taskNews` hook |
+| media | ON | ported (M5) | Mochi drag-out ghost lives in the module (core hooks: `mochiDrop`, `Overlay.cursor(down)`). `attach_window` imports claude's `save_capture` (debt) |
+| upload | ON (requires claude) | ported (M5) | the drop animation starts AFTER the island opens (fixes the "0 %" bug) |
+| timer | OFF | ported (M5) | |
+| voice | OFF (requires claude) | ported (M5) | English only (Whistle/needle.exe); alert hotkey belongs to claude |
+| integrations | OFF | ported (M5) | one scheduler, no task when no provider is active; GitHub panel + pills; hooks `taskCard`/`taskNews`/`avatar.tint` |
+
+Known gaps: pill badge on mini bots (`pillBadge`), idle "Nova sessão" card, keyframes `gh-swap`,
+`gh-dim`, `gh-undim`, `gh-grow`, `gh-rise`, `gh-ghost`, `gh-live`, `gh-dot-in`, `gh-breathe`.
+Everything above is unverified at runtime until it has been run in the real app.

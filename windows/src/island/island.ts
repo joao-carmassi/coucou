@@ -77,6 +77,8 @@ export class Island implements IslandHost {
 
   /** The colour Mochi body is drawn in, eased towards what it should be. */
   private bodyRGB: RGB | null = null;
+  /** A body colour a view asked for (the GitHub graph's day under the mouse); wins over the pill's. His body only. */
+  private tintRequest: RGB | null = null;
 
   private running = false;
   private lastFrame = 0;
@@ -238,6 +240,7 @@ export class Island implements IslandHost {
     const prev = State.mode;
     if (mode === prev) return;
     State.mode = mode;
+    this.tintRequest = null;
     // Any change of mode sends a nudged island home.
     this.nudge = null;
     this.clearNudgeTimer();
@@ -280,6 +283,7 @@ export class Island implements IslandHost {
 
   setView(view: IslandViewName) {
     view = this.guard(view);
+    this.tintRequest = null;
     if (view !== State.view) for (const o of this.overlays) o.leaving?.(view);
     if (State.mode !== "expanded") {
       this.fsm.forceHome();
@@ -359,7 +363,8 @@ export class Island implements IslandHost {
     if (this.botPress) {
       this.botPress = null;
       this.cancelBotHover();
-      this.engine.slap();
+      // A Mochi with news to tell takes you to it (a module's followNews); any other gets his slap.
+      if (!Hooks.some("followNews")) this.engine.slap();
     } else if (this.nudge) {
       const moved = this.nudge.moved;
       this.nudge = null;
@@ -828,6 +833,7 @@ export class Island implements IslandHost {
 
   /** The colour Mochi should be: his focused pill colour, else his own cream. */
   private targetBodyColor(): RGB | null {
+    if (this.tintRequest) return this.tintRequest;
     const focus = State.focusTask;
     return focus ? hexToRGB(focus.color) : null;
   }
@@ -1025,6 +1031,11 @@ export class Island implements IslandHost {
 
   avatarMorph(v: number) {
     this.engine.animateMorph(v);
+    this.ensureRunning();
+  }
+
+  avatarTint(color: string | null) {
+    this.tintRequest = color ? hexToRGB(color) : null;
     this.ensureRunning();
   }
 

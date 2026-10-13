@@ -3,6 +3,7 @@
 
 import "./settings.css";
 import "../modules/claude/settings.css";
+import "../modules/integrations/settings.css";
 import { Bridge, onEvent } from "../core/bridge";
 import { resolveEnabled } from "../core/moduleApi";
 import { MODULE_INFO } from "../modules/catalog";
