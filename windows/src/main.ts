@@ -4,6 +4,7 @@ import "./style";
 import { Bridge, IS_TAURI, onEvent } from "./core/bridge";
 import { Sound } from "./core/sound";
 import { State, type Settings } from "./core/state";
+import { Registry } from "./core/registry";
 import { Island } from "./island/island";
 
 async function main() {
@@ -17,6 +18,9 @@ async function main() {
     State.settings = { ...State.settings, ...boot.settings };
   }
   island.applySettings();
+  Registry.init(island);
+  Registry.apply(boot?.modules ?? Registry.defaults(State.settings.modulesEnabled));
+  await onEvent<Record<string, boolean>>("modules-changed", Registry.apply);
   if (boot && !boot.cursorPoll) island.followPageCursor();
 
   await onEvent<{ x: number; y: number; down: boolean }>("cursor", ({ x, y, down }) =>
@@ -33,11 +37,11 @@ async function main() {
     switch (what) {
       case "settings":
         setPaused(false);
-        island.alert("settings");
+        island.open("settings");
         break;
       case "open":
         setPaused(false);
-        island.alert(State.defaultView());
+        island.open(State.defaultView());
         break;
       case "pause":
         setPaused(!State.paused);

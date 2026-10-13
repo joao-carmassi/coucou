@@ -9,7 +9,7 @@ import type { Settings } from "./state";
 export const IS_TAURI =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
+export async function command<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   if (!IS_TAURI) return null;
   try {
     return await invoke<T>(cmd, args);
@@ -26,42 +26,44 @@ export interface BootInfo {
   version: string;
   /** False where the OS has no global cursor (Wayland): see Island.followPageCursor. */
   cursorPoll: boolean;
+  /** Which modules are on (resolved by Rust). */
+  modules: Record<string, boolean>;
 }
 
 export const Bridge = {
-  boot: () => call<BootInfo>("boot"),
+  boot: () => command<BootInfo>("boot"),
 
-  saveSettings: (settings: Settings) => call<void>("save_settings", { settings }),
+  saveSettings: (settings: Settings) => command<void>("save_settings", { settings }),
 
   /** Shrink the window down to the invisible wake strip (hidden) or back to full. */
-  setCollapsed: (collapsed: boolean) => call<void>("set_collapsed", { collapsed }),
+  setCollapsed: (collapsed: boolean) => command<void>("set_collapsed", { collapsed }),
 
   /**
    * Pushes the island shape in window coordinates. Rust flips click-through from
    * its own cursor poll, so the flag is never a frame behind a click.
    */
   setIslandRect: (x: number, y: number, width: number, height: number) =>
-    call<void>("set_island_rect", { x, y, width, height }),
+    command<void>("set_island_rect", { x, y, width, height }),
 
   /** Give the window keyboard focus and take it away again. */
-  focusWindow: (focused: boolean) => call<void>("focus_window", { focused }),
+  focusWindow: (focused: boolean) => command<void>("focus_window", { focused }),
 
-  reposition: () => call<void>("reposition"),
+  reposition: () => command<void>("reposition"),
 
-  openUrl: (url: string) => call<void>("open_url", { url }),
+  openUrl: (url: string) => command<void>("open_url", { url }),
 
-  quit: () => call<void>("quit_app"),
+  quit: () => command<void>("quit_app"),
 
-  openSettingsWindow: () => call<void>("open_settings_window"),
+  openSettingsWindow: () => command<void>("open_settings_window"),
 
   /** The section the settings window was opened for, once ("" for none). */
-  takeSettingsSection: () => call<string>("take_settings_section"),
+  takeSettingsSection: () => command<string>("take_settings_section"),
 
   /** Writes to %LOCALAPPDATA%\Coucou\coucou.log, next to the Rust lines. */
-  log: (message: string) => call<void>("log_line", { message }),
+  log: (message: string) => command<void>("log_line", { message }),
 
   /** Tray → Pause. */
-  setPaused: (paused: boolean) => call<void>("set_paused", { paused }),
+  setPaused: (paused: boolean) => command<void>("set_paused", { paused }),
 };
 
 export type BridgeEvent =

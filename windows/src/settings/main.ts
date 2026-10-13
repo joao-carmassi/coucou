@@ -3,6 +3,8 @@
 
 import "./settings.css";
 import { Bridge, onEvent } from "../core/bridge";
+import { resolveEnabled } from "../core/moduleApi";
+import { MODULE_INFO } from "../modules/catalog";
 import { DEFAULT_SETTINGS, type Settings } from "../core/state";
 import { h, clear } from "../views/dom";
 
@@ -111,6 +113,32 @@ function generalSection(): HTMLElement {
   );
 }
 
+// ── Modules section ───────────────────────────────────────────────────────────
+
+const modulesBox = h("div", {});
+
+/** `effective` comes from Rust (modules-changed); until then it is computed from the stored switches. */
+function renderModules(effective: Record<string, boolean> = resolveEnabled(MODULE_INFO, settings.modulesEnabled)) {
+  const rows = MODULE_INFO.map((m) => {
+    const missing = (m.requires ?? []).find((r) => effective[r] !== true);
+    const sw = toggle(effective[m.id] === true, (v) => {
+      settings.modulesEnabled = { ...settings.modulesEnabled, [m.id]: v };
+      void save();
+      renderModules();
+    });
+    if (missing) {
+      sw.setAttribute("disabled", "");
+    }
+    const need = missing ? MODULE_INFO.find((x) => x.id === missing)?.label ?? missing : "";
+    return h("div", { class: "row" },
+      h("label", { text: m.label }),
+      sw,
+      missing ? h("span", { class: "hint", text: `Requer ${need}` }) : "",
+    );
+  });
+  modulesBox.replaceChildren(h("section", { id: "modules" }, h("h2", {}, h("span", { text: "Módulos" })), ...rows));
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -124,11 +152,15 @@ async function main() {
   root.append(
     h("h1", {}, h("span", { text: "Coucou" }), h("span", { class: "version", text: version })),
     generalSection(),
+    modulesBox,
     h("div", {
       class: "hint",
       text: "Sem telemetria. As requisições de rede só vão para os serviços que você mesmo configurar.",
     }),
   );
+
+  renderModules(boot?.modules);
+  void onEvent<Record<string, boolean>>("modules-changed", (m) => renderModules(m));
 
   void onEvent<Settings>("settings-changed", (s) => {
     settings = { ...settings, ...s };

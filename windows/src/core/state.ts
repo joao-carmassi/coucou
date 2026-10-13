@@ -22,6 +22,8 @@ export interface Settings {
   absenceInterval: number;
   screen: "primary" | "cursor";
   autostart: boolean;
+  /** Per-module switches; a missing key means the module default. */
+  modulesEnabled: Record<string, boolean>;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -32,6 +34,7 @@ export const DEFAULT_SETTINGS: Settings = {
   absenceInterval: 180,
   screen: "primary",
   autostart: false,
+  modulesEnabled: {},
 };
 
 type Listener = () => void;
@@ -39,6 +42,9 @@ type Listener = () => void;
 class AppState {
   mode: IslandMode = "hidden";
   view: IslandViewName = "empty";
+
+  /** Effective on/off of every module (Registry.apply). */
+  modules: Record<string, boolean> = {};
 
   /** Mini Mochis shown in the compact grid; empty until a module adds some. */
   tasks: AgentTask[] = [];
