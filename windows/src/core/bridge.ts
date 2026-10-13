@@ -99,6 +99,12 @@ export const Bridge = {
     commandOrThrow<void>("resume_in_terminal", { id, cwd }),
   /** Copies a file into the inbox (the only place a session may attach from). */
   ingestClaudeFile: (path: string) => commandOrThrow<ClaudeInboxFile>("ingest_file", { path }),
+
+  // ── Voice module (voice) ──────────────────────────────────────────────────
+  voiceStart: () => commandOrThrow<void>("voice_start"),
+  voiceStop: () => command<void>("voice_stop"),
+  voiceModelStatus: () => command<VoiceStatus>("voice_model_status"),
+  voiceDownloadModel: () => commandOrThrow<void>("voice_download_model"),
 };
 
 // ── Media module ─────────────────────────────────────────────────────────────
@@ -202,3 +208,5 @@ export interface HookPreview {
   /** Hand back to hooksApply so only the reviewed diff is ever written. */
   fingerprint: string;
 }
+
+export interface VoiceStatus { ready: boolean; listening: boolean; hotkeyError: string }

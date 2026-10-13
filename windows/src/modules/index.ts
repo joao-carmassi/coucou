@@ -5,5 +5,6 @@ import { claude } from "./claude";
 import { media } from "./media";
 import { uploadModule } from "./upload";
 import { timerModule } from "./timer";
+import { voiceModule } from "./voice";
 
-export const MODULES: ModuleDef[] = [claude, media, uploadModule, timerModule];
+export const MODULES: ModuleDef[] = [claude, media, uploadModule, timerModule, voiceModule];
