@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node --test tests/resolvers.test.ts tests/timer.test.ts",
+    "test": "node --test tests/resolvers.test.ts tests/timer.test.ts tests/upload.test.ts",
     "icons": "node scripts/gen-icons.mjs",
     "tauri": "tauri",
     "predev": "cargo build --release -p coucou-hook",
