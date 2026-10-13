@@ -16,8 +16,8 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
-use crate::hooks::{self, HookPreview, Target};
-use crate::settings;
+use crate::modules::claude::hooks::{self, HookPreview, Target};
+use crate::core::settings;
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -27,7 +27,7 @@ const WSL_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// The relay script, as published in hook/. Only its `EXE=` line is rewritten,
 /// to the WSL path of this machine's coucou-hook.exe.
-const RELAY_TEMPLATE: &str = include_str!("../../hook/coucou-hook-wsl.sh");
+const RELAY_TEMPLATE: &str = include_str!("../../../../hook/coucou-hook-wsl.sh");
 
 /// Where the relay lives inside the distro, relative to $HOME.
 const RELAY_REL: &str = ".claude/hooks/coucou-hook-wsl.sh";
@@ -211,7 +211,7 @@ pub fn status(name: &str) -> WslStatus {
             settings_path: d.settings_linux(),
             relay_path: d.relay_linux(),
             relay_ready: d.relay_ready(),
-            claude_cli: crate::local_claude::wsl_cli(&d.name),
+            claude_cli: crate::modules::claude::local_claude::wsl_cli(&d.name),
             distro: d.name,
             error: None,
         },

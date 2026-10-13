@@ -4,7 +4,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter};
 
-use crate::island::WINDOW_LABEL;
+use crate::core::island::WINDOW_LABEL;
 
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Abrir Coucou", true, None::<&str>)?;

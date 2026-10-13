@@ -23,10 +23,10 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
-use crate::github_detail::Target;
-use crate::integrations::{emit, IntegrationEvent, IntegrationUpdate};
-use crate::log;
-use crate::secrets;
+use crate::modules::integrations::github_detail::Target;
+use crate::modules::integrations::integrations::{emit, IntegrationEvent, IntegrationUpdate};
+use crate::core::log;
+use crate::modules::integrations::secrets;
 
 const ID: &str = "integration_github";
 
@@ -565,7 +565,7 @@ pub fn watch_live(app: AppHandle) {
                 .snapshot
                 .as_ref()
                 .is_some_and(|s| s.repos.iter().any(|r| r.build.as_ref().is_some_and(|b| b.state == "running")));
-            if !going || crate::integrations::PAUSED.load(Ordering::Relaxed) || !crate::integrations::enabled(&app, ID) {
+            if !going || crate::modules::integrations::integrations::PAUSED.load(Ordering::Relaxed) || !crate::modules::integrations::integrations::enabled(&app, ID) {
                 continue;
             }
             refresh_builds(app.clone()).await;
@@ -719,7 +719,7 @@ fn came_in(seen: Option<&str>, opened: &[Opened], login: &str) -> Option<News> {
 }
 
 /// What the card says under a pull request somebody opened: where, by whom, how big.
-fn opened_facts(pull: &crate::github_detail::PullDetail) -> Vec<Value> {
+fn opened_facts(pull: &crate::modules::integrations::github_detail::PullDetail) -> Vec<Value> {
     let mut facts = vec![json!({ "kind": "repo", "text": short_name(&pull.repo) })];
     if let Some(who) = &pull.author {
         facts.push(json!({ "kind": "by", "verb": "opened by", "text": who }));
@@ -735,7 +735,7 @@ fn opened_facts(pull: &crate::github_detail::PullDetail) -> Vec<Value> {
 /// Each fact says what it is (`kind`), so the island can draw it as what it
 /// is — a name, a size in green and red, a branch — rather than as one grey
 /// sentence.
-fn merge_facts(pull: &crate::github_detail::PullDetail) -> Vec<Value> {
+fn merge_facts(pull: &crate::modules::integrations::github_detail::PullDetail) -> Vec<Value> {
     let mut facts = vec![json!({ "kind": "repo", "text": short_name(&pull.repo) })];
     if let Some(who) = &pull.merged_by {
         facts.push(json!({ "kind": "by", "verb": "merged by", "text": who }));
@@ -748,7 +748,7 @@ fn merge_facts(pull: &crate::github_detail::PullDetail) -> Vec<Value> {
 
 /// What the card says under a build that broke: the job and the step it broke
 /// at, the branch, the commit it ran for, who started it.
-fn failure_facts(run: &crate::github_detail::RunDetail) -> Vec<Value> {
+fn failure_facts(run: &crate::modules::integrations::github_detail::RunDetail) -> Vec<Value> {
     let mut facts = Vec::new();
     if let Some(job) = run.jobs.iter().find(|j| j.state == "failure") {
         let at = match job.steps.iter().find(|s| s.state == "failure") {
@@ -775,7 +775,7 @@ fn failure_facts(run: &crate::github_detail::RunDetail) -> Vec<Value> {
 /// sheets' cache for the click that opens it. If it can't be had, the news
 /// goes out as it is.
 async fn tell(event: &mut IntegrationEvent, target: Target) {
-    use crate::github_detail::{detail, Detail};
+    use crate::modules::integrations::github_detail::{detail, Detail};
     let Some(open) = event.open.as_mut() else { return };
     match detail(target, false).await {
         Ok(Detail::Run(run)) => {
@@ -805,7 +805,7 @@ pub fn forget() {
     *CACHE.lock().unwrap() = Cache::default();
     PROJECTS.clear();
     DAYS.clear();
-    crate::github_detail::forget();
+    crate::modules::integrations::github_detail::forget();
 }
 
 /// Everything the panel shows. The tick, the Refresh button, opening the panel

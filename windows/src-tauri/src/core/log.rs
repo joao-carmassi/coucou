@@ -2,7 +2,7 @@
 
 use std::io::Write;
 
-use crate::{platform, settings};
+use crate::core::{platform, settings};
 
 pub fn line(message: impl AsRef<str>) {
     let t = platform::local_time();

@@ -11,7 +11,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
-use crate::settings::Settings;
+use crate::core::settings::Settings;
 
 #[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -141,7 +141,7 @@ mod imp {
         d.as_ref().iter().map(|b| format!("{b:02x}")).collect()
     }
     fn dir() -> PathBuf {
-        crate::settings::local_dir().join("voice")
+        crate::core::settings::local_dir().join("voice")
     }
     /// The hash check reads ~24 MB: remember a pass (download() resets it).
     static VERIFIED: AtomicBool = AtomicBool::new(false);
@@ -256,7 +256,7 @@ mod imp {
     }
 
     pub fn start(app: &AppHandle) -> Result<(), String> {
-        if !crate::settings::load().voice_enabled {
+        if !crate::core::settings::load().voice_enabled {
             return Err("A entrada de voz está desligada nas Configurações.".into());
         }
         let d = dir();

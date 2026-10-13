@@ -66,7 +66,7 @@ pub fn existing_terminal(pids: &[u32]) -> bool {
     });
     let Some(hwnd) = hwnd else { return false };
     if !bring_forward(hwnd) {
-        crate::log::line("could not bring the terminal window forward".to_string());
+        crate::core::log::line("could not bring the terminal window forward".to_string());
     }
     true
 }

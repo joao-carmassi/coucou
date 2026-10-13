@@ -26,7 +26,7 @@ use windows::Win32::UI::Shell::{DragQueryFileW, HDROP};
 use windows::Win32::UI::Input::KeyboardAndMouse::EnableWindow;
 use windows::Win32::UI::WindowsAndMessaging::{EnumChildWindows, GetClassNameW, GetWindowThreadProcessId};
 
-use crate::island::WINDOW_LABEL;
+use crate::core::island::WINDOW_LABEL;
 
 #[implement(IDropTarget)]
 struct FileDropTarget {
@@ -108,7 +108,7 @@ impl IDropTarget_Impl for FileDropTarget_Impl {
         effect: *mut DROPEFFECT,
     ) -> windows::core::Result<()> {
         let paths = file_paths(data).unwrap_or_default();
-        crate::log::line(format!("file drop: {} file(s)", paths.len()));
+        crate::core::log::line(format!("file drop: {} file(s)", paths.len()));
         unsafe { *effect = if paths.is_empty() { DROPEFFECT_NONE } else { DROPEFFECT_COPY } };
         self.effect.set(DROPEFFECT_NONE);
         self.emit("drop", &paths);
@@ -155,7 +155,7 @@ pub fn install(app: &AppHandle, root: HWND) {
         unsafe {
             let _ = RevokeDragDrop(hwnd);
             if let Err(err) = RegisterDragDrop(hwnd, &target) {
-                crate::log::line(format!("drop target not registered on {hwnd:?}: {err}"));
+                crate::core::log::line(format!("drop target not registered on {hwnd:?}: {err}"));
             }
         }
     }
@@ -186,7 +186,7 @@ fn own_descendants(root: HWND) -> Vec<HWND> {
 /// of hit-testing so the drag lands on WRY_WEBVIEW and our target; restores it
 /// when the drag ends. Main thread only.
 pub fn shield_webview(app: &AppHandle, on: bool) {
-    let Some(root) = crate::platform::island_hwnd(app) else { return };
+    let Some(root) = crate::core::platform::island_hwnd(app) else { return };
     if on {
         install(app, root);
     }

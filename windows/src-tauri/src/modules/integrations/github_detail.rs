@@ -13,7 +13,7 @@ use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::github::{
+use crate::modules::integrations::github::{
     build_state, first_line, flag, int, is_timestamp, nodes, parse_run, permission, pull_state, review_decision,
     short_sha, split_full_name, text, unix_now, Build, Gh, GhError, Kept, SHORT_SHA, UNTITLED, WEB, WORKFLOW,
 };

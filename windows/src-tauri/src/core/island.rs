@@ -12,7 +12,7 @@ use std::time::Duration;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Monitor, PhysicalPosition, PhysicalSize, WebviewWindow};
 
-use crate::platform::{self, cursor_physical, left_button_down};
+use crate::core::platform::{self, cursor_physical, left_button_down};
 
 /// Logical size of the full window — the largest island view, like the macOS panel.
 pub const PANEL_W: f64 = 720.0;
@@ -221,7 +221,7 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
                         let first = last_screen.is_none();
                         last_screen = now;
                         if !first {
-                            crate::log::line("display layout changed — repositioning".to_string());
+                            crate::core::log::line("display layout changed — repositioning".to_string());
                             let _ = app.emit_to(WINDOW_LABEL, "screen-changed", ());
                         }
                     }

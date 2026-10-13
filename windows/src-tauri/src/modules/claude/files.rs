@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use serde::Serialize;
+use tauri::{AppHandle, Emitter};
 
-use crate::settings;
+use crate::core::settings;
 
 const KEEP_FOR: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
@@ -23,7 +24,15 @@ pub fn inbox_dir() -> PathBuf {
     settings::local_dir().join("inbox")
 }
 
-pub fn ingest(source: &str) -> Result<DroppedFile, String> {
+/// Tells the Mídia list about a file that came onto the island. It is an event
+/// because the list lives in media, which listens for it; no handle means no event.
+fn note_drop(app: Option<&AppHandle>, path: &str) {
+    if let Some(app) = app {
+        let _ = app.emit("media-note-drop", path);
+    }
+}
+
+pub fn ingest(app: Option<&AppHandle>, source: &str) -> Result<DroppedFile, String> {
     let src = Path::new(source);
     let meta = std::fs::metadata(src).map_err(|e| format!("não consegui ler {source}: {e}"))?;
     if meta.is_dir() {
@@ -31,7 +40,7 @@ pub fn ingest(source: &str) -> Result<DroppedFile, String> {
     }
 
     let dir = inbox_dir();
-    crate::platform::ensure_private_dir(&settings::local_dir()).map_err(|e| e.to_string())?;
+    crate::core::platform::ensure_private_dir(&settings::local_dir()).map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
     let name = src
@@ -67,7 +76,7 @@ pub fn ingest(source: &str) -> Result<DroppedFile, String> {
         let _ = file.set_modified(SystemTime::now());
     }
     sweep(&dir);
-    crate::media::note_drop(src);
+    note_drop(app, source);
 
     Ok(DroppedFile {
         name,
@@ -78,9 +87,9 @@ pub fn ingest(source: &str) -> Result<DroppedFile, String> {
 
 /// Writes a window capture (RGB, 8-bit) to the inbox as `{app}-{unix_secs}.png`,
 /// shrunk to 1568 px wide so a 4K window stays under the API's 5 MB image limit.
-pub fn save_capture(app: &str, w: u32, h: u32, rgb: &[u8]) -> Result<DroppedFile, String> {
+pub fn save_capture(handle: Option<&AppHandle>, app: &str, w: u32, h: u32, rgb: &[u8]) -> Result<DroppedFile, String> {
     let dir = inbox_dir();
-    crate::platform::ensure_private_dir(&settings::local_dir()).map_err(|e| e.to_string())?;
+    crate::core::platform::ensure_private_dir(&settings::local_dir()).map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
     let (w, h, rgb) = shrink(w, h, rgb, 1568);
@@ -95,7 +104,7 @@ pub fn save_capture(app: &str, w: u32, h: u32, rgb: &[u8]) -> Result<DroppedFile
         .and_then(|mut writer| writer.write_image_data(&rgb))
         .map_err(|e| format!("não consegui salvar a captura: {e}"))?;
     sweep(&dir);
-    crate::media::note_drop(&dest);
+    note_drop(handle, &dest.to_string_lossy());
 
     Ok(DroppedFile {
         name,
@@ -163,7 +172,7 @@ mod tests {
         // left block = pixels 0,1,4,5 -> (0+10+40+50)/4 = 25; right = 2,3,6,7 -> 45
         assert_eq!(out, vec![25, 25, 25, 45, 45, 45]);
 
-        let saved = save_capture("coucou-test", 2, 2, &[255; 12]).unwrap();
+        let saved = save_capture(None, "coucou-test", 2, 2, &[255; 12]).unwrap();
         let bytes = std::fs::read(&saved.path).unwrap();
         assert!(bytes.starts_with(b"\x89PNG"));
         let info = png::Decoder::new(bytes.as_slice()).read_info().unwrap();
@@ -178,19 +187,19 @@ mod tests {
         let source = tmp.join("note.txt");
         std::fs::write(&source, b"hello").unwrap();
 
-        let first = ingest(source.to_str().unwrap()).unwrap();
+        let first = ingest(None, source.to_str().unwrap()).unwrap();
         assert_eq!(first.name, "note.txt");
         assert_eq!(std::fs::read(&first.path).unwrap(), b"hello");
 
         // A second drop of the same name must not clobber the first copy.
         std::fs::write(&source, b"second").unwrap();
-        let second = ingest(source.to_str().unwrap()).unwrap();
+        let second = ingest(None, source.to_str().unwrap()).unwrap();
         assert_ne!(first.path, second.path);
         assert_eq!(std::fs::read(&first.path).unwrap(), b"hello");
         assert_eq!(std::fs::read(&second.path).unwrap(), b"second");
 
         // Folders are refused rather than silently ignored.
-        assert!(ingest(tmp.to_str().unwrap()).is_err());
+        assert!(ingest(None, tmp.to_str().unwrap()).is_err());
 
         // An ancient source must not arrive already older than the sweep window.
         let old_source = tmp.join("ancient.txt");
@@ -202,7 +211,7 @@ mod tests {
             .unwrap()
             .set_modified(long_ago)
             .unwrap();
-        let aged = ingest(old_source.to_str().unwrap()).unwrap();
+        let aged = ingest(None, old_source.to_str().unwrap()).unwrap();
         assert!(
             Path::new(&aged.path).exists(),
             "a file copied just now was swept as if it were a week old"

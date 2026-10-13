@@ -1,25 +1,7 @@
 // Coucou for Windows — app wiring and the commands the island calls.
 
-mod b64;
-mod drop_target;
-mod files;
-mod github;
-mod github_detail;
-mod focus;
-mod hooks;
-mod integrations;
-mod island;
-mod local_claude;
-mod log;
-mod media;
-mod pipe;
-mod platform;
-mod secrets;
-mod sessions;
-mod settings;
-mod tray;
-mod voice;
-mod wsl;
+mod core;
+mod modules;
 
 use std::os::windows::process::CommandExt;
 use std::process::Command;
@@ -29,6 +11,12 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::{ManagerExt, MacosLauncher};
+
+use crate::core::{island, log, platform, settings, tray};
+use crate::modules::claude::{files, focus, hooks, local_claude, pipe, sessions, wsl};
+use crate::modules::integrations::{github, github_detail, integrations, secrets};
+use crate::modules::media::media;
+use crate::modules::voice::voice;
 
 use files::DroppedFile;
 use hooks::{HookPreview, HookStatus};
@@ -502,14 +490,6 @@ fn remember_wsl_hooks(app: &AppHandle, distro: &str, installed: bool) {
     let _ = app.emit("settings-changed", updated);
 }
 
-/// Whether the Claude Code behind "Use for Mochi" (`"windows"` or `"wsl:<d>"`)
-/// is signed in. Asked only while the settings window is open.
-#[tauri::command]
-async fn claude_logged_in(target: String) -> Option<bool> {
-    let backend = local_claude::Backend::parse(&target);
-    blocking(move || local_claude::logged_in(&backend)).await.ok().flatten()
-}
-
 /// First launch after installing: if WSL has distros and none is hooked up yet,
 /// open the settings on the WSL section. Offered once; nothing is written until
 /// the user reviews the diff and clicks, as everywhere else.
@@ -561,7 +541,7 @@ fn approval_answer(app: AppHandle, request_id: String, answers: serde_json::Map<
     pipe::answer_question(&app, &request_id, &answers);
 }
 
-// ── Files and secrets ─────────────────────────────────────────────────────────
+// ── Sessions manager ─────────────────────────────────────────────────────────
 
 #[tauri::command]
 fn claude_profiles() -> Vec<sessions::Profile> {
@@ -655,10 +635,10 @@ async fn session_erase(profile: String, id: String) -> Result<(), String> {
 
 /// Copies a dropped file into the inbox and reports its name back.
 #[tauri::command]
-async fn ingest_file(path: String) -> Result<DroppedFile, String> {
+async fn ingest_file(handle: AppHandle, path: String) -> Result<DroppedFile, String> {
     // Off the main thread: a big copy must not freeze the webview.
     log::line("ingest start");
-    let r = blocking(move || files::ingest(&path)).await?;
+    let r = blocking(move || files::ingest(Some(&handle), &path)).await?;
     log::line(match &r {
         Ok(f) => format!("ingest done: {} ({} bytes)", f.name, f.size),
         Err(e) => format!("ingest failed: {e}"),
@@ -668,9 +648,9 @@ async fn ingest_file(path: String) -> Result<DroppedFile, String> {
 
 /// Screenshots the window under the cursor into the inbox (Mochi dragged onto it).
 #[tauri::command]
-async fn attach_window() -> Result<DroppedFile, String> {
-    let (app, w, h, rgb) = platform::capture_under_cursor()?;
-    let file = files::save_capture(&app, w, h, &rgb)?;
+async fn attach_window(handle: AppHandle) -> Result<DroppedFile, String> {
+    let (app, w, h, rgb) = crate::modules::media::capture::capture_under_cursor()?;
+    let file = files::save_capture(Some(&handle), &app, w, h, &rgb)?;
     log::line(format!("window attached: {app} {w}x{h}"));
     Ok(file)
 }
@@ -946,7 +926,6 @@ pub fn run() {
             wsl_status,
             wsl_hooks_preview,
             wsl_hooks_apply,
-            claude_logged_in,
             approval_decision,
             approval_ack,
             approval_decline,

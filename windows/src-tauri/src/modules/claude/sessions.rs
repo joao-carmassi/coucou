@@ -63,7 +63,7 @@ pub struct LiveSession {
 /// `~/.claude`, every `~/.claude-*` that holds `projects/`, and the folder set in
 /// "Account folder", deduplicated by key.
 pub fn profiles() -> Vec<Profile> {
-    let home = crate::platform::home_dir();
+    let home = crate::core::platform::home_dir();
     let mut dirs = vec![home.join(".claude")];
     if let Ok(entries) = std::fs::read_dir(&home) {
         let mut extra: Vec<PathBuf> = entries
@@ -77,11 +77,11 @@ pub fn profiles() -> Vec<Profile> {
         extra.sort();
         dirs.extend(extra);
     }
-    dirs.extend(crate::settings::claude_config_dir());
+    dirs.extend(crate::core::settings::claude_config_dir());
     let mut out: Vec<Profile> = Vec::new();
     for dir in dirs {
         let shown = dir.to_string_lossy().into_owned();
-        let key = crate::hooks::profile_key(&shown);
+        let key = crate::modules::claude::hooks::profile_key(&shown);
         if out.iter().any(|p| p.key == key) {
             continue;
         }
@@ -393,10 +393,10 @@ mod tests {
 
     #[test]
     fn profile_keys_ignore_case_and_slashes() {
-        let home = crate::platform::home_dir();
+        let home = crate::core::platform::home_dir();
         let plain = home.join(".claude-qf").to_string_lossy().into_owned();
         let odd = plain.to_uppercase().replace('\\', "/");
-        assert_eq!(crate::hooks::profile_key(&odd), crate::hooks::profile_key(&plain));
-        assert_eq!(crate::hooks::profile_key(&home.join(".claude").to_string_lossy()), "");
+        assert_eq!(crate::modules::claude::hooks::profile_key(&odd), crate::modules::claude::hooks::profile_key(&plain));
+        assert_eq!(crate::modules::claude::hooks::profile_key(&home.join(".claude").to_string_lossy()), "");
     }
 }

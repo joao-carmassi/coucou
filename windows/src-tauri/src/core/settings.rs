@@ -94,10 +94,10 @@ impl Default for Settings {
     }
 }
 
-pub use crate::platform::{config_dir, local_dir};
+pub use crate::core::platform::{config_dir, local_dir};
 
 pub fn hook_exe_path() -> PathBuf {
-    local_dir().join("bin").join(crate::platform::HOOK_EXE)
+    local_dir().join("bin").join(crate::core::platform::HOOK_EXE)
 }
 
 fn settings_path() -> PathBuf {
@@ -120,7 +120,7 @@ pub fn claude_config_dir() -> Option<PathBuf> {
     }
     match dir.strip_prefix('~') {
         Some(rest) if rest.is_empty() || rest.starts_with(['/', '\\']) => {
-            Some(crate::platform::home_dir().join(rest.trim_start_matches(['/', '\\'])))
+            Some(crate::core::platform::home_dir().join(rest.trim_start_matches(['/', '\\'])))
         }
         _ => Some(PathBuf::from(dir)),
     }
@@ -128,7 +128,7 @@ pub fn claude_config_dir() -> Option<PathBuf> {
 
 pub fn save(settings: &Settings) -> std::io::Result<()> {
     let dir = config_dir();
-    crate::platform::ensure_private_dir(&dir)?;
+    crate::core::platform::ensure_private_dir(&dir)?;
     let json = serde_json::to_vec_pretty(settings)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     std::fs::write(settings_path(), json)

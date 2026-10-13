@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 use tauri::{AppHandle, Manager};
-use crate::{platform, settings};
+use crate::core::{platform, settings};
 
 /// Every event the island reacts to, with the hook timeout written to settings.json.
 /// PermissionRequest waits for a human, so it gets the decision timeout + 10 s.
@@ -288,7 +288,7 @@ pub fn status_in(dir: Option<&Path>) -> HookStatus {
         settings_path: path.to_string_lossy().to_string(),
         hook_ready: hook_path.exists(),
         hook_path: hook_path.to_string_lossy().to_string(),
-        claude_cli: crate::local_claude::windows_cli().map(|p| p.to_string_lossy().to_string()),
+        claude_cli: crate::modules::claude::local_claude::windows_cli().map(|p| p.to_string_lossy().to_string()),
     }
 }
 
@@ -415,7 +415,7 @@ pub fn ensure_hook_exe(app: &AppHandle) {
 
     let tried: Vec<String> = candidates.iter().map(|p| p.display().to_string()).collect();
     let Some(src) = candidates.into_iter().find(|p| p.exists()) else {
-        crate::log::line(format!(
+        crate::core::log::line(format!(
             "{} not found — Claude Code hooks cannot work. Looked in: {}",
             platform::HOOK_EXE,
             tried.join(", ")
@@ -437,7 +437,7 @@ fn install_relay(src: &Path, dest: &Path) {
     // copy is fine, it is the same relay.
     if let Err(err) = std::fs::copy(src, dest) {
         if !dest.exists() {
-            crate::log::line(format!("could not install {}: {err}", platform::HOOK_EXE));
+            crate::core::log::line(format!("could not install {}: {err}", platform::HOOK_EXE));
         }
     }
 }

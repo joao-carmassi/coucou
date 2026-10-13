@@ -19,9 +19,9 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::island::WINDOW_LABEL;
-use crate::log;
-use crate::secrets;
+use crate::core::island::WINDOW_LABEL;
+use crate::core::log;
+use crate::modules::integrations::secrets;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -77,8 +77,8 @@ pub fn start(app: AppHandle) {
     spawn(app.clone(), "integration_vercel", 5, 30, poll_vercel);
     spawn(app.clone(), "integration_stripe", 6, 30, poll_stripe);
     spawn(app.clone(), "integration_resend", 6, 60, poll_resend);
-    spawn(app.clone(), "integration_github", 7, crate::github::TICK_SECS, crate::github::refresh);
-    crate::github::watch_live(app.clone());
+    spawn(app.clone(), "integration_github", 7, crate::modules::integrations::github::TICK_SECS, crate::modules::integrations::github::refresh);
+    crate::modules::integrations::github::watch_live(app.clone());
     spawn(app.clone(), "integration_calcom", 8, 300, poll_calcom);
     spawn(app, "integration_notion", 9, 300, poll_notion);
 }
@@ -119,7 +119,7 @@ where
 pub async fn poll_once(app: AppHandle, id: &str) {
     match id {
         "integration_stripe" => poll_stripe(app).await,
-        "integration_github" => crate::github::refresh(app).await,
+        "integration_github" => crate::modules::integrations::github::refresh(app).await,
         "integration_vercel" => poll_vercel(app).await,
         "integration_n8n" => poll_n8n(app).await,
         "integration_resend" => poll_resend(app).await,
@@ -157,7 +157,7 @@ fn status_error(code: u16, unauthorised_hint: &str) -> String {
 
 async fn poll_stripe(app: AppHandle) {
     let Some(key) = secrets::get("stripe-api-key") else { return };
-    let auth = format!("Basic {}", crate::b64::base64_for(format!("{key}:").as_bytes()));
+    let auth = format!("Basic {}", crate::core::b64::base64_for(format!("{key}:").as_bytes()));
     let http = client();
 
     let balance = http

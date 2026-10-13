@@ -33,8 +33,8 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use tokio::sync::mpsc;
 
-use crate::island::WINDOW_LABEL;
-use crate::log;
+use crate::core::island::WINDOW_LABEL;
+use crate::core::log;
 
 /// Slightly under coucou-hook's own 110 s wait, so we always answer first.
 const DECISION_TIMEOUT: Duration = Duration::from_secs(108);
@@ -63,7 +63,7 @@ static COUNTER: AtomicU64 = AtomicU64::new(1);
 
 /// `\\.\pipe\coucou-<sid>` — must match coucou-hook's `pipe_path()` exactly.
 pub fn pipe_name() -> String {
-    let key = crate::platform::current_user_sid()
+    let key = crate::core::platform::current_user_sid()
         .unwrap_or_else(|| std::env::var("USERNAME").unwrap_or_else(|_| "user".into()));
     format!(r"\\.\pipe\coucou-{key}")
 }
@@ -146,7 +146,7 @@ async fn handle(app: AppHandle, mut pipe: impl Relay) {
     // The relay forwards CLAUDE_CONFIG_DIR as typed; the island matches profiles
     // by their normalised key.
     if let Some(dir) = payload.get("config_dir").and_then(Value::as_str) {
-        payload["config_dir"] = json!(crate::hooks::profile_key(dir));
+        payload["config_dir"] = json!(crate::modules::claude::hooks::profile_key(dir));
     }
     let sid: String = payload
         .get("session_id")

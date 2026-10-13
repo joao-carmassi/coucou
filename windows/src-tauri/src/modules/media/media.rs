@@ -9,7 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use crate::settings;
+use crate::core::settings;
 
 const MAX_ITEMS: usize = 300;
 /// A file already in a watched folder when the app starts is listed only if recent.
@@ -53,7 +53,7 @@ fn load() -> Store {
 }
 
 fn save(store: &Store) {
-    let _ = crate::platform::ensure_private_dir(&settings::local_dir());
+    let _ = crate::core::platform::ensure_private_dir(&settings::local_dir());
     if let Ok(json) = serde_json::to_vec(store) {
         let _ = std::fs::write(store_path(), json);
     }
@@ -185,7 +185,7 @@ mod sys {
     use std::path::{Path, PathBuf};
     use std::time::Duration;
 
-    use tauri::{AppHandle, Emitter};
+    use tauri::{AppHandle, Emitter, Listener};
     use windows::core::{w, HSTRING, PCWSTR};
     use windows::Win32::Foundation::{CloseHandle, HANDLE, SIZE};
     use windows::Win32::Graphics::Gdi::{
@@ -243,6 +243,12 @@ mod sys {
     }
 
     pub fn start(app: AppHandle) {
+        // Files that came onto the island (files.rs) join the list, as before the split.
+        app.listen("media-note-drop", |ev| {
+            if let Ok(path) = serde_json::from_str::<String>(ev.payload()) {
+                super::note_drop(Path::new(&path));
+            }
+        });
         for (dir, kind) in folders() {
             let app = app.clone();
             std::thread::spawn(move || watch(app, dir, kind));
