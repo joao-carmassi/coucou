@@ -4530,3 +4530,10 @@ button.gh-block:hover {
 .media-menu-row:hover {
   background: var(--gh-hover);
 }
+
+/* Timer: selected preset / mode, disabled start, idle <-> running swap */
+.btn.sel { background: rgba(255, 255, 255, 0.16); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--amber); }
+.btn:disabled { opacity: 0.4; pointer-events: none; }
+.timer-min.sel { box-shadow: inset 0 0 0 1.5px var(--amber); }
+.timer-swap { animation: timer-swap 0.2s ease-out; }
+@keyframes timer-swap { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }

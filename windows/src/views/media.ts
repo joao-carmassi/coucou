@@ -58,15 +58,15 @@ export function buildMedia(actions: ViewActions): ViewHost {
 
   menu.style.display = "none";
   const closeMenu = () => (menu.style.display = "none");
-  main.addEventListener("click", (e) => {
-    if (!(e.target as HTMLElement).closest(".media-menu, .media-more")) closeMenu();
-  });
-
-  document.addEventListener("keydown", (e) => e.key === "Escape" && menu.style.display !== "none" && closeMenu());
-  // A right click anywhere outside an item (or its menu) just closes the menu.
-  main.addEventListener("contextmenu", (e) => {
-    if (!(e.target as HTMLElement).closest(".media-cell")) closeMenu();
-  });
+  // Capture phase on the document: nothing in the island can swallow the outside press.
+  const outside = (e: Event) => {
+    if (menu.style.display !== "none" && !(e.target as HTMLElement).closest?.(".media-menu")) closeMenu();
+  };
+  document.addEventListener("pointerdown", outside, true);
+  document.addEventListener("mousedown", outside, true);
+  document.addEventListener("keydown", (e) => e.key === "Escape" && closeMenu());
+  window.addEventListener("blur", closeMenu);
+  grid.addEventListener("scroll", closeMenu, { passive: true });
 
   function fail(err: unknown) {
     error = String(err).replace(/^Error:\s*/, "");

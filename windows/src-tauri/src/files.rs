@@ -39,6 +39,13 @@ pub fn ingest(source: &str) -> Result<DroppedFile, String> {
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "file".into());
 
+    // Already in the inbox (the Mídia list): attach it as it is, no second copy.
+    if let (Ok(s), Ok(d)) = (src.canonicalize(), dir.canonicalize()) {
+        if s.parent() == Some(d.as_path()) {
+            return Ok(DroppedFile { name, path: source.to_string(), size: meta.len() });
+        }
+    }
+
     let mut dest = dir.join(&name);
     if dest.exists() {
         let stem = src.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();

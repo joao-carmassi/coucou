@@ -779,8 +779,9 @@ async fn session_erase(profile: String, id: String) -> Result<(), String> {
 
 /// Copies a dropped file into the inbox and reports its name back.
 #[tauri::command]
-fn ingest_file(path: String) -> Result<DroppedFile, String> {
-    files::ingest(&path)
+async fn ingest_file(path: String) -> Result<DroppedFile, String> {
+    // Off the main thread: a big copy must not freeze the webview.
+    blocking(move || files::ingest(&path)).await?
 }
 
 /// Screenshots the window under the cursor into the inbox (Mochi dragged onto it).

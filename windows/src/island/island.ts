@@ -707,16 +707,29 @@ export class Island {
 
   /** A file from the Mídia list, taken in like a dropped one: copied into the inbox (the only place a session may attach from), then asked about. */
   private async openFileInClaude(path: string) {
-    const file = await Bridge.ingestFile(path);
-    State.droppedFile = { name: file.name, path: file.path };
-    State.promptContext = { kind: "file", name: file.name, path: file.path };
-    if (State.settings.askMode === "mochi") {
+    const name = path.split(/[\/]/).pop() || "file";
+    const mochi = State.settings.askMode === "mochi";
+    if (mochi) {
+      // Up at once with the path we have; the copy (none, for a file already in the inbox) swaps it in.
+      State.droppedFile = { name, path };
+      State.promptContext = { kind: "file", name, path };
       State.chatHistory = [];
       State.activeSession = null;
       void Bridge.chatReset();
       Sound.play("attach");
       this.setView("prompt");
-    } else this.launchWith(file.path);
+    } else this.showNote("Abrindo no terminal…");
+    try {
+      const file = await Bridge.ingestFile(path);
+      if (!mochi) return this.launchWith(file.path);
+      if (State.droppedFile?.path === path) {
+        State.droppedFile = { name: file.name, path: file.path };
+        State.promptContext = { kind: "file", name: file.name, path: file.path };
+        State.notify();
+      }
+    } catch (err) {
+      this.showError(err);
+    }
   }
 
   /** A new terminal session, in the front session's profile and folder, with the file attached. */
