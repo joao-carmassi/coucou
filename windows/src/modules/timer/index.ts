@@ -1,0 +1,61 @@
+import "./timer.css";
+import { svg } from "../../views/dom";
+import { ICONS } from "../../views/icons";
+import { Sound } from "../../core/sound";
+import type { Disposer, IslandApi, ModuleDef } from "../../core/moduleApi";
+import { TimerClock } from "./timer";
+import { buildTimerView } from "./view";
+
+// State lives here (not in State); the object is inert until start() gives it an onChange.
+const Timer = new TimerClock();
+
+function start(api: IslandApi): Disposer {
+  let tick: Disposer | null = null;
+  let done: Disposer | null = null;
+  const refresh = () => {
+    api.status.set(Timer.active ? { priority: 50, text: Timer.text(), overGrid: true } : null);
+    api.island.redraw();
+  };
+  const disarm = () => { tick?.(); done?.(); tick = done = null; };
+  const finish = () => {
+    done = null;
+    Timer.cancel(); // onChange -> arm -> idle
+    Sound.play("finish");
+    // A request waiting keeps the island: the sound is enough then.
+    if (!api.island.pendingAlert()) api.island.note("Temporizador concluído");
+  };
+  const arm = () => {
+    disarm();
+    if (Timer.status === "running") {
+      // One-shot, so the end still rings (and is shown) if the island is hidden.
+      if (Timer.kind === "countdown") done = api.timeout(finish, Timer.remaining());
+      tick = api.interval(refresh, 1000, { whenVisible: true });
+    }
+    refresh();
+  };
+  Timer.reset();
+  Timer.onChange = arm;
+  const offKeep = api.island.keepAwake(() => Timer.active);
+  // The interval is off while hidden: catch the readout up when the island comes back.
+  const offVis = api.onVisibility((mode) => { if (mode !== "hidden" && Timer.status === "running") refresh(); });
+  return () => {
+    disarm();
+    offKeep();
+    offVis();
+    Timer.reset();
+    api.status.set(null);
+  };
+}
+
+export const timerModule: ModuleDef = {
+  id: "timer",
+  label: "Timer",
+  defaultEnabled: false,
+  views: [{
+    name: "timer",
+    layout: { height: 160, botX: 54, botY: null, botDiameter: 46, agentMode: "none" },
+    build: (ctx) => buildTimerView(Timer, ctx),
+  }],
+  tab: { view: "timer", title: "Timer", icon: () => svg(ICONS.timer, 13), order: 30 },
+  start,
+};

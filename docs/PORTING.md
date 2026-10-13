@@ -8,7 +8,7 @@ runs on the module API (docs/MODULES-CONTRACT.md) and its folder exists under
 | Module | Status | Old code to port (at m3-ok) |
 |---|---|---|
 | claude | not ported | rust: modules/claude/{pipe,hooks,sessions,local_claude,wsl,focus,files}.rs + lib.rs claude commands; ts: modules/claude/**, views.ts approval/question/error/finished/overview, island.ts approval flows |
-| timer | not ported | ts: modules/timer/{timer,view}.ts + timer.css |
+| timer | ported (m5-timer) | ts: modules/timer/{timer,view}.ts + timer.css |
 | media | not ported | rust: modules/media/{media,capture}.rs; ts: modules/media/view.ts + media.css |
 | upload | not ported | ts: modules/upload/{canvas,sequence,view}.ts + upload.css; island.ts drag/drop flow |
 | voice | not ported | rust: modules/voice/voice.rs; ts: modules/voice/view.ts |
