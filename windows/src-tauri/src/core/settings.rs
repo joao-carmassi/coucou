@@ -46,8 +46,6 @@ impl Default for Settings {
 }
 
 impl Settings {
-    // used by the module ports (M5)
-    #[allow(dead_code)]
     pub fn module_on(&self, id: &str, default: bool) -> bool {
         self.modules_enabled.get(id).copied().unwrap_or(default)
     }

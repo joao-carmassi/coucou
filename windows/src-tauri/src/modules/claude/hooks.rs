@@ -74,12 +74,6 @@ pub struct Target {
 }
 
 impl Target {
-    /// Claude Code for Windows: `%USERPROFILE%\.claude\settings.json`.
-    #[allow(dead_code)] // used by tests
-    pub fn windows() -> Self {
-        Self::for_config_dir(None)
-    }
-
     /// Claude Code with `CLAUDE_CONFIG_DIR` = `dir` (a second account); None = the default.
     pub fn for_config_dir(dir: Option<&Path>) -> Self {
         let settings_path = match dir {
@@ -277,7 +271,7 @@ pub fn installed_at(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-#[allow(dead_code)] // Windows-default wrappers, used by tests
+#[cfg(test)] // Windows-default wrappers, used by tests
 pub fn status() -> HookStatus {
     status_in(None)
 }
@@ -294,7 +288,7 @@ pub fn status_in(dir: Option<&Path>) -> HookStatus {
     }
 }
 
-#[allow(dead_code)] // Windows-default wrappers, used by tests
+#[cfg(test)] // Windows-default wrappers, used by tests
 pub fn preview(install: bool) -> Result<HookPreview, String> {
     preview_in(None, install)
 }
@@ -321,7 +315,7 @@ pub fn preview_for(target: &Target, install: bool) -> Result<HookPreview, String
 /// in between — another tool, another window, the user's own editor — we stop
 /// and make them look at a fresh diff, because the only thing worse than not
 /// installing the hooks is silently reverting somebody else's edit.
-#[allow(dead_code)] // Windows-default wrappers, used by tests
+#[cfg(test)] // Windows-default wrappers, used by tests
 pub fn write(install: bool, fingerprint: &str) -> Result<String, String> {
     write_in(None, install, fingerprint)
 }

@@ -32,9 +32,7 @@ static THREAD: AtomicU32 = AtomicU32::new(0);
 static HANDLE: Mutex<Option<std::thread::JoinHandle<()>>> = Mutex::new(None);
 static ERROR: Mutex<String> = Mutex::new(String::new());
 
-// used by the module ports (M5)
 /// Registers `combo` for `name` ("" clears it). Cheap when nothing changed.
-#[allow(dead_code)]
 pub fn set(app: &AppHandle, name: &'static str, label: &'static str, combo: &str, on: Handler) {
     {
         let mut e = ENTRIES.lock().unwrap();
@@ -46,24 +44,18 @@ pub fn set(app: &AppHandle, name: &'static str, label: &'static str, combo: &str
     rebuild(app);
 }
 
-// used by the module ports (M5)
-#[allow(dead_code)]
 pub fn clear(app: &AppHandle, name: &'static str) {
     ENTRIES.lock().unwrap().retain(|x| x.name != name);
     rebuild(app);
 }
 
-// used by the module ports (M5)
 /// Why a combo could not be registered ("" = fine).
-#[allow(dead_code)]
 pub fn error() -> String {
     ERROR.lock().unwrap().clone()
 }
 
-// used by the module ports (M5)
 /// Normalises "ctrl + alt+v" to "Ctrl+Alt+V"; falls back to `default` when it is not a hotkey.
 /// An empty string stays empty (the hotkey is off).
-#[allow(dead_code)]
 pub fn clean(s: &str, default: &str) -> String {
     if s.trim().is_empty() {
         return String::new();

@@ -72,8 +72,6 @@ pub struct ModuleCtx {
     listeners: Mutex<Vec<EventId>>,
 }
 
-// used by the module ports (M5)
-#[allow(dead_code)]
 impl ModuleCtx {
     pub fn stopping(&self) -> bool {
         self.stop.load(Ordering::SeqCst)
@@ -182,14 +180,10 @@ impl ModuleHost {
         }
     }
 
-    // used by the module ports (M5)
-    #[allow(dead_code)]
     pub fn is_enabled(&self, id: &str) -> bool {
         self.effective.lock().unwrap().get(id).copied().unwrap_or(false)
     }
 
-    // used by the module ports (M5)
-    #[allow(dead_code)]
     pub fn require(&self, id: &str) -> Result<(), String> {
         if self.is_enabled(id) {
             return Ok(());
@@ -208,8 +202,6 @@ impl ModuleHost {
     }
 }
 
-// used by the module ports (M5)
-#[allow(dead_code)]
 pub async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Result<T, String> {
     tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())
 }

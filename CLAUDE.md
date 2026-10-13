@@ -9,8 +9,19 @@ This branch (`refactor/modules`) is **Windows-only**: the macOS app (`NotchBuddy
 - `windows/` — the Tauri app for Windows: Rust in `src-tauri/`, TypeScript in `src/`, the `coucou-hook` relay in `hook/`. `windows/README.md` lists what differs from the Mac.
 - `docs/*.html` — the GitHub Pages site (privacy, terms, support, legal notice).
 
-## Build
-Windows: `cd windows && npm install && npm run tauri dev`
+## Architecture (windows/)
+- **Core** is always on: island, Mochi, tray, settings window, hotkeys, log, Windows layer. Core never imports a module. Front end `windows/src/core/` (module API in `moduleApi.ts`), `src/island/`, `src/mochi/`; Rust `windows/src-tauri/src/core/` (`host.rs` has `ModuleHost` and `ModuleCtx`).
+- **Modules** are optional (claude, media, upload, timer, voice, integrations), switched on in Settings. A module reaches the app only through the module API and its `ModuleCtx`. A disabled module has no tab, view, pill, timer, thread or listener.
+- **A module** is a folder `windows/src/modules/<id>` and `windows/src-tauri/src/modules/<id>`, plus one line in each registry: `MODULE_INFO` in `src/modules/catalog.ts`, `MODULES` in `src/modules/index.ts`, and `CATALOG` plus `registry()` in `src-tauri/src/modules/mod.rs`. Ids and order must match.
+- Contract: `docs/MODULES-CONTRACT.md`. Porting status: `docs/PORTING.md`. Idle budget: `docs/idle-baseline.md`.
+- `npm run idle-audit` (`windows/scripts/idle-audit.mjs`) fails on raw timers, top-level listeners in `src/modules`, and raw thread spawns in `src-tauri/src/modules`. Exceptions go in its ALLOWLIST with a reason. `scripts/idle-measure.ps1` samples a running app, read-only.
+
+## Build and test
+```
+cd windows && npm install && npm run tauri dev
+npx tsc --noEmit && npm run build && npm test && npm run idle-audit
+cd src-tauri && cargo check && cargo test
+```
 
 ## Rules
 - No telemetry. Network calls only to services the user configured.

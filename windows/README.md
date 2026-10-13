@@ -322,17 +322,7 @@ npm run pack           # builds the installer and drops it in windows/release/
 ```
 
 `npm run dev` alone serves the front end in an ordinary browser, which is enough
-to work on the island's looks. It also serves two pages that never ship in the
-app:
-
-- `dev/upload-preview.html` replays the whole file-drop choreography on a loop —
-  the one part of the UI that otherwise needs a real drag from Explorer to see.
-- `dev/github-preview.html` shows the GitHub card and panel on made-up data, so
-  they can be worked on without a token. The links at the bottom of the page go
-  to each screen: a project, a run in progress, a failing build, the comments.
-- `dev/claude-preview.html` plays a made-up Claude Code session through the
-  island's own hook handler: a file being written, a question, a permission
-  request with its diff, the end of a turn, several sessions at once.
+to work on the island's looks.
 
 `npm run pack` leaves two files in `windows/release/`, the same names the release
 workflow publishes:
@@ -355,21 +345,49 @@ The app icon and the tray icon are drawn in code, like Mochi itself:
 npm run icons          # regenerates src-tauri/icons from scripts/gen-icons.mjs
 ```
 
-### Layout
+## Architecture
+
+**Core** is always on: island, Mochi, tray, settings window, hotkeys, log, the
+Windows layer. **Modules** are optional (Claude Code, media, file drop, timer,
+voice, integrations) and switch on in Settings. Core never imports a module.
 
 ```
-windows/
-  src/                 island front end (TypeScript, no framework)
-    mochi/             Mochi and the launch greeting, in Canvas 2D
-    island/            state machine, hooks, integrations
-    views/             every island view
-    settings/          the settings window
-  src-tauri/           Rust backend: window, named pipe, Claude API, pollers
-  hook/                coucou-hook.exe, the Claude Code relay
-  scripts/             icon generator
+src/core/        module API (moduleApi.ts), registry, bridge, layout
+src/island/      island state machine and window
+src/mochi/       Mochi and the greeting, Canvas 2D
+src/modules/     catalog.ts (MODULE_INFO), index.ts (MODULES), <id>/ per module
+src-tauri/src/core/     host.rs (ModuleHost, ModuleCtx), hotkeys, island, tray, platform/
+src-tauri/src/modules/  mod.rs (CATALOG, registry()), <id>/ per module
+hook/            coucou-hook.exe, the Claude Code relay
+scripts/         idle-audit, idle-measure, icons, pack
 ```
 
-### Log
+**A module** is a folder under `windows/src/modules/<id>` and
+`windows/src-tauri/src/modules/<id>`, plus one line in each registry: `MODULE_INFO`
+in `src/modules/catalog.ts`, `MODULES` in `src/modules/index.ts`, and `CATALOG` plus
+`registry()` in `src-tauri/src/modules/mod.rs`. Ids and order must match.
+The contract: [`docs/MODULES-CONTRACT.md`](../docs/MODULES-CONTRACT.md). Porting
+status: [`docs/PORTING.md`](../docs/PORTING.md). Idle cost:
+[`docs/idle-baseline.md`](../docs/idle-baseline.md).
+
+A disabled module has no tab, view, pill, timer, thread or listener.
+
+- `npm run idle-audit` (`scripts/idle-audit.mjs`) fails on raw timers or top-level
+  listeners in `src/modules`, and raw thread spawns in `src-tauri/src/modules`.
+  Exceptions are in its ALLOWLIST, one reason each.
+- `scripts/idle-measure.ps1` samples a running Coucou, read-only: CPU, threads and
+  handles over `-Seconds` (default 60). Run it with the island hidden.
+
+Checks before a commit:
+
+```powershell
+cd windows
+npx tsc --noEmit && npm run build && npm test && npm run idle-audit
+cd src-tauri
+cargo check && cargo test
+```
+
+## Log
 
 `%LOCALAPPDATA%\Coucou\coucou.log` — hook events, permission decisions, poller
 problems. It stays on your machine.
