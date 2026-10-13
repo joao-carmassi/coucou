@@ -90,7 +90,3 @@ input[type="range"]::-webkit-slider-thumb {
   flex: 1 1 auto;
 }
 
-.nowrap {
-  white-space: nowrap;
-}
-

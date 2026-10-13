@@ -5,9 +5,6 @@ import { Bridge, IS_TAURI, onEvent } from "./core/bridge";
 import { Sound } from "./core/sound";
 import { State, type Settings } from "./core/state";
 import { Island } from "./island/island";
-import { registerHookHandlers } from "./modules/claude/hooks";
-import { registerVoiceHandlers } from "./modules/voice/view";
-import { registerIntegrationHandlers, refreshConfigured } from "./modules/integrations/integrations";
 
 async function main() {
   const root = document.getElementById("root");
@@ -20,7 +17,6 @@ async function main() {
     State.settings = { ...State.settings, ...boot.settings };
   }
   island.applySettings();
-  State.loadIntegrationTasks();
   if (boot && !boot.cursorPoll) island.followPageCursor();
 
   await onEvent<{ x: number; y: number; down: boolean }>("cursor", ({ x, y, down }) =>
@@ -51,9 +47,6 @@ async function main() {
     }
   });
 
-  // Hotkey (Rust): straight to the card waiting for an answer.
-  await onEvent<null>("go-to-alert", () => island.goToAlert());
-
   await onEvent<null>("screen-changed", () => void Bridge.reposition());
 
   // A hidden page gets no animation frames: the island would be heard but not seen.
@@ -64,16 +57,8 @@ async function main() {
   await onEvent<Settings>("settings-changed", (s) => {
     State.settings = { ...State.settings, ...s };
     island.applySettings();
-    State.loadIntegrationTasks();
-    void refreshConfigured();
   });
 
-  // A key saved or removed in the settings window.
-  await onEvent<null>("secrets-changed", () => void refreshConfigured());
-
-  registerHookHandlers(island);
-  registerIntegrationHandlers(island);
-  registerVoiceHandlers(island);
 
   island.launch();
 

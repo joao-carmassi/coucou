@@ -1,4 +1,0 @@
-/* Timer: selected preset / mode, disabled start, idle <-> running swap */
-.btn:disabled { opacity: 0.4; pointer-events: none; }
-.timer-swap { animation: timer-swap 0.2s ease-out; }
-@keyframes timer-swap { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }

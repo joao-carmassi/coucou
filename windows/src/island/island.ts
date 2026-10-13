@@ -1,45 +1,27 @@
 // The island: DOM shell, sizing animation, Mochi placement, mouse handling.
-// Mirrors IslandRootView.swift + IslandWindowController.swift.
+// Mirrors IslandRootView.swift + IslandWindowController.swift. Core only.
 
 import { Tracked, Spring, clamp, mixColor } from "../core/anim";
-import { Bridge, IS_TAURI, onDragDrop } from "../core/bridge";
+import { Bridge, IS_TAURI } from "../core/bridge";
 import { wipe } from "../core/canvas";
 import {
   COMPACT_BOT_CX, COMPACT_CONTENT_X, COMPACT_PAD, EXPANDED_CORNER, EXPANDED_W, PANEL_H, PANEL_W,
   ROUNDED_CORNER, VIEW_LAYOUTS, botGlowColor, botGlowOpacity, botPosition,
   compactWidth, islandSize, miniGridSize,
-  type BotStateName, type IslandMode, type IslandViewName,
+  type IslandMode, type IslandViewName,
 } from "../core/layout";
 import { Sound } from "../core/sound";
-import { CLAUDE_ID, QUESTION_TOOL, State, type SessionStep } from "../core/state";
+import { State } from "../core/state";
 import { BotEngine, hexToRGB, type RGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
 import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
-import { UploadCanvas } from "../modules/upload/canvas";
-import { USC, UploadSeq } from "../modules/upload/sequence";
 import { buildHeader, buildViews, type ViewActions, type ViewHost } from "../views/views";
-import { githubData } from "../modules/integrations/views/integrations";
-import { highlightMedia } from "../modules/media/view";
-import { enterSessionPanel } from "../modules/claude/views/session";
-import { followNews } from "../modules/integrations/integrations";
 import { h } from "../views/dom";
-import { voiceReviewing } from "../modules/voice/view";
-import { IslandStateMachine, type FsmState } from "./fsm";
-import { activityLine } from "../modules/claude/activity";
-import { Timer } from "../modules/timer/timer";
+import { IslandStateMachine } from "./fsm";
 
 const BOT_OVERHANG = 40;
-/** The dragged Mochi's canvas: the body is 0.6 of the width, like the island's own. */
-const GHOST_W = 84;
-const GHOST_H = GHOST_W + BOT_OVERHANG;
 /** Same margin as the Rust hit test (src-tauri/src/island.rs). */
 const HIT_MARGIN = 14;
-
-/** The three views the drop sequence owns; leaving them stops the engine. */
-const UPLOAD_VIEWS: ReadonlySet<IslandViewName> = new Set(["upload", "uploading", "choose"]);
-
-/** Seconds between the drop and the moment the progress bar starts filling. */
-const PRE_PROGRESS = USC.T_PROG_START - USC.T_DROP;
 
 const modeOrder = (m: IslandMode) => (m === "hidden" ? 0 : m === "compact" ? 1 : 2);
 
@@ -66,7 +48,6 @@ export class Island {
 
   private header!: ViewHost;
   private views!: Map<IslandViewName, ViewHost>;
-  private uploadCanvas!: UploadCanvas;
 
   private width = new Tracked(compactWidth(0, 0));
   private widthTarget = -1;
@@ -83,14 +64,8 @@ export class Island {
   private engine = new BotEngine();
   private greeting = new Greeting();
 
-  /**
-   * A view asking Mochi to take a colour for a moment (a day of the GitHub
-   * graph). His body only: the glow stays his own.
-   */
-  private tintRequest: RGB | null = null;
-  /** A state a view asked Mochi to wear (see ViewActions.look). */
-  private viewState: BotStateName | null = null;
-  /** The colour Mochi's body is drawn in, eased towards what it should be. */
+
+  /** The colour Mochi body is drawn in, eased towards what it should be. */
   private bodyRGB: RGB | null = null;
 
   private running = false;
@@ -112,14 +87,10 @@ export class Island {
   private lastLoveTime = 0;
   private botHoverStart = { x: 0, y: 0 };
 
-  // Mochi drag-out: press on him, pull past 7 px with the button held, release
-  // over another window to attach a screenshot of it.
+  // Press on Mochi: a plain click (no travel) is his slap.
   private botPress: { x: number; y: number } | null = null;
-  private draggingGhost = false;
   private lastDown = false;
   private pressedOutside = false;
-  private ghostEl!: HTMLCanvasElement;
-  private ghostEngine = new BotEngine();
 
   // Compact island nudged sideways so what's under it can be clicked; glides home.
   private offsetX = new Spring(0, 0.45, 1);
@@ -127,17 +98,8 @@ export class Island {
   private nudgeTimer: number | null = null;
 
   private confusedRecovery: number | null = null;
-  private prevViewBeforeConfused: IslandViewName = "overview";
-  private lastSyncedView: IslandViewName | null = null;
+  private prevViewBeforeConfused: IslandViewName = "empty";
 
-  /** Drop sequence bookkeeping: last tick played, and whether the ✓ has fired. */
-  private uploadTens = 0;
-  private uploadDone = false;
-
-  /** Where the island was when a file drag first reached it, to go back on a cancel. */
-  private mediaPinTimer = 0;
-  private dragOrigin:{ state: FsmState; view: IslandViewName } | null = null;
-  private abandonTimer: number | null = null;
   private noteTimer: number | null = null;
 
   constructor(root: HTMLElement) {
@@ -147,10 +109,6 @@ export class Island {
     this.wireInput();
     this.engine.onDizzy = () => this.handleDizzy();
     this.greeting.onComplete = () => this.fsm.greetComplete();
-    Timer.onDone = () => {
-      // A request waiting keeps the island: the sound is enough then.
-      if (!this.hasPending()) this.showNote("Temporizador concluído");
-    };
     State.subscribe(() => {
       this.dirty = true;
       this.ensureRunning();
@@ -162,86 +120,6 @@ export class Island {
   private build() {
     const actions: ViewActions = {
       setView: (v) => this.setView(v),
-      collapse: () => this.collapse(),
-      setFocus: (id) => {
-        State.setFocus(id);
-        Sound.play("blip");
-        // A request that came in while another pill had the front only left a
-        // badge: bringing Claude's pill forward is asking for its card.
-        if (id !== CLAUDE_ID) return;
-        if (State.pendingQuestion) this.setView("question");
-        else if (State.pendingApproval) this.setView("approval");
-        // No card for the session in front, but one behind it is waiting: its turn.
-        else if (State.waiting.length > 0) this.afterRequest(true);
-      },
-      openTerminal: () => this.openClient(),
-      // The ↗ button — same targets as openAgentTarget() on macOS.
-      openTarget: () => {
-        const task = State.focusTask;
-        if (!task) return;
-        const urls: Record<string, string> = {
-          integration_resend: "https://resend.com/emails",
-          integration_vercel: "https://vercel.com/dashboard",
-          integration_github: "https://github.com",
-          integration_stripe: "https://dashboard.stripe.com/payments",
-          integration_notion: "https://notion.so",
-          integration_calcom: "https://app.cal.com/bookings",
-        };
-        if (task.id === CLAUDE_ID) this.openClient();
-        else if (task.id === "integration_n8n") void Bridge.openN8n();
-        else if (task.id === "integration_github" && githubData()) void Bridge.openUrl(githubData()!.profileUrl);
-        else if (urls[task.id]) void Bridge.openUrl(urls[task.id]);
-      },
-      openUrl: (url) => {
-        if (url) void Bridge.openUrl(url);
-      },
-      decide: (d) => {
-        const req = State.pendingApproval;
-        void Bridge.log(`decide ${d} req=${req?.requestId ?? "none"}`);
-        if (!req) return;
-        const denied = d === "deny" || d === "plan-keep";
-        Sound.play(denied ? "blip" : "approve");
-        void Bridge.approvalDecision(req.requestId, d);
-        this.noteOutcome(req.tool, (step) => (step.permission = denied ? "denied" : "allowed"));
-        this.settleRequest();
-      },
-      answer: (answers) => {
-        const req = State.pendingQuestion;
-        if (!req) return;
-        Sound.play("approve");
-        void Bridge.approvalAnswer(req.requestId, answers);
-        this.noteOutcome(QUESTION_TOOL, (step) => (step.answers = answers));
-        this.settleRequest();
-      },
-      skipQuestion: () => {
-        const req = State.pendingQuestion;
-        if (!req) return;
-        Sound.play("blip");
-        void Bridge.approvalDecision(req.requestId, "skip");
-        this.noteOutcome(QUESTION_TOOL, (step) => (step.state = "failed"));
-        this.settleRequest();
-      },
-      // shortcut: relay gives up after ~108 s, then the terminal takes over
-      // Closes the island and leaves the request as it is: no decision is sent.
-      deferAlert: () => this.collapse(),
-      passQuestion: () => {
-        const req = State.pendingQuestion;
-        if (!req) return;
-        Sound.play("blip");
-        // Declined, not denied: Claude Code asks it in its own window at once.
-        void Bridge.approvalDecline(req.requestId);
-        this.settleRequest();
-      },
-      keyboard: (on) => void Bridge.focusWindow(on),
-      openSession: (changes) => {
-        enterSessionPanel(changes ? "changes" : "journal");
-        this.setView("session");
-      },
-      openSessions: () => {
-        enterSessionPanel("sessions");
-        this.setView("session");
-      },
-      pickSession: (id) => this.pickSession(id),
       toggleSound: () => {
         State.settings.soundEnabled = !State.settings.soundEnabled;
         Sound.setEnabled(State.settings.soundEnabled);
@@ -254,7 +132,6 @@ export class Island {
         void Bridge.saveSettings(State.settings);
         State.notify();
       },
-      cancelDrop: () => this.cancelDrop(),
       setAutoClose: (s) => {
         State.settings.autoCloseInterval = s;
         this.fsm.homeToPetitDelay = s;
@@ -263,18 +140,6 @@ export class Island {
       },
       openSettingsWindow: () => void Bridge.openSettingsWindow(),
       blip: () => Sound.play("blip"),
-      emote: (e) => this.engine.triggerEmote(e),
-      tintMochi: (color) => {
-        this.tintRequest = color ? hexToRGB(color) : null;
-        this.ensureRunning();
-      },
-      look: (state) => {
-        if (this.viewState === state) return;
-        this.viewState = state;
-        State.notify();
-      },
-      followNews: () => followNews(this),
-      launchFile: (path) => this.openFileInClaude(path),
     };
 
     this.wakeStrip = h("div", { id: "wake-strip" });
@@ -285,28 +150,14 @@ export class Island {
     this.activityEl = h("div", { id: "activity-line" });
     this.countdown = h("div", { id: "countdown" });
 
+
     this.header = buildHeader(actions);
-    this.views = buildViews(actions, () => this.animateGeometry(false));    this.viewsEl = h("div", { id: "views" });
+    this.views = buildViews(actions);
+    this.viewsEl = h("div", { id: "views" });
     for (const v of this.views.values()) this.viewsEl.append(v.el);
     this.contentEl = h("div", { id: "content" }, this.header.el, this.viewsEl);
 
-    // The drop sequence draws the card, the bar and its own Mochi. It sits under
-    // the header, which stays visible on top of it exactly as on macOS.
-    this.uploadCanvas = new UploadCanvas({
-      ask: () => {
-        // A new terminal session takes the file, at the user's word — Cancelar can still drop it.
-        if (State.droppedFile) this.launchWith(State.droppedFile.path);
-      },
-      cancel: () => this.cancelDrop(),
-    });
-
-    this.clipEl = h(
-      "div",
-      { id: "island-clip" },
-      this.greetingCanvas,
-      this.uploadCanvas.el,
-      this.contentEl,
-    );
+    this.clipEl = h("div", { id: "island-clip" }, this.greetingCanvas, this.contentEl);
     this.islandEl = h(
       "div",
       { id: "island" },
@@ -324,8 +175,8 @@ export class Island {
     this.greetingCanvas.style.width = `${EXPANDED_W}px`;
     this.greetingCanvas.style.height = "150px";
 
-    this.ghostEl = this.buildGhost();
-    this.root.append(this.wakeStrip, this.islandEl, this.ghostEl);
+
+    this.root.append(this.wakeStrip, this.islandEl);
     this.applyGeometry();
   }
 
@@ -334,11 +185,6 @@ export class Island {
   private wireFsm() {
     this.fsm.homeToPetitDelay = State.settings.autoCloseInterval;
     this.fsm.petitToHiddenDelay = State.settings.compactHideInterval;
-    // A session at work keeps the compact island up; one silent for 15 min is presumed dead.
-    // So does a request waiting for an answer, and a running timer.
-    this.fsm.keepAwake = () => Timer.active || this.hasPending() || State.sessions.some(
-      (s) => (s.state === "working" || s.state === "thinking") && Date.now() - s.heardAt < 15 * 60_000,
-    );
     this.fsm.onTransition = (from, to) => {
       switch (to) {
         case "hidden":
@@ -351,17 +197,10 @@ export class Island {
           if (from === "coucou") State.view = State.defaultView();
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
-        case "home": {
-          // A request still waiting (its card folded away by ↗) comes back with the island, as setFocus does.
-          const card = State.focusId !== CLAUDE_ID ? null
-            : State.pendingQuestion ? "question" : State.pendingApproval ? "approval" : null;
-          const review = voiceReviewing();
-          this.expand(card ?? (review ? "voice" : State.defaultView()));
-          // collapse() clears the pin: a card showing a request (or the transcript) holds the island open again.
-          if (card || review) State.isPinned = this.fsm.pinned = true;
+        case "home":
+          this.expand(State.defaultView());
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
-        }
         case "coucou":
           this.expand("greeting");
           this.greeting.start();
@@ -385,41 +224,19 @@ export class Island {
     this.nudge = null;
     this.clearNudgeTimer();
     this.offsetX.target = 0;
-    // Whatever asked for a tint is no longer under the mouse.
-    this.tintRequest = null;
-    this.viewState = null;
     if (mode === "expanded") Sound.play("open");
     if (prev === "expanded") {
       Sound.play("close");
       State.isPinned = false;
       void Bridge.focusWindow(false);
     }
-    if (mode !== "expanded") {
-      this.engine.resetMorph();
-      // Nothing can be seen of the sequence once the island is shut, and leaving
-      // it running would keep the frame loop awake — the island must cost
-      // nothing while hidden.
-      UploadSeq.deactivate();
-    }
-    // The 1 s tick runs only while the island is on screen.
-    if (Timer.status === "running" && (mode === "hidden" || prev === "hidden")) Timer.sync();
+    if (mode !== "expanded") this.engine.resetMorph();
     this.updateWindowCollapsed();
     this.animateGeometry(modeOrder(mode) < modeOrder(prev));
     State.notify();
   }
 
-  /** True while the drop sequence owns the island body. */
-  private get uploadActive(): boolean {
-    return State.mode === "expanded" && UploadSeq.isActive && UPLOAD_VIEWS.has(State.view);
-  }
-
-  /** Navigating out of the drop flow ends the sequence, as on macOS. */
-  private stopSequenceIfLeaving(view: IslandViewName) {
-    if (UploadSeq.isActive && !UPLOAD_VIEWS.has(view)) UploadSeq.deactivate();
-  }
-
   expand(view: IslandViewName) {
-    this.stopSequenceIfLeaving(view);
     State.view = view;
     if (State.mode !== "expanded") this.setMode("expanded");
     else this.animateGeometry(false);
@@ -429,9 +246,6 @@ export class Island {
   }
 
   setView(view: IslandViewName) {
-    this.stopSequenceIfLeaving(view);
-    this.tintRequest = null;
-    this.viewState = null;
     if (State.mode !== "expanded") {
       this.fsm.forceHome();
       State.view = view;
@@ -446,69 +260,8 @@ export class Island {
     State.notify();
   }
 
-  /** Writes what was decided on the island in the journal, on the step that was waiting for it. */
-  private noteOutcome(tool: string, write: (step: SessionStep) => void) {
-    const step = [...State.session.steps].reverse().find((s) => s.tool === tool && s.state === "running");
-    if (step) write(step);
-  }
-
-  /** The request on the card got its answer: its session is back at work. */
-  private settleRequest() {
-    const session = State.session;
-    session.approval = null;
-    session.question = null;
-    session.state = "working";
-    this.afterRequest(true);
-  }
-
-  /**
-   * The request of the session in front is done with. Another session waiting
-   * for an answer comes forward with its own; with none, the island is free
-   * to close again. `show` moves the view too: to that card, or back to the
-   * overview.
-   */
-  afterRequest(show: boolean) {
-    const next = State.pendingApproval || State.pendingQuestion ? State.session : State.waiting[0];
-    if (next) State.bringForward(next.id);
-    State.isPinned = next != null;
-    this.fsm.pinned = next != null;
-    State.setPillBadge(CLAUDE_ID, next && State.focusId !== CLAUDE_ID ? "approval" : null);
-    State.present();
-    if (show) this.setView(next ? (next.question ? "question" : "approval") : State.defaultView());
-  }
-
-  /**
-   * Puts another session in front, at the user's asking: its card if it is
-   * waiting for an answer, and never the card of the one that was there.
-   */
-  private pickSession(id: string) {
-    if (id === State.frontId) return;
-    Sound.play("blip");
-    // The list of sessions is reached whatever pill is in front: picking one is asking for Claude's.
-    if (State.focusId !== CLAUDE_ID) State.setFocus(CLAUDE_ID);
-    State.bringForward(id);
-    const session = State.session;
-    const waits = session.question != null || session.approval != null;
-    State.isPinned = waits;
-    this.fsm.pinned = waits;
-    if (waits) this.setView(session.question ? "question" : "approval");
-    else if (State.view === "approval" || State.view === "question") this.setView(State.defaultView());
-  }
-
-  /** Where the session runs: the Claude app brought forward, or its terminal (VS Code without WSL). */
-  private openClient() {
-    if (State.session.client === "desktop") void Bridge.openClaudeApp();
-    else {
-      const s = State.session;
-      void Bridge.openTerminal(s.cwd, s.wslDistro, s.terminalPids);
-    }
-    // The window is in front now: fold the island back.
-    this.collapse();
-  }
-
   collapse() {
     this.botPress = null;
-    if (this.draggingGhost) this.endGhostHidden();
     State.isPinned = false;
     this.fsm.pinned = false;
     // Drive the state machine rather than the mode: setting the mode behind its
@@ -517,7 +270,7 @@ export class Island {
     this.fsm.forcePetit();
   }
 
-  /** Alert from the hook server: open on this view. Pinned alerts never auto-close. */
+  /** Open on this view. Pinned alerts never auto-close. */
   alert(view: IslandViewName) {
     this.fsm.pinned = State.isPinned;
     this.fsm.forceHome();
@@ -528,192 +281,9 @@ export class Island {
     this.fsm.reveal();
   }
 
-  /** Any session with a request waiting for an answer. */
-  private hasPending(): boolean {
-    return State.sessions.some((s) => s.approval != null || s.question != null);
-  }
-
-  /** Hotkey: straight to the card waiting for an answer (or home). */
-  goToAlert() {
-    if (State.focusId !== CLAUDE_ID) State.setFocus(CLAUDE_ID);
-    if (this.hasPending()) this.afterRequest(true);
-    this.fsm.forceHome();
-  }
-
-  /** The mouse reaches a hidden island: with a request pending it opens on the card, else just peeks. */
+  /** The mouse reaches a hidden island: it just peeks. */
   private mouseEnter() {
-    if (this.fsm.state === "hidden" && this.hasPending() && State.focusId === CLAUDE_ID) {
-      this.fsm.pinned = true;
-      this.fsm.forceHome();
-    } else this.fsm.mouseEntered();
-  }
-
-  // ── File drop ───────────────────────────────────────────────────────────────
-
-  /**
-   * Cancel on the drop card. The file goes with it: leaving it in the state
-   * meant the next chat still carried it, chip and all.
-   */
-  private cancelDrop() {
-    State.droppedFile = null;
-    this.setView(State.defaultView());
-  }
-
-  private onDragDrop(e: { type: string; paths?: string[] }) {
-    if (e.type !== "over") void Bridge.log(`drag ${e.type} ${e.paths?.length ?? 0} file(s)`);
-    if (State.paused) return;
-    switch (e.type) {
-      case "enter":
-      case "over": {
-        if (State.fileDragOver) return;
-        this.cancelAbandon();
-        this.dragOrigin ??= { state: this.fsm.state, view: State.view };
-        State.fileDragOver = true;
-        this.engine.animateMorph(1);
-        this.alert("upload");
-        // After alert, not before: from a hidden/compact island forceHome first
-        // expands to the default view, which deactivates any running sequence —
-        // the drop then sat on "0 %" forever with no frame driving it.
-        UploadSeq.enterZone(State.mouseInIsland.x, State.mouseInIsland.y);
-        break;
-      }
-      case "leave": {
-        if (!State.fileDragOver) return;
-        State.fileDragOver = false;
-        this.engine.animateMorph(0);
-        // The island stays open while the drag session is alive — the file may
-        // come back. The button coming up ends it (the "end" case).
-        UploadSeq.exitZone();
-        State.notify();
-        break;
-      }
-      case "end": {
-        // Released somewhere else (or Esc): the one way the island gets back to
-        // where it was. A short grace lets a drop that raced the end win.
-        State.fileDragOver = false;
-        this.engine.animateMorph(0);
-        this.scheduleAbandon();
-        break;
-      }
-      case "drop": {
-        this.cancelAbandon();
-        this.dragOrigin = null;
-        State.fileDragOver = false;
-        const path = e.paths?.[0];
-        if (!path) {
-          this.engine.animateMorph(0);
-          this.setView(State.defaultView());
-          return;
-        }
-        this.swallow(path);
-        break;
-      }
-    }
-  }
-
-  /**
-   * The file went elsewhere (or the drag was cancelled). A short grace lets a
-   * late `drop` win, then the island goes back to where it was before the drag.
-   */
-  private scheduleAbandon() {
-    this.cancelAbandon();
-    this.abandonTimer = window.setTimeout(() => {
-      this.abandonTimer = null;
-      this.abandonDrag();
-    }, 250);
-  }
-
-  private cancelAbandon() {
-    if (this.abandonTimer != null) window.clearTimeout(this.abandonTimer);
-    this.abandonTimer = null;
-  }
-
-  private abandonDrag() {
-    const origin = this.dragOrigin;
-    this.dragOrigin = null;
-    if (!origin || State.fileDragOver || UploadSeq.dropped) return;
-    // The user moved on to something else in the meantime: leave it alone.
-    if (State.mode !== "expanded" || State.view !== "upload") return;
-    void Bridge.log(`drag abandoned, back to ${origin.state}/${origin.view}`);
-    UploadSeq.deactivate();
-    switch (origin.state) {
-      case "hidden":
-        // Still under the cursor (an Escape over the island): stay reachable.
-        if (this.wasInIsland) this.collapse();
-        else this.fsm.forceHidden();
-        break;
-      case "home":
-        this.setView(origin.view);
-        break;
-      default:
-        this.collapse();
-    }
-  }
-
-  /**
-   * Mochi eats the file. Nothing here waits on the file system: the copy into
-   * the inbox runs in the background and swaps the path in when it lands, so a
-   * slow disk can never stall the animation — same as FileDropHandler on macOS.
-   */
-  private swallow(path: string) {
-    const name = path.split(/[\\/]/).pop() || "file";
-    State.droppedFile = { name, path };
-
-    this.uploadTens = 0;
-    this.uploadDone = false;
-
-    this.engine.gulp();
-    Sound.play("approve");
-    this.engine.triggerEmote("happy");
-    this.engine.animateMorph(0);
-
-    State.uploadProgress = 0;
-    this.setView("uploading");
-    // setView on a closed island goes through forceHome, which stops the
-    // sequence; without it nothing advances past "0 %" or reaches `choose`.
-    if (!UploadSeq.isActive) {
-      void Bridge.log("drop: sequence was not running, restarted");
-      UploadSeq.enterZone(State.mouseInIsland.x, State.mouseInIsland.y);
-    }
-    UploadSeq.performDrop(State.uploadDuration);
-    this.ensureRunning();
-
-    void Bridge.ingestFile(path)
-      .then((file) => {
-        State.droppedFile = { name: file.name, path: file.path };
-        State.notify();
-      })
-      .catch((err) => {
-        UploadSeq.deactivate();
-        this.engine.animateMorph(0);
-        this.showError(err);
-      });
-  }
-
-  /** A file from the Mídia list, taken in like a dropped one: copied into the inbox (the only place a session may attach from), then asked about. */
-  private async openFileInClaude(path: string) {
-    this.showNote("Abrindo no terminal…");
-    try {
-      const file = await Bridge.ingestFile(path);
-      this.launchWith(file.path);
-    } catch (err) {
-      this.showError(err);
-    }
-  }
-
-  /** A new terminal session, in the front session's profile and folder, with the file attached. */
-  private launchWith(path: string) {
-    const front = State.session;
-    // Shown at once: it also takes the choose card down, so a second click can't launch twice.
-    this.showNote("Abrindo no terminal…");
-    Bridge.sessionLaunch({ profile: front.profile, cwd: front.cwd, resume: null, attach: path })
-      .then(() => Sound.play("attach"))
-      .catch((err) => this.showError(err));
-  }
-
-  private showError(err: unknown) {
-    this.showNote(String(err).replace(/^Error:\s*/, ""));
-    Sound.play("error");
+    this.fsm.mouseEntered();
   }
 
   /** A line on the note card for a moment, then back — unless the island moved on meanwhile. */
@@ -727,92 +297,12 @@ export class Island {
     }, 2400);
   }
 
-  // ── Mochi drag-out → window attach ──────────────────────────────────────────
-
-  /**
-   * A simple CSS Mochi (cream squircle + two eyes) that follows the cursor while
-   * he is dragged out. The real canvas is hidden until the release.
-   */
-  private buildGhost(): HTMLCanvasElement {
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const c = h("canvas", {
-      id: "bot-ghost",
-      style: `position:absolute;display:none;width:${GHOST_W}px;height:${GHOST_H}px;z-index:60;pointer-events:none;filter:drop-shadow(0 6px 14px rgba(0,0,0,.5))`,
-    }) as HTMLCanvasElement;
-    c.width = Math.round(GHOST_W * dpr);
-    c.height = Math.round(GHOST_H * dpr);
-    return c;
-  }
-
-  /** The dragged Mochi is the real model — his own engine, drawn at the cursor. */
-  private drawGhost(dt: number) {
-    const ctx = this.ghostEl.getContext("2d");
-    if (!ctx) return;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    this.ghostEngine.bodyColor = this.engine.bodyColor;
-    this.ghostEngine.particleOverhang = BOT_OVERHANG;
-    this.ghostEngine.update(dt);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    wipe(ctx);
-    this.ghostEngine.draw(ctx, GHOST_W, GHOST_H);
-  }
-
-  private startGhost(x: number, y: number) {
-    this.draggingGhost = true;
-    this.botPress = null;
-    this.cancelBotHover();
-    this.botHovering = false;
-    this.engine.triggerEmote("surprised");
-    this.ghostEngine.setState("idle", true);
-    this.ghostEngine.triggerEmote("surprised", 60);
-    Sound.play("pop");
-    this.moveGhost(x, y);
-    this.drawGhost(0);
-    this.ghostEl.style.display = "block";
-  }
-
-  private moveGhost(x: number, y: number) {
-    this.ghostEl.style.left = `${x - GHOST_W / 2}px`;
-    this.ghostEl.style.top = `${y - BOT_OVERHANG / 2 - GHOST_H / 2}px`;
-  }
-
-  private endGhostHidden() {
-    this.draggingGhost = false;
-    this.ghostEl.style.display = "none";
-    this.ensureRunning();
-  }
-
-  /** Release of the left button: ends a ghost drag, or is Mochi's plain click. Idempotent. */
-  private onMouseUp(x: number, y: number) {
-    if (this.draggingGhost) {
-      const rect = this.islandRect();
-      const overIsland =
-        x >= rect.x - HIT_MARGIN && x <= rect.x + rect.w + HIT_MARGIN &&
-        y >= rect.y - HIT_MARGIN && y <= rect.y + rect.h + HIT_MARGIN;
-      this.endGhostHidden();
-      if (overIsland) return; // dropped back home: silent cancel
-      void Bridge.attachWindow()
-        .then((file) => {
-          // Not sent to Claude: it is already in the inbox and the Mídia list; the user picks the action there.
-          this.engine.triggerEmote("wink");
-          Sound.play("attach");
-          highlightMedia(file.name);
-          this.fsm.pinned = true;
-          this.fsm.forceHome();
-          this.expand("media");
-          // Pinned for a moment only, then the usual auto-close applies again.
-          window.clearTimeout(this.mediaPinTimer);
-          this.mediaPinTimer = window.setTimeout(() => {
-            this.fsm.pinned = State.isPinned;
-            if (this.fsm.state === "home") this.fsm.forceHome();
-          }, 8000);
-        })
-        .catch((err) => this.showError(err));
-    } else if (this.botPress) {
+  /** Release of the left button: Mochi plain click, or the end of a nudge. Idempotent. */
+  private onMouseUp() {
+    if (this.botPress) {
       this.botPress = null;
       this.cancelBotHover();
-      // A Mochi with news to tell takes you to it; any other gets his slap.
-      if (!followNews(this)) this.engine.slap();
+      this.engine.slap();
     } else if (this.nudge) {
       const moved = this.nudge.moved;
       this.nudge = null;
@@ -821,59 +311,24 @@ export class Island {
     }
   }
 
-  /**
-   * Sounds and view changes hung off the canvas timeline: a `tick` every 10 %,
-   * the ✓ chime when the bar completes, then `choose` once Mochi has grown back.
-   */
-  private stepSequence() {
-    const since = UploadSeq.sinceDrop();
-    if (since == null) return;
-    const dur = State.uploadDuration;
-    const p = Math.max(0, Math.min(1, (since - PRE_PROGRESS) / dur));
-
-    const tens = Math.floor(p * 10);
-    if (tens > this.uploadTens && tens < 10) {
-      this.uploadTens = tens;
-      Sound.play("tick");
-    }
-
-    if (!this.uploadDone && since >= PRE_PROGRESS + dur) {
-      this.uploadDone = true;
-      Sound.play("approve");
-      this.engine.triggerEmote("happy");
-    }
-    // The extra second is the grow-back, after which the choose card is up.
-    if (since >= PRE_PROGRESS + dur + 1 && State.view === "uploading") {
-      this.setView("choose");
-    }
-  }
-
   // ── Geometry ────────────────────────────────────────────────────────────────
 
   private targetSize(): { w: number; h: number; r: number } {
-    const news = State.focusId != null && State.integrations[State.focusId]?.news != null;
-    // A diff or a plan on the approval card: the island grows to its tallest.
-    const proposal = State.pendingApproval?.proposal != null || !!State.pendingApproval?.plan;
     // A view that knows how tall its content is has the last word.
     const fitted = this.views?.get(State.view)?.height ?? null;
     const line = this.compactLine();
-    const cw = compactWidth(this.textOverGrid() ? 0 : State.otherTasks.length, line ? this.textWidth(line) : 0);
-    const { w, h } = islandSize(State.mode, State.view, news, proposal, fitted, cw);
+    const cw = compactWidth(State.otherTasks.length, line ? this.textWidth(line) : 0);
+    const { w, h } = islandSize(State.mode, State.view, fitted, cw);
     const r = State.mode === "expanded" ? EXPANDED_CORNER : ROUNDED_CORNER;
     return { w, h, r };
   }
 
-  /** What the compact island says: Claude's status, when no other integration is up. */
+  /**
+   * The one-line status the compact island says. Empty while no provider is
+   * plugged in; the DOM (#activity-line) and its width logic are kept for one.
+   */
   private compactLine(): string {
-    const base = State.otherTasks.length === 0 ? activityLine(State.session) : "";
-    if (!Timer.active) return base;
-    // "esperando você" wins; otherwise the timer shows even beside a session or an integration pill.
-    return base === "esperando você" ? base : Timer.text();
-  }
-
-  /** The text takes the place of the mini grid (a timer beside integration pills). */
-  private textOverGrid(): boolean {
-    return Timer.active && this.compactLine() !== "";
+    return "";
   }
 
   /** New word rises from below while the old one leaves upward; instant if nothing was showing. */
@@ -941,7 +396,6 @@ export class Island {
     this.activityEl.style.textOverflow = this.width.animating ? "clip" : "";
     this.activityEl.style.top = `${hh / 2 - 8}px`;
     this.greetingCanvas.style.left = `${(w - EXPANDED_W) / 2}px`;
-    this.uploadCanvas.el.style.left = `${(w - EXPANDED_W) / 2}px`;
 
     const rect = { x: (PANEL_W - w) / 2 + off, y: 0, w, h: hh };
     const p = this.pushedRect;
@@ -1028,7 +482,7 @@ export class Island {
     // The DOM only sees releases over our window; the cursor poll's falling edge
     // covers the rest. Both funnel into onMouseUp.
     window.addEventListener("mouseup", () => {
-      if (!this.draggingGhost) this.onMouseUp(State.mouse.x, State.mouse.y);
+      this.onMouseUp();
     });
 
     window.addEventListener("keydown", (e) => {
@@ -1036,7 +490,6 @@ export class Island {
       State.lastActivity = performance.now();
     });
 
-    void onDragDrop((e) => this.onDragDrop(e));
 
     // Outside Tauri (plain browser) drive the cursor from DOM events so the
     // island can be inspected with `npm run dev`.
@@ -1071,18 +524,14 @@ export class Island {
       this.offsetX.set(clamp(this.nudge.off + x - this.nudge.x, -m, m)); // x only, never y
       this.ensureRunning();
     }
+    // Pulled away from Mochi: not a click any more.
     if (this.botPress && down && Math.hypot(x - this.botPress.x, y - this.botPress.y) > 7) {
-      this.startGhost(x, y);
-    }
-    if (this.draggingGhost) {
-      if (released) this.onMouseUp(x, y);
-      else this.moveGhost(x, y);
-      this.ensureRunning();
-      return; // no hover or auto-close bookkeeping mid-drag
+      this.botPress = null;
+      this.cancelBotHover();
     }
 
     // A click elsewhere on screen folds the island (#31). Judged on the release, so a file
-    // dragged in from Explorer and dropped on us isn't one; an approval/question (isPinned) keeps it.
+    // dragged in from Explorer and dropped on us isn't one; a pinned island (isPinned) keeps it.
     const inRect = x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
     if (pressed) this.pressedOutside = !inRect;
     if (released && this.pressedOutside) {
@@ -1090,13 +539,8 @@ export class Island {
       if (!inRect && State.mode === "expanded" && !State.isPinned) this.collapse();
     }
     // A stale press (released off the island) must not turn a later drag into a ghost.
-    if (released && (this.botPress || this.nudge)) this.onMouseUp(x, y);
+    if (released && (this.botPress || this.nudge)) this.onMouseUp();
 
-    // Windows sends no cursor position with an OLE drag, so the drop sequence is
-    // fed from the Win32 cursor poll instead — it runs throughout the drag.
-    if (UploadSeq.isActive && !UploadSeq.dropped) {
-      UploadSeq.updateCursor(State.mouseInIsland.x, State.mouseInIsland.y);
-    }
 
     const inIsland =
       x >= rect.x - HIT_MARGIN && x <= rect.x + rect.w + HIT_MARGIN &&
@@ -1224,44 +668,26 @@ export class Island {
         this.greeting.draw(gctx);
       }
     } else {
-      // Kept running even while the drop canvas is up, so the island's own Mochi
-      // is already in the right place the moment the canvas fades out.
       this.drawBot(dt);
     }
 
-    const uploadActive = this.uploadActive;
-    if (uploadActive) this.uploadCanvas.draw(UploadSeq.frame(), nowMs / 1000);
-    this.uploadCanvas.el.classList.toggle("on", uploadActive);
-    this.viewsEl.classList.toggle("hidden-by-upload", uploadActive);
-    this.contentEl.classList.toggle("upload-active", uploadActive);
-
-    if (this.draggingGhost) this.drawGhost(dt);
-
     tickMiniBots(dt);
-    const view = this.views.get(State.view);
-    view?.tick?.(nowMs);
-    if (UploadSeq.isActive) this.stepSequence();
+    this.views.get(State.view)?.tick?.(nowMs);
     this.updateCountdown(nowMs);
 
     // Nothing is drawn while the island is hidden, so nothing may keep the loop
-    // alive either. This used to read `... || this.engine.busy || State.mode !==
-    // "hidden"`, and engine.busy is permanently true for any state with a
-    // looping animation — breathing, ratelimit sweat, sleeping z's, the search
-    // sweep — so a hidden island went on burning frames in exactly the states it
-    // spends most of its life in. Geometry still has to finish retracting.
+    // alive either (engine.busy is permanently true for looping animations).
+    // Geometry still has to finish retracting.
     const settling =
       this.width.animating || this.height.animating || this.radius.animating || !this.offsetX.settled;
     const busy = State.mode === "hidden"
       ? settling
       : settling ||
         !this.botCx.settled || !this.botCy.settled || !this.botSize.settled ||
-        greetingActive || this.engine.busy || UploadSeq.isActive || this.tintSettling ||
+        greetingActive || this.engine.busy || this.tintSettling ||
         // The auto-close countdown bar is only redrawn here; a stopped loop froze
         // it and it caught up in jumps whenever something else animated.
-        (State.mode === "expanded" && !State.isPinned && this.homeCollapseAt != null) ||
-        // A view showing something live keeps its Mochis moving: a run's crew
-        // would otherwise freeze the moment the big one came to rest.
-        this.viewState != null;
+        (State.mode === "expanded" && !State.isPinned && this.homeCollapseAt != null);
 
     if (busy) {
       requestAnimationFrame(this.frame);
@@ -1272,19 +698,15 @@ export class Island {
   };
 
   private updateBotTargets() {
-    const p = botPosition(
-      State.mode, State.view, this.height.value, State.uploadProgress,
-    );
+    const p = botPosition(State.mode, State.view, this.height.value);
     this.botCx.target = p.cx;
     this.botCy.target = p.cy;
     this.botSize.target = p.diameter / 0.6;
 
     const greetingActive = State.mode === "expanded" && State.view === "greeting";
-    // The drop canvas draws its own Mochi; two of them would overlap.
-    const visible = p.opacity > 0 && !greetingActive && !this.uploadActive && !this.draggingGhost;
-    this.botCanvas.style.opacity = visible ? "1" : "0";
+    this.botCanvas.style.opacity = p.opacity > 0 && !greetingActive ? "1" : "0";
 
-    if (State.mode === "expanded" && State.view !== "uploading" && !greetingActive && !this.uploadActive) {
+    if (State.mode === "expanded" && !greetingActive) {
       const d = p.diameter;
       const color = botGlowColor(State.effectiveState);
       this.botGlow.style.display = "block";
@@ -1321,26 +743,19 @@ export class Island {
     this.engine.particleOverhang = BOT_OVERHANG;
     this.engine.lookX = this.lookX();
     this.engine.lookY = this.lookY();
-    if (this.engine.morph > 0.3) {
-      this.engine.slotHTarget = State.fileDragOver ? 0.2 : 0;
-    } else {
-      this.engine.slotHTarget = 0;
-      if (this.engine.morph < 0.05) {
-        this.engine.slotH = 0;
-        this.engine.slotHVel = 0;
-      }
-    }
+    this.engine.slotHTarget = 0;
+    this.engine.slotH = 0;
+    this.engine.slotHVel = 0;
     this.engine.update(dt);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     wipe(ctx);
     this.engine.draw(ctx, w, hCss);
   }
 
-  /** The colour Mochi should be: a view's request, else his pill's colour. */
+  /** The colour Mochi should be: his focused pill colour, else his own cream. */
   private targetBodyColor(): RGB | null {
-    if (this.tintRequest) return this.tintRequest;
     const focus = State.focusTask;
-    return focus?.isIntegration ? hexToRGB(focus.color) : null;
+    return focus ? hexToRGB(focus.color) : null;
   }
 
   /**
@@ -1391,15 +806,13 @@ export class Island {
   }
 
   // ── DOM sync ────────────────────────────────────────────────────────────────
-
   private syncDom() {
     const expanded = State.mode === "expanded";
     const greetingActive = expanded && State.view === "greeting";
 
     this.contentEl.style.opacity = expanded && !greetingActive ? "1" : "0";
     // Folded or hidden, the views are out of sight but still in the page: what
-    // moves in them on its own stops (see #content.away), and picks up when the
-    // island unfolds.
+    // moves in them on its own stops (see #content.away).
     this.contentEl.classList.toggle("away", !expanded);
     this.contentEl.style.pointerEvents = expanded && !greetingActive ? "auto" : "none";
     this.greetingCanvas.style.display = greetingActive ? "block" : "none";
@@ -1411,21 +824,8 @@ export class Island {
       if (on) view.sync();
     }
 
-    // The sessions view is the only one with a text field, so it is the only
-    // time the island is allowed to take keyboard focus.
-    if (this.lastSyncedView !== State.view) {
-      const wasChat = this.lastSyncedView === "sessions";
-      this.lastSyncedView = State.view;
-      if (State.view === "sessions") {
-        void Bridge.focusWindow(true);
-        window.setTimeout(() => this.views.get("sessions")?.focus?.(), 120);
-      } else if (wasChat) {
-        void Bridge.focusWindow(false);
-      }
-    }
-
     // Compact mini grid
-    const showGrid = State.mode === "compact" && !this.textOverGrid();
+    const showGrid = State.mode === "compact";
     this.miniGrid.style.opacity = showGrid ? "1" : "0";
     if (showGrid) {
       const others = State.otherTasks.slice(0, 4);
@@ -1450,7 +850,7 @@ export class Island {
     if (line) this.setActivityText(line);
     this.activityShown = !!line;
 
-    // Text or integrations changed while compact: the island follows, width only
+    // Text or minis changed while compact: the island follows, width only
     // (height/radius belong to a running hidden→compact spring). Not while hidden:
     // the window is collapsed and the frame loop must stay idle.
     if (State.mode === "compact") {
@@ -1464,11 +864,7 @@ export class Island {
     }
 
     syncMiniBotStates(State.tasks);
-    // A view's look fills in for a Mochi with nothing of his own to say: idle,
-    // or only "working" — which the view, closer to what it shows, knows better.
-    const state = State.effectiveState;
-    const quiet = state === "idle" || state === "working";
-    this.engine.setState(this.viewState && quiet ? this.viewState : state);
+    this.engine.setState(State.effectiveState);
   }
 
   /** Applies settings coming from Rust at boot. */
