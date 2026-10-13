@@ -1,97 +1,30 @@
-// Mochi's chat through the user's own Claude Code instead of an API key.
-//
-// `claude -p` runs headless, on the user's subscription, either on Windows or
-// inside a WSL distro — whichever the settings window marked "Use for Mochi".
-// The question goes in on stdin, never on a command line; the conversation
-// carries on with `--resume <session>`.
-//
-// Mochi gets read-only tools (Read, WebSearch, WebFetch) and runs in Coucou's
-// inbox, where dropped files land, so it can read what was dropped and nothing
-// it could break. Hooks are switched off for these runs, and the relay ignores
-// anything marked COUCOU_INTERNAL besides: Mochi's own chat must never show up
-// in the island as a Claude Code session.
+// Helpers around the user's own Claude Code: where its CLI lives, a clean
+// environment to start it in, and whether it is signed in.
 
 use std::io::{Read, Write};
 use std::os::windows::process::CommandExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-use crate::claude::{ChatContext, ChatReply, SYSTEM_PROMPT};
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-/// A long answer with a few web searches can take a while; a wedged CLI can't
-/// hold the chat forever.
-const TIMEOUT: Duration = Duration::from_secs(300);
-
-const TOOLS: &str = "Read,WebSearch,WebFetch";
-const SETTINGS: &str = r#"{"disableAllHooks":true}"#;
-const EXTRA_PROMPT: &str = "You are answering from a small chat bubble, not a terminal. \
-The user's dropped files are in the current directory; read them when the question is about them. \
-You cannot change files or run commands here.";
-
-/// Where Mochi's answers come from.
+/// Which Claude Code: the Windows one or a WSL distro's.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Backend {
-    Api,
     Windows,
     Wsl(String),
 }
 
 impl Backend {
-    /// `settings.chat_backend`: "api", "windows" or "wsl:<distro>". Anything
-    /// unrecognised is the API, which needs nothing installed.
+    /// "windows" or "wsl:<distro>"; anything unrecognised is Windows.
     pub fn parse(value: &str) -> Self {
-        match value {
-            "windows" => Self::Windows,
-            v => match v.strip_prefix("wsl:") {
-                Some(d) if crate::wsl::is_distro_name(d) => Self::Wsl(d.to_string()),
-                _ => Self::Api,
-            },
+        match value.strip_prefix("wsl:") {
+            Some(d) if crate::wsl::is_distro_name(d) => Self::Wsl(d.to_string()),
+            _ => Self::Windows,
         }
-    }
-
-    pub fn key(&self) -> String {
-        match self {
-            Self::Api => "api".into(),
-            Self::Windows => "windows".into(),
-            Self::Wsl(d) => format!("wsl:{d}"),
-        }
-    }
-}
-
-/// The session Mochi is in: the backend it belongs to (a session id from WSL
-/// means nothing to the Windows CLI, and vice versa), its id once Claude Code
-/// has given it one, and the folder it runs in — Coucou's inbox when unset.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ActiveSession {
-    pub backend: String,
-    pub id: Option<String>,
-    pub cwd: Option<String>,
-}
-
-#[derive(Default)]
-pub struct LocalSession(Mutex<Option<ActiveSession>>);
-
-impl LocalSession {
-    /// A new session in the inbox — what a dropped file starts.
-    pub fn reset(&self) {
-        *self.0.lock().unwrap() = None;
-    }
-
-    pub fn set(&self, active: Option<ActiveSession>) {
-        *self.0.lock().unwrap() = active;
-    }
-
-    /// The active session, if it belongs to `backend`.
-    pub fn get(&self, backend: &Backend) -> Option<ActiveSession> {
-        self.0.lock().unwrap().clone().filter(|a| a.backend == backend.key())
     }
 }
 
@@ -173,7 +106,6 @@ pub fn fresh_env(cmd: &mut Command) {
 /// the Claude desktop app answers "no" until it is signed in on its own.
 pub fn logged_in(backend: &Backend) -> Option<bool> {
     let cmd = match backend {
-        Backend::Api => return None,
         Backend::Windows => {
             let mut c = Command::new(windows_cli()?);
             c.args(["auth", "status"]);
@@ -193,110 +125,6 @@ pub fn logged_in(backend: &Backend) -> Option<bool> {
     // Pretty-printed JSON; a login shell may print its own lines first.
     let json = &out[out.find('{')?..];
     serde_json::from_str::<Value>(json).ok()?.get("loggedIn")?.as_bool()
-}
-
-/// One chat turn through Claude Code. Blocking: run it off the main thread.
-pub fn send(
-    backend: &Backend,
-    session: &LocalSession,
-    query: String,
-    context: Option<ChatContext>,
-) -> Result<ChatReply, String> {
-    let active = session.get(backend);
-    let resume = active.as_ref().and_then(|a| a.id.clone());
-    let folder = active.as_ref().and_then(|a| a.cwd.clone());
-
-    // Context rides along with the first message only, as with the API.
-    let mut prompt = String::new();
-    if resume.is_none() {
-        match &context {
-            Some(ChatContext::File { name, path }) => {
-                let file = Path::new(path).file_name().map(|f| f.to_string_lossy().into_owned());
-                prompt.push_str(&format!(
-                    "The user dropped a file named \"{name}\". It is in the current directory as \"{}\".\n\n",
-                    file.unwrap_or_else(|| name.clone())
-                ));
-            }
-            Some(ChatContext::Window { app_name, title, url }) => {
-                prompt.push_str(&format!("Context — App: {app_name}, Window: {title}"));
-                if let Some(url) = url {
-                    prompt.push_str(&format!(", URL: {url}"));
-                }
-                prompt.push_str("\n\n");
-            }
-            None => {}
-        }
-    }
-    prompt.push_str(&query);
-
-    let mut args: Vec<String> = vec![
-        "-p".into(),
-        "--output-format".into(),
-        "json".into(),
-        "--settings".into(),
-        SETTINGS.into(),
-        "--allowedTools".into(),
-        TOOLS.into(),
-        "--append-system-prompt".into(),
-        format!("{SYSTEM_PROMPT}\n{EXTRA_PROMPT}"),
-    ];
-    if let Some(id) = &resume {
-        args.push("--resume".into());
-        args.push(id.clone());
-    }
-
-    let inbox = crate::files::inbox_dir();
-    let _ = std::fs::create_dir_all(&inbox);
-    // A session's own folder, or the inbox for a new one (dropped files land there).
-    let cwd = folder.clone().unwrap_or_else(|| inbox.to_string_lossy().into_owned());
-
-    let mut cmd = match backend {
-        Backend::Api => return Err("O Mochi está configurado para usar a API do Claude.".into()),
-        Backend::Windows => {
-            let cli = windows_cli()
-                .ok_or("O Claude Code não está instalado no Windows. Escolha outro motor nas Configurações.")?;
-            let mut c = Command::new(cli);
-            c.args(&args).current_dir(&cwd);
-            fresh_env(&mut c);
-            if let Some(dir) = crate::settings::claude_config_dir() {
-                c.env("CLAUDE_CONFIG_DIR", dir);
-            }
-            c
-        }
-        Backend::Wsl(distro) => {
-            // A login shell finds `claude` where the user installed it
-            // (~/.local/bin, npm…); the arguments travel as "$@", unparsed.
-            let mut c = Command::new("wsl.exe");
-            // --cd takes a Linux path (from the transcript) as well as a Windows one.
-            c.args(["-d", distro, "--cd"])
-                .arg(&cwd)
-                .args(["--exec", "sh", "-lc", r#"exec claude "$@""#, "claude"])
-                .args(&args);
-            let wslenv = std::env::var("WSLENV").unwrap_or_default();
-            let wslenv = if wslenv.is_empty() { "COUCOU_INTERNAL".into() } else { format!("{wslenv}:COUCOU_INTERNAL") };
-            c.env("WSLENV", wslenv);
-            c
-        }
-    };
-    cmd.env("COUCOU_INTERNAL", "1");
-
-    let (stdout, stderr) = run(cmd, &prompt, TIMEOUT)?;
-    let reply = parse_reply(&stdout).ok_or_else(|| {
-        let why = stderr.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("no answer");
-        format!("Claude Code: {}", why.chars().take(200).collect::<String>())
-    })?;
-
-    let id = reply.session_id.clone().or(resume);
-    if id.is_some() {
-        session.set(Some(ActiveSession { backend: backend.key(), id: id.clone(), cwd: folder }));
-    }
-    if reply.is_error {
-        return Err(format!("Claude Code: {}", reply.text.chars().take(300).collect::<String>()));
-    }
-    if reply.text.trim().is_empty() {
-        return Err("Sem texto na resposta.".into());
-    }
-    Ok(ChatReply { text: reply.text.trim().to_string(), session: id })
 }
 
 /// Spawns the CLI, feeds it the prompt and collects its output under a deadline.
@@ -342,34 +170,6 @@ fn run(mut cmd: Command, prompt: &str, timeout: Duration) -> Result<(String, Str
     Ok((out.join().unwrap_or_default(), err.join().unwrap_or_default()))
 }
 
-struct Reply {
-    text: String,
-    session_id: Option<String>,
-    is_error: bool,
-}
-
-/// The `--output-format json` result object. A login shell may print its own
-/// lines first, so the last line that parses as one is taken.
-fn parse_reply(stdout: &str) -> Option<Reply> {
-    stdout.lines().rev().find_map(|line| {
-        let v: Value = serde_json::from_str(line.trim()).ok()?;
-        let is_result = v.get("type").and_then(Value::as_str) == Some("result")
-            || (v.get("result").is_some() && v.get("session_id").is_some());
-        if !is_result {
-            return None;
-        }
-        Some(Reply {
-            text: v.get("result").and_then(Value::as_str).unwrap_or("").to_string(),
-            session_id: v
-                .get("session_id")
-                .and_then(Value::as_str)
-                .filter(|s| s.chars().all(|c| c.is_ascii_hexdigit() || c == '-'))
-                .map(str::to_string),
-            is_error: v.get("is_error").and_then(Value::as_bool).unwrap_or(false),
-        })
-    })
-}
-
 /// Claude Code inside a distro, as its login shell finds it.
 pub fn wsl_cli(distro: &str) -> Option<String> {
     crate::wsl::run_wsl(&["-d", distro, "--exec", "sh", "-lc", "command -v claude"])
@@ -390,26 +190,9 @@ mod tests {
 
     #[test]
     fn backends_parse_and_refuse_odd_distros() {
-        assert_eq!(Backend::parse("api"), Backend::Api);
         assert_eq!(Backend::parse("windows"), Backend::Windows);
         assert_eq!(Backend::parse("wsl:Ubuntu-22.04"), Backend::Wsl("Ubuntu-22.04".into()));
-        assert_eq!(Backend::parse("wsl:x&y"), Backend::Api);
-        assert_eq!(Backend::parse(""), Backend::Api);
-    }
-
-    #[test]
-    fn the_result_line_is_found_after_shell_noise() {
-        let out = "Welcome to Ubuntu\n{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"OK\",\"session_id\":\"b015262a-3d5d-46cc-b71d-8f56527dee84\"}\n";
-        let r = parse_reply(out).unwrap();
-        assert_eq!(r.text, "OK");
-        assert_eq!(r.session_id.as_deref(), Some("b015262a-3d5d-46cc-b71d-8f56527dee84"));
-        assert!(!r.is_error);
-        assert!(parse_reply("not json\n").is_none());
-    }
-
-    #[test]
-    fn a_session_id_that_is_not_a_uuid_is_never_resumed() {
-        let out = r#"{"type":"result","result":"x","session_id":"--dangerously-skip-permissions"}"#;
-        assert!(parse_reply(out).unwrap().session_id.is_none());
+        assert_eq!(Backend::parse("wsl:x&y"), Backend::Windows);
+        assert_eq!(Backend::parse(""), Backend::Windows);
     }
 }
