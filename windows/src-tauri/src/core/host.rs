@@ -198,6 +198,11 @@ impl ModuleHost {
         Err(format!("O módulo {label} está desligado nas Configurações."))
     }
 
+    /// The live context of a running module (for threads started from a hotkey or a command).
+    pub fn ctx(&self, id: &str) -> Option<Arc<ModuleCtx>> {
+        self.running.lock().unwrap().get(id).cloned()
+    }
+
     pub fn state(&self) -> BTreeMap<String, bool> {
         self.effective.lock().unwrap().clone()
     }

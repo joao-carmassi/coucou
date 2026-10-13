@@ -1,0 +1,65 @@
+// The Voz section of the settings window (rendered only while the module is on).
+// The speech model is downloaded only on the button; the microphone opens only on the hotkey.
+
+import { Bridge, onEvent } from "../../core/bridge";
+import { State } from "../../core/state";
+import { h } from "../../views/dom";
+
+const DEFAULT_HOTKEY = "Ctrl+Alt+V";
+/** Rust keeps the hotkey in `extra`: absent = the default, "" = off. */
+const cfg = () => State.settings as unknown as { voiceHotkey?: string };
+
+export function voiceSettingsSection(): { el: HTMLElement; dispose(): void } {
+  const status = h("span", { class: "hint" });
+  const err = h("div", { class: "notice warn", style: "display:none" });
+  const dl = h("button", { class: "btn secondary", text: "Baixar modelo (~20 MB)" }) as HTMLButtonElement;
+  const showError = (msg: string) => {
+    err.style.display = msg ? "" : "none";
+    err.textContent = msg;
+  };
+  const refresh = async () => {
+    const st = await Bridge.voiceModelStatus();
+    status.textContent = st?.ready ? "Modelo instalado." : "Modelo não instalado.";
+    dl.disabled = !!st?.ready;
+    showError(st?.hotkeyError ?? "");
+  };
+  dl.addEventListener("click", async () => {
+    dl.disabled = true;
+    status.textContent = "Baixando…";
+    try {
+      await Bridge.voiceDownloadModel();
+    } catch (e) {
+      status.textContent = String(e).replace(/^Error:\s*/, "");
+      dl.disabled = false;
+      return;
+    }
+    void refresh();
+  });
+  const input = h("input", {
+    type: "text", value: cfg().voiceHotkey ?? DEFAULT_HOTKEY, spellcheck: "false", placeholder: "ex.: Ctrl+Alt+V",
+  }) as HTMLInputElement;
+  input.addEventListener("change", () => {
+    cfg().voiceHotkey = input.value.trim();
+    // Rust tries the new combo on save; the verdict comes back as `voice-hotkey-error`.
+    void Bridge.saveSettings(State.settings).then(() => setTimeout(() => void refresh(), 300));
+  });
+
+  const offs = [
+    onEvent<{ file: string; received: number; total: number }>("voice-download", (p) => {
+      status.textContent = `Baixando ${p.file}… ${p.total ? Math.round((100 * p.received) / p.total) + "%" : ""}`;
+    }),
+    onEvent<string>("voice-hotkey-error", showError),
+  ];
+  void refresh();
+  const el = h("section", { id: "voice" },
+    h("h2", {}, h("span", { text: "Voz" })),
+    h("div", { class: "row" },
+      h("label", { text: "Atalho de voz" }),
+      input,
+      h("span", { class: "hint", text: "Entrada de voz em inglês, reconhecida no próprio computador; o microfone só abre quando você aperta o atalho. Ex.: Ctrl+Alt+V. Aperte de novo para parar. Vazio = sem atalho." }),
+    ),
+    h("div", { class: "row" }, h("label", { text: "Modelo de voz" }), dl, status),
+    err,
+  );
+  return { el, dispose: () => offs.forEach((o) => void o.then((off) => off())) };
+}

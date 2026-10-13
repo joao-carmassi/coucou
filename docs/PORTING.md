@@ -11,5 +11,5 @@ runs on the module API (docs/MODULES-CONTRACT.md) and its folder exists under
 | timer | ported (M5, unreviewed: Gate D pending) | `src/modules/timer/**`, default OFF |
 | media | not ported | rust: modules/media/{media,capture}.rs + `attach_window`; ts: modules/media/view.ts + media.css |
 | upload | not ported | ts: modules/upload/{canvas,sequence,view}.ts + upload.css; island.ts drag/drop flow (provides on `file-drag`; uses claude's `launchFile` hook) |
-| voice | not ported | rust: modules/voice/voice.rs; ts: modules/voice/view.ts |
+| voice | ported (M5, unreviewed: Gate D pending) | `src-tauri/src/modules/voice/{mod,voice,cfg}.rs`, `src/modules/voice/**`, default OFF, requires claude. No CSS of its own |
 | integrations | not ported | rust: modules/integrations/*.rs; ts: modules/integrations/** (github, vercel, stripe, n8n, resend, calcom, notion). Must provide the `openTarget`/`followNews` hooks and its own views; must not register a view named `overview` |
