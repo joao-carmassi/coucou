@@ -18,6 +18,7 @@ import { diffLine, fileKind, plusMinus, readPatch } from "./code";
 import { markdown } from "./markdown";
 import { hasPreview, stepIcon, stepName, stepPreview } from "./step";
 import { COLOR } from "./palette";
+import { buildVoice } from "./voice";
 import { Bridge, type IntegrationNews } from "../core/bridge";
 import { Timer } from "../island/timer";
 
@@ -1217,6 +1218,7 @@ export function buildViews(
   map.set("github", buildGithub(actions));
   map.set("session", buildSession(actions));
   map.set("media", buildMedia(actions));
+  map.set("voice", buildVoice());
   // Not in the Windows v1: sending a file by email, window attach + web result.
   map.set("mail", buildPlaceholder("Enviar por e-mail não está nesta versão.", ""));
   map.set("searching", buildPlaceholder("Claude está buscando…", ""));
