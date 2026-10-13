@@ -4,7 +4,11 @@
 import { h, svg, clear } from "./dom";
 import { ICONS } from "./icons";
 import { State } from "../core/state";
-import { washRGBA, type IslandViewName, type Wash } from "../core/layout";
+import { washRGBA } from "../core/layout";
+import type { IslandViewName, Wash } from "../core/layout";
+import type { TabDef, ViewHost } from "../core/moduleApi";
+
+export type { ViewHost } from "../core/moduleApi";
 
 export interface ViewActions {
   setView(v: IslandViewName): void;
@@ -13,15 +17,6 @@ export interface ViewActions {
   setAutoClose(seconds: number): void;
   openSettingsWindow(): void;
   blip(): void;
-}
-
-export interface ViewHost {
-  el: HTMLElement;
-  sync(): void;
-  /** Called every frame while the view is on screen. */
-  tick?(nowMs: number): void;
-  /** How tall the island should be for what the view holds now, when that varies. */
-  readonly height?: number;
 }
 
 // ── Shared pieces ─────────────────────────────────────────────────────────────
@@ -34,10 +29,17 @@ export function card(wash: Wash, ...children: (Node | string)[]): HTMLElement {
 
 // ── Header ────────────────────────────────────────────────────────────────────
 
-export function buildHeader(actions: ViewActions): ViewHost {
+export interface Header extends ViewHost {
+  setTabs(tabs: TabDef[]): void;
+}
+
+/** Tabs come from the modules (setTabs); Home is always there. `tabOf` maps a view to the tab it belongs to. */
+export function buildHeader(actions: ViewActions, tabOf: (view: string) => string | undefined): Header {
   const tabHome = h("button", { class: "tab", title: "Início", onclick: () => go("empty") }, svg(ICONS.house, 13));
   const gearBtn = h("button", { title: "Configurações", onclick: () => go("settings") }, svg(ICONS.gear, 14));
   const soundBtn = h("button", { title: "Silenciar", onclick: () => actions.toggleSound() }, svg(ICONS.speakerOn, 14));
+  const tabsEl = h("div", { class: "tabs" }, tabHome);
+  let tabs: { def: TabDef; btn: HTMLElement }[] = [];
 
   function go(v: IslandViewName) {
     actions.blip();
@@ -47,15 +49,24 @@ export function buildHeader(actions: ViewActions): ViewHost {
   const el = h(
     "div",
     { id: "header" },
-    h("div", { class: "tabs" }, tabHome),
+    tabsEl,
     h("div", { class: "header-actions" }, gearBtn, soundBtn),
   );
 
   return {
     el,
+    setTabs(defs) {
+      tabs = defs.map((def) => {
+        const btn = h("button", { class: "tab", title: def.title, onclick: () => go(def.view) }, def.icon());
+        return { def, btn };
+      });
+      tabsEl.replaceChildren(tabHome, ...tabs.map((t) => t.btn));
+    },
     sync() {
       const v = State.view;
-      tabHome.classList.toggle("on", v === "empty");
+      const own = tabOf(v);
+      tabHome.classList.toggle("on", v === "overview" || v === "empty" || own === "overview");
+      for (const t of tabs) t.btn.classList.toggle("on", v === t.def.view || own === t.def.view);
       gearBtn.classList.toggle("on", v === "settings");
       clear(gearBtn);
       gearBtn.append(svg(v === "settings" ? ICONS.gearFill : ICONS.gear, 14));
@@ -160,8 +171,8 @@ function buildSettings(actions: ViewActions): ViewHost {
 // ── Registry ──────────────────────────────────────────────────────────────────
 
 /** The greeting has no DOM view: the island draws it on its own canvas. */
-export function buildViews(actions: ViewActions): Map<IslandViewName, ViewHost> {
-  const map = new Map<IslandViewName, ViewHost>();
+export function buildViews(actions: ViewActions): Map<string, ViewHost> {
+  const map = new Map<string, ViewHost>();
   map.set("empty", buildEmpty());
   map.set("confused", buildConfused());
   map.set("note", buildNote());

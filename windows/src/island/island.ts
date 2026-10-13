@@ -6,18 +6,22 @@ import { Bridge, IS_TAURI } from "../core/bridge";
 import { wipe } from "../core/canvas";
 import {
   COMPACT_BOT_CX, COMPACT_CONTENT_X, COMPACT_PAD, EXPANDED_CORNER, EXPANDED_W, PANEL_H, PANEL_W,
-  ROUNDED_CORNER, VIEW_LAYOUTS, botGlowColor, botGlowOpacity, botPosition,
+  ROUNDED_CORNER, botGlowColor, botGlowOpacity, botPosition, registerLayout, viewLayout,
   compactWidth, islandSize, miniGridSize,
-  type IslandMode, type IslandViewName,
 } from "../core/layout";
+import type { BotEmoteName, IslandMode, IslandViewName } from "../core/layout";
+import { Avatar } from "../core/avatar";
+import { Compact } from "../core/compact";
+import { Hooks, emitMode } from "../core/hooks";
+import type { Disposer, IslandHost, Overlay, TabDef, ViewContext, ViewDef } from "../core/moduleApi";
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
 import { BotEngine, hexToRGB, type RGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
 import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
-import { buildHeader, buildViews, type ViewActions, type ViewHost } from "../views/views";
+import { buildHeader, buildViews, type Header, type ViewActions, type ViewHost } from "../views/views";
 import { h } from "../views/dom";
-import { IslandStateMachine } from "./fsm";
+import { IslandStateMachine, type FsmState } from "./fsm";
 
 const BOT_OVERHANG = 40;
 /** Same margin as the Rust hit test (src-tauri/src/island.rs). */
@@ -30,8 +34,9 @@ const TINT_RATE = 5.5;
 /** Closer than this on every channel (0…1), the body has its colour: a unit of 8-bit colour. */
 const TINT_SETTLED = 0.004;
 
-export class Island {
+export class Island implements IslandHost {
   readonly fsm = new IslandStateMachine();
+  readonly actions: ViewActions;
 
   private root: HTMLElement;
   private islandEl!: HTMLElement;
@@ -46,8 +51,13 @@ export class Island {
   private countdown!: HTMLElement;
   private wakeStrip!: HTMLElement;
 
-  private header!: ViewHost;
-  private views!: Map<IslandViewName, ViewHost>;
+  private header!: Header;
+  private views!: Map<string, ViewHost>;
+  /** Views modules registered, by name (tabOf, keyboard). */
+  private viewDefs = new Map<string, ViewDef>();
+  private overlays = new Set<Overlay>();
+  private pinTimer: number | null = null;
+  private kbFocus = false;
 
   private width = new Tracked(compactWidth(0, 0));
   private widthTarget = -1;
@@ -104,6 +114,7 @@ export class Island {
 
   constructor(root: HTMLElement) {
     this.root = root;
+    this.actions = this.makeActions();
     this.build();
     this.wireFsm();
     this.wireInput();
@@ -117,8 +128,8 @@ export class Island {
 
   // ── DOM ─────────────────────────────────────────────────────────────────────
 
-  private build() {
-    const actions: ViewActions = {
+  private makeActions(): ViewActions {
+    return {
       setView: (v) => this.setView(v),
       toggleSound: () => {
         State.settings.soundEnabled = !State.settings.soundEnabled;
@@ -141,6 +152,9 @@ export class Island {
       openSettingsWindow: () => void Bridge.openSettingsWindow(),
       blip: () => Sound.play("blip"),
     };
+  }
+
+  private build() {
 
     this.wakeStrip = h("div", { id: "wake-strip" });
     this.botGlow = h("div", { id: "bot-glow" });
@@ -151,8 +165,8 @@ export class Island {
     this.countdown = h("div", { id: "countdown" });
 
 
-    this.header = buildHeader(actions);
-    this.views = buildViews(actions);
+    this.header = buildHeader(this.actions, (v) => this.viewDefs.get(v)?.tabOf);
+    this.views = buildViews(this.actions);
     this.viewsEl = h("div", { id: "views" });
     for (const v of this.views.values()) this.viewsEl.append(v.el);
     this.contentEl = h("div", { id: "content" }, this.header.el, this.viewsEl);
@@ -185,6 +199,7 @@ export class Island {
   private wireFsm() {
     this.fsm.homeToPetitDelay = State.settings.autoCloseInterval;
     this.fsm.petitToHiddenDelay = State.settings.compactHideInterval;
+    this.fsm.keepAwake = () => Hooks.some("keepAwake");
     this.fsm.onTransition = (from, to) => {
       switch (to) {
         case "hidden":
@@ -197,10 +212,13 @@ export class Island {
           if (from === "coucou") State.view = State.defaultView();
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
-        case "home":
-          this.expand(State.defaultView());
+        case "home": {
+          const r = Hooks.home();
+          this.expand(r?.view ?? State.defaultView());
+          if (r?.pin) State.isPinned = this.fsm.pinned = true;
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
+        }
         case "coucou":
           this.expand("greeting");
           this.greeting.start();
@@ -228,15 +246,30 @@ export class Island {
     if (prev === "expanded") {
       Sound.play("close");
       State.isPinned = false;
+      this.clearPinTimer();
       void Bridge.focusWindow(false);
     }
     if (mode !== "expanded") this.engine.resetMorph();
+    emitMode(mode, prev);
     this.updateWindowCollapsed();
     this.animateGeometry(modeOrder(mode) < modeOrder(prev));
     State.notify();
   }
 
+  /** A view with a DOM host, or the greeting (drawn on its own canvas). */
+  private known(view: string): boolean {
+    return view === "greeting" || this.views.has(view);
+  }
+
+  private guard(view: string): string {
+    if (this.known(view)) return view;
+    void Bridge.log(`ui  unknown view "${view}", using ${State.defaultView()}`);
+    return State.defaultView();
+  }
+
   expand(view: IslandViewName) {
+    view = this.guard(view);
+    if (view !== State.view) for (const o of this.overlays) o.leaving?.(view);
     State.view = view;
     if (State.mode !== "expanded") this.setMode("expanded");
     else this.animateGeometry(false);
@@ -246,6 +279,8 @@ export class Island {
   }
 
   setView(view: IslandViewName) {
+    view = this.guard(view);
+    if (view !== State.view) for (const o of this.overlays) o.leaving?.(view);
     if (State.mode !== "expanded") {
       this.fsm.forceHome();
       State.view = view;
@@ -253,7 +288,7 @@ export class Island {
       State.notify();
       return;
     }
-    const grew = VIEW_LAYOUTS[view].height >= VIEW_LAYOUTS[State.view].height;
+    const grew = viewLayout(view).height >= viewLayout(State.view).height;
     State.view = view;
     State.lastActivity = performance.now();
     this.animateGeometry(!grew);
@@ -270,11 +305,29 @@ export class Island {
     this.fsm.forcePetit();
   }
 
-  /** Open on this view. Pinned alerts never auto-close. */
-  alert(view: IslandViewName) {
+  /** Open on this view. Pinned alerts never auto-close; `pinMs` pins for that long. */
+  open(view: IslandViewName, pinMs?: number) {
     this.fsm.pinned = State.isPinned;
     this.fsm.forceHome();
     this.expand(view);
+    if (!pinMs) return;
+    this.clearPinTimer();
+    State.isPinned = this.fsm.pinned = true;
+    this.pinTimer = window.setTimeout(() => {
+      this.pinTimer = null;
+      State.isPinned = this.fsm.pinned = false;
+      if (this.fsm.state === "home" && !this.wasInIsland) this.fsm.mouseLeft();
+      State.notify();
+    }, pinMs);
+  }
+
+  private clearPinTimer() {
+    if (this.pinTimer != null) window.clearTimeout(this.pinTimer);
+    this.pinTimer = null;
+  }
+
+  hide() {
+    this.fsm.forceHidden();
   }
 
   reveal() {
@@ -317,18 +370,21 @@ export class Island {
     // A view that knows how tall its content is has the last word.
     const fitted = this.views?.get(State.view)?.height ?? null;
     const line = this.compactLine();
-    const cw = compactWidth(State.otherTasks.length, line ? this.textWidth(line) : 0);
+    const others = this.textOverGrid() ? 0 : State.otherTasks.length;
+    const cw = compactWidth(others, line ? this.textWidth(line) : 0);
     const { w, h } = islandSize(State.mode, State.view, fitted, cw);
     const r = State.mode === "expanded" ? EXPANDED_CORNER : ROUNDED_CORNER;
     return { w, h, r };
   }
 
-  /**
-   * The one-line status the compact island says. Empty while no provider is
-   * plugged in; the DOM (#activity-line) and its width logic are kept for one.
-   */
+  /** The one-line status the compact island says: the strongest module line. */
   private compactLine(): string {
-    return "";
+    return Compact.resolve(State.otherTasks.length)?.text ?? "";
+  }
+
+  /** The line takes the place of the mini grid (timer). */
+  private textOverGrid(): boolean {
+    return !!Compact.resolve(State.otherTasks.length)?.overGrid;
   }
 
   /** New word rises from below while the old one leaves upward; instant if nothing was showing. */
@@ -396,6 +452,7 @@ export class Island {
     this.activityEl.style.textOverflow = this.width.animating ? "clip" : "";
     this.activityEl.style.top = `${hh / 2 - 8}px`;
     this.greetingCanvas.style.left = `${(w - EXPANDED_W) / 2}px`;
+    for (const o of this.overlays) o.place?.(w);
 
     const rect = { x: (PANEL_W - w) / 2 + off, y: 0, w, h: hh };
     const p = this.pushedRect;
@@ -514,6 +571,7 @@ export class Island {
     State.mouse = { x, y };
     const rect = this.islandRect();
     State.mouseInIsland = { x: x - rect.x, y: y - rect.y };
+    for (const o of this.overlays) o.cursor?.(State.mouseInIsland.x, State.mouseInIsland.y);
 
     const released = this.lastDown && !down;
     const pressed = down && !this.lastDown;
@@ -616,12 +674,12 @@ export class Island {
     State.stateOverride = "dizzy";
     this.engine.setState("dizzy");
     Sound.play("dizzy");
-    this.alert("confused");
+    this.open("confused");
     if (this.confusedRecovery != null) window.clearTimeout(this.confusedRecovery);
     this.confusedRecovery = window.setTimeout(() => {
       this.confusedRecovery = null;
       State.stateOverride = null;
-      this.engine.setState(State.effectiveState);
+      this.engine.setState(this.effState());
       if (State.view === "confused") {
         const fallback = State.defaultView();
         this.setView(this.prevViewBeforeConfused === "confused" ? fallback : this.prevViewBeforeConfused);
@@ -673,6 +731,12 @@ export class Island {
 
     tickMiniBots(dt);
     this.views.get(State.view)?.tick?.(nowMs);
+    let overlayBusy = false;
+    for (const o of this.overlays) {
+      const on = o.active();
+      o.el.style.display = on ? "" : "none";
+      if (on && o.frame(nowMs)) overlayBusy = true; // every overlay draws, no short-circuit
+    }
     this.updateCountdown(nowMs);
 
     // Nothing is drawn while the island is hidden, so nothing may keep the loop
@@ -684,7 +748,7 @@ export class Island {
       ? settling
       : settling ||
         !this.botCx.settled || !this.botCy.settled || !this.botSize.settled ||
-        greetingActive || this.engine.busy || this.tintSettling ||
+        greetingActive || this.engine.busy || this.tintSettling || overlayBusy ||
         // The auto-close countdown bar is only redrawn here; a stopped loop froze
         // it and it caught up in jumps whenever something else animated.
         (State.mode === "expanded" && !State.isPinned && this.homeCollapseAt != null);
@@ -706,16 +770,16 @@ export class Island {
     const greetingActive = State.mode === "expanded" && State.view === "greeting";
     this.botCanvas.style.opacity = p.opacity > 0 && !greetingActive ? "1" : "0";
 
-    if (State.mode === "expanded" && !greetingActive) {
+    if (State.mode === "expanded" && !greetingActive && viewLayout(State.view).glow !== false) {
       const d = p.diameter;
-      const color = botGlowColor(State.effectiveState);
+      const color = botGlowColor(this.effState());
       this.botGlow.style.display = "block";
       this.botGlow.style.width = `${d * 2.2}px`;
       this.botGlow.style.height = `${d * 2.2}px`;
       this.botGlow.style.left = `${this.botCx.value - d * 1.1}px`;
       this.botGlow.style.top = `${this.botCy.value - d * 1.1}px`;
       this.botGlow.style.background = `radial-gradient(circle, ${color} 0%, transparent 62%)`;
-      this.botGlow.style.opacity = String(botGlowOpacity(State.effectiveState));
+      this.botGlow.style.opacity = String(botGlowOpacity(this.effState()));
     } else {
       this.botGlow.style.display = "none";
     }
@@ -750,6 +814,11 @@ export class Island {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     wipe(ctx);
     this.engine.draw(ctx, w, hCss);
+  }
+
+  /** What the avatar wears: override > strongest module signal > focused task > idle. */
+  private effState() {
+    return Avatar.state(State.focusTask?.state ?? State.avatarState ?? "idle", State.stateOverride);
   }
 
   /** The colour Mochi should be: his focused pill colour, else his own cream. */
@@ -823,9 +892,18 @@ export class Island {
       view.el.classList.toggle("on", on);
       if (on) view.sync();
     }
+    const kb = expanded && !!this.viewDefs.get(State.view)?.keyboard;
+    if (kb !== this.kbFocus) {
+      this.kbFocus = kb;
+      void Bridge.focusWindow(kb);
+      if (kb) this.views.get(State.view)?.focus?.();
+    }
+
+    const emote = Avatar.takeEmote();
+    if (emote) this.engine.triggerEmote(emote);
 
     // Compact mini grid
-    const showGrid = State.mode === "compact";
+    const showGrid = State.mode === "compact" && !this.textOverGrid();
     this.miniGrid.style.opacity = showGrid ? "1" : "0";
     if (showGrid) {
       const others = State.otherTasks.slice(0, 4);
@@ -864,7 +942,90 @@ export class Island {
     }
 
     syncMiniBotStates(State.tasks);
-    this.engine.setState(State.effectiveState);
+    this.engine.setState(this.effState());
+  }
+
+  // ── IslandHost (what the registry gets) ─────────────────────────────────────
+
+  note(text: string) {
+    this.showNote(text);
+  }
+
+  error(err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    void Bridge.log(`ui  error ${msg}`);
+    this.showNote(msg);
+  }
+
+  pendingAlert(): boolean {
+    return State.mode === "expanded" && State.isPinned;
+  }
+
+  mouseInside(): boolean {
+    return this.wasInIsland;
+  }
+
+  fsmState(): FsmState {
+    return this.fsm.state;
+  }
+
+  layoutHint() {
+    this.animateGeometry(false);
+  }
+
+  redraw() {
+    this.dirty = true;
+    this.ensureRunning();
+  }
+
+  addView(def: ViewDef, ctx: ViewContext): Disposer {
+    const offLayout = registerLayout(def.name, def.layout);
+    const host = def.build(ctx);
+    this.views.set(def.name, host);
+    this.viewDefs.set(def.name, def);
+    this.viewsEl.append(host.el);
+    return () => {
+      offLayout();
+      host.el.remove();
+      this.views.delete(def.name);
+      this.viewDefs.delete(def.name);
+      if (State.view === def.name) {
+        if (State.mode === "expanded") this.setView(State.defaultView());
+        else State.view = State.defaultView();
+      }
+      State.notify();
+    };
+  }
+
+  setTabs(tabs: TabDef[]) {
+    this.header.setTabs(tabs);
+    this.redraw();
+  }
+
+  addOverlay(o: Overlay): Disposer {
+    this.overlays.add(o);
+    this.islandEl.append(o.el);
+    o.place?.(this.width.value);
+    this.redraw();
+    return () => {
+      this.overlays.delete(o);
+      o.el.remove();
+    };
+  }
+
+  avatarEmote(e: BotEmoteName) {
+    this.engine.triggerEmote(e);
+    this.ensureRunning();
+  }
+
+  avatarMorph(v: number) {
+    this.engine.animateMorph(v);
+    this.ensureRunning();
+  }
+
+  avatarGulp() {
+    this.engine.gulp();
+    this.ensureRunning();
   }
 
   /** Applies settings coming from Rust at boot. */

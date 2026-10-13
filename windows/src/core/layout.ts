@@ -4,7 +4,9 @@
 
 export type IslandMode = "hidden" | "compact" | "expanded";
 
-export type IslandViewName = "empty" | "confused" | "note" | "settings" | "greeting";
+export type CoreViewName = "empty" | "confused" | "note" | "settings" | "greeting";
+/** Core views plus whatever modules register. */
+export type IslandViewName = string;
 
 export type BotStateName =
   | "idle"
@@ -29,6 +31,14 @@ export interface ViewLayout {
   botY: number | null; // null = auto-centred
   botDiameter: number;
   agentMode: AgentLayoutMode;
+  /** Room for a news line under the card. */
+  newsLine?: boolean;
+  /** Extra height (px) for a proposal row. */
+  proposalRoom?: number;
+  /** The bot follows botX but stays inside [from, from + span]. */
+  botTrack?: { from: number; span: number };
+  /** false = no glow behind the bot. */
+  glow?: false;
 }
 
 // The window is a fixed 720×320 (largest view) like the macOS panel; the island is
@@ -76,13 +86,25 @@ export const EXPANDED_CORNER = 22;
 export const WAKE_STRIP_W = 240;
 export const WAKE_STRIP_H = 6;
 
-export const VIEW_LAYOUTS: Record<IslandViewName, ViewLayout> = {
+export const VIEW_LAYOUTS: Record<string, ViewLayout> = {
   empty: { height: 160, botX: 70, botY: null, botDiameter: 62, agentMode: "none" },
   confused: { height: 160, botX: 76, botY: null, botDiameter: 66, agentMode: "column" },
   note: { height: 160, botX: 60, botY: null, botDiameter: 50, agentMode: "column" },
   settings: { height: 160, botX: 54, botY: null, botDiameter: 46, agentMode: "none" },
   greeting: { height: 150, botX: 320, botY: 90, botDiameter: 0, agentMode: "none" },
 };
+
+/** Never index VIEW_LAYOUTS directly: a view may be unregistered. */
+export function viewLayout(v: string): ViewLayout {
+  return VIEW_LAYOUTS[v] ?? VIEW_LAYOUTS.overview ?? VIEW_LAYOUTS.empty;
+}
+
+export function registerLayout(v: string, layout: ViewLayout): () => void {
+  VIEW_LAYOUTS[v] = layout;
+  return () => {
+    if (VIEW_LAYOUTS[v] === layout) delete VIEW_LAYOUTS[v];
+  };
+}
 
 export function islandSize(
   mode: IslandMode,
@@ -99,7 +121,8 @@ export function islandSize(
     case "compact":
       return { w: compactW, h: NOTCH_H };
     case "expanded": {
-      const h = fitted ?? VIEW_LAYOUTS[view].height;
+      const l = viewLayout(view);
+      const h = fitted ?? l.height + (l.proposalRoom ?? 0);
       return { w: EXPANDED_W, h };
     }
   }
@@ -124,15 +147,17 @@ export function botPosition(
     case "compact":
       return { cx: COMPACT_BOT_CX, cy: 16, diameter: COMPACT_BOT_D, opacity: 1 };
     case "expanded": {
-      const layout = VIEW_LAYOUTS[view];
+      const layout = viewLayout(view);
+      const t = layout.botTrack;
+      const cx = t ? Math.min(t.from + t.span, Math.max(t.from, layout.botX)) : layout.botX;
       if (layout.botY != null) {
-        return { cx: layout.botX, cy: layout.botY, diameter: layout.botDiameter, opacity: 1 };
+        return { cx, cy: layout.botY, diameter: layout.botDiameter, opacity: 1 };
       }
       // Centre of the fixed 84 pt card (8 pt top inset + 34 pt header → content at y = 42)
       const headerBottom = 42;
       const cardH = 84;
       const cy = headerBottom + (islandH - headerBottom - cardH) / 2 + cardH / 2;
-      return { cx: layout.botX, cy, diameter: layout.botDiameter, opacity: 1 };
+      return { cx, cy, diameter: layout.botDiameter, opacity: 1 };
     }
   }
 }
