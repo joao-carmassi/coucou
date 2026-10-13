@@ -6,7 +6,7 @@ import { Bridge, IS_TAURI, onDragDrop } from "../core/bridge";
 import { wipe } from "../core/canvas";
 import {
   COMPACT_BOT_CX, COMPACT_CONTENT_X, COMPACT_PAD, EXPANDED_CORNER, EXPANDED_W, PANEL_H, PANEL_W,
-  ROUNDED_CORNER, VIEW_LAYOUTS, botGlowColor, botGlowOpacity, botPosition, chatPromptHeight,
+  ROUNDED_CORNER, VIEW_LAYOUTS, botGlowColor, botGlowOpacity, botPosition,
   compactWidth, islandSize, miniGridSize,
   type BotStateName, type IslandMode, type IslandViewName,
 } from "../core/layout";
@@ -23,7 +23,6 @@ import { highlightMedia } from "../views/media";
 import { enterSessionPanel } from "../views/session";
 import { followNews } from "./integrations";
 import { h } from "../views/dom";
-import { usesSessions } from "../views/sessionMenu";
 import { voiceReviewing } from "../views/voice";
 import { IslandStateMachine, type FsmState } from "./fsm";
 import { activityLine } from "./activity";
@@ -295,15 +294,8 @@ export class Island {
     // the header, which stays visible on top of it exactly as on macOS.
     this.uploadCanvas = new UploadCanvas({
       ask: () => {
-        // Sessions: a new terminal session takes the file, at the user's word — Cancelar can still drop it.
-        if (State.settings.askMode !== "mochi") {
-          if (State.droppedFile) this.launchWith(State.droppedFile.path);
-          return;
-        }
-        State.promptContext = State.droppedFile
-          ? { kind: "file", name: State.droppedFile.name, path: State.droppedFile.path }
-          : null;
-        this.setView("prompt");
+        // A new terminal session takes the file, at the user's word — Cancelar can still drop it.
+        if (State.droppedFile) this.launchWith(State.droppedFile.path);
       },
       cancel: () => this.cancelDrop(),
     });
@@ -564,12 +556,6 @@ export class Island {
    */
   private cancelDrop() {
     State.droppedFile = null;
-    State.promptContext = null;
-    // Only Mochi's chat was reset by the drop (swallow); in sessions mode it is left alone.
-    if (State.settings.askMode === "mochi") {
-      State.chatHistory = [];
-      void Bridge.chatReset();
-    }
     this.setView(State.defaultView());
   }
 
@@ -672,13 +658,6 @@ export class Island {
   private swallow(path: string) {
     const name = path.split(/[\\/]/).pop() || "file";
     State.droppedFile = { name, path };
-    State.promptContext = { kind: "file", name, path };
-    if (State.settings.askMode === "mochi") {
-      State.chatHistory = [];
-      // A dropped file starts a new session (in the inbox, where the file lands).
-      State.activeSession = null;
-      void Bridge.chatReset();
-    }
 
     this.uploadTens = 0;
     this.uploadDone = false;
@@ -702,7 +681,6 @@ export class Island {
     void Bridge.ingestFile(path)
       .then((file) => {
         State.droppedFile = { name: file.name, path: file.path };
-        State.promptContext = { kind: "file", name: file.name, path: file.path };
         State.notify();
       })
       .catch((err) => {
@@ -714,26 +692,10 @@ export class Island {
 
   /** A file from the Mídia list, taken in like a dropped one: copied into the inbox (the only place a session may attach from), then asked about. */
   private async openFileInClaude(path: string) {
-    const name = path.split(/[\\/]/).pop() || "file";
-    const mochi = State.settings.askMode === "mochi";
-    if (mochi) {
-      // Up at once with the path we have; the copy (none, for a file already in the inbox) swaps it in.
-      State.droppedFile = { name, path };
-      State.promptContext = { kind: "file", name, path };
-      State.chatHistory = [];
-      State.activeSession = null;
-      void Bridge.chatReset();
-      Sound.play("attach");
-      this.setView("prompt");
-    } else this.showNote("Abrindo no terminal…");
+    this.showNote("Abrindo no terminal…");
     try {
       const file = await Bridge.ingestFile(path);
-      if (!mochi) return this.launchWith(file.path);
-      if (State.droppedFile?.path === path) {
-        State.droppedFile = { name: file.name, path: file.path };
-        State.promptContext = { kind: "file", name: file.name, path: file.path };
-        State.notify();
-      }
+      this.launchWith(file.path);
     } catch (err) {
       this.showError(err);
     }
@@ -894,11 +856,9 @@ export class Island {
     const proposal = State.pendingApproval?.proposal != null || !!State.pendingApproval?.plan;
     // A view that knows how tall its content is has the last word.
     const fitted = this.views?.get(State.view)?.height ?? null;
-    // An open session menu wants the room: the chat grows to its tallest.
-    const chatCount = State.sessionsMenuOpen ? Infinity : State.chatHistory.length;
     const line = this.compactLine();
     const cw = compactWidth(this.textOverGrid() ? 0 : State.otherTasks.length, line ? this.textWidth(line) : 0);
-    const { w, h } = islandSize(State.mode, State.view, chatCount, news, proposal, fitted, cw);
+    const { w, h } = islandSize(State.mode, State.view, news, proposal, fitted, cw);
     const r = State.mode === "expanded" ? EXPANDED_CORNER : ROUNDED_CORNER;
     return { w, h, r };
   }
@@ -1313,7 +1273,7 @@ export class Island {
 
   private updateBotTargets() {
     const p = botPosition(
-      State.mode, State.view, this.height.value, State.uploadProgress, usesSessions(),
+      State.mode, State.view, this.height.value, State.uploadProgress,
     );
     this.botCx.target = p.cx;
     this.botCy.target = p.cy;
@@ -1451,14 +1411,14 @@ export class Island {
       if (on) view.sync();
     }
 
-    // The chat is the only view with a text field, so it is the only time the
-    // island is allowed to take keyboard focus.
+    // The sessions view is the only one with a text field, so it is the only
+    // time the island is allowed to take keyboard focus.
     if (this.lastSyncedView !== State.view) {
-      const wasChat = this.lastSyncedView === "prompt";
+      const wasChat = this.lastSyncedView === "sessions";
       this.lastSyncedView = State.view;
-      if (State.view === "prompt") {
+      if (State.view === "sessions") {
         void Bridge.focusWindow(true);
-        window.setTimeout(() => this.views.get("prompt")?.focus?.(), 120);
+        window.setTimeout(() => this.views.get("sessions")?.focus?.(), 120);
       } else if (wasChat) {
         void Bridge.focusWindow(false);
       }
@@ -1524,9 +1484,5 @@ export class Island {
 
   get panelSize() {
     return { w: PANEL_W, h: PANEL_H };
-  }
-
-  get chatHeight() {
-    return chatPromptHeight(State.chatHistory.length);
   }
 }

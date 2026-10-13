@@ -2,7 +2,7 @@
 
 import type { BotEmoteName, BotStateName, IslandMode, IslandViewName } from "./layout";
 import type { EyeShape } from "../mochi/engine";
-import type { ActiveSession, IntegrationNews, ManagedSession, SessionInfo } from "./bridge";
+import type { IntegrationNews, ManagedSession } from "./bridge";
 
 export type AgentSource = "claudeCode" | "n8n" | "agent";
 export type PillBadge = "approval" | "finished" | "error";
@@ -216,28 +216,6 @@ export function newSession(id: string): ClaudeSession {
   };
 }
 
-export interface ChatMessage {
-  id: number;
-  role: "user" | "assistant";
-  content: string;
-}
-
-export type PromptContext =
-  | { kind: "window"; appName: string; title: string; url?: string }
-  | { kind: "file"; name: string; path?: string };
-
-export interface ResultItem {
-  label: string;
-  detail: string;
-  url?: string;
-}
-
-export interface SearchResult {
-  title: string;
-  items: ResultItem[];
-  note?: string;
-}
-
 const task = (
   id: string, name: string, color: string, source: AgentSource,
 ): AgentTask => ({
@@ -285,18 +263,12 @@ export interface Settings {
   screen: "primary" | "cursor";
   autostart: boolean;
   hooksInstalled: boolean;
-  /** Claude model used by the chat. */
-  model: string;
   /** GitHub projects ("owner/name") whose news the pill keeps to itself. */
   githubMuted: string[];
-  /** Mochi's chat engine: "api", "windows" or "wsl:<distro>" (local Claude Code). */
-  chatBackend: string;
   /** A second Claude account: Claude Code's config folder on Windows; empty = the default. */
   claudeConfigDir: string;
   /** What the idle Claude card opens: "" = Visual Studio Code, "terminal" = Claude Code in a terminal. */
   idleOpen: string;
-  /** What the Ask tab is: "sessions" (sessions manager) or "mochi" (the old chat). */
-  askMode: "sessions" | "mochi";
   /** Voice input (English), off until switched on. */
   voiceEnabled: boolean;
   voiceHotkey: string;
@@ -316,12 +288,9 @@ export const DEFAULT_SETTINGS: Settings = {
   screen: "primary",
   autostart: false,
   hooksInstalled: false,
-  model: "claude-opus-5",
   githubMuted: [],
-  chatBackend: "api",
   claudeConfigDir: "",
   idleOpen: "",
-  askMode: "sessions",
   voiceEnabled: false,
   voiceHotkey: "Ctrl+Alt+V",
   alertHotkey: "",
@@ -350,11 +319,8 @@ class AppState {
   uploadDuration = 2.4;
   fileDragOver = false;
 
-  promptContext: PromptContext | null = null;
   droppedFile: { name: string; path: string } | null = null;
   noteMessage: string | null = null;
-  searchResult: SearchResult | null = null;
-  chatHistory: ChatMessage[] = [];
 
   /** Every session the island knows of, in the order they were first heard. */
   sessions: ClaudeSession[] = [];
@@ -364,13 +330,8 @@ class AppState {
   private readonly noSession = newSession("");
   /** What each session changed, by session id. */
   changes = new Map<string, ChangedFile[]>();
-  /** Mochi's session menu (local Claude Code only). */
-  chatSessions: SessionInfo[] = [];
   /** Every session of every Claude profile, running or not. */
   managedSessions: ManagedSession[] = [];
-  activeSession: ActiveSession | null = null;
-  /** The session menu is open: the Ask view takes its full height for it. */
-  sessionsMenuOpen = false;
 
   integrations: Record<string, IntegrationInfo> = {};
 

@@ -784,7 +784,7 @@ input[type="range"]::-webkit-slider-thumb {
   white-space: nowrap;
 }
 
-/* ── Chat (prompt view) ─────────────────────────────────────────────────── */
+/* ── Sessions view card ─────────────────────────────────────────────────── */
 
 .chat-card {
   overflow: hidden;
@@ -797,68 +797,6 @@ input[type="range"]::-webkit-slider-thumb {
   display: flex;
   gap: 10px;
   padding: 12px 16px 14px 84px;
-}
-
-.chat-main {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* ── Mochi's sessions (left of the chat, local Claude Code only) ─────────── */
-
-/* Split: the column takes the room the chat kept for Mochi, and Mochi moves to
-   its top (SESSIONS_COLUMN in layout.ts) — the menu starts below him. */
-.chat-body.split {
-  padding-left: 16px;
-}
-
-.chat-body.split .sessions {
-  padding-top: 52px;
-}
-
-.sessions {
-  flex: 0 0 156px;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.sess-trigger {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
-  padding: 6px 22px 6px 9px;
-  border: 0;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.07);
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.sess-trigger:hover {
-  background: rgba(255, 255, 255, 0.11);
-}
-
-.sess-trigger svg {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  color: var(--dim-2);
-  transform: translateY(-50%) rotate(90deg);
-  transition: transform 0.15s ease-out;
-}
-
-.sessions.open .sess-trigger svg {
-  transform: translateY(-50%) rotate(-90deg);
 }
 
 .sess-title,
@@ -880,17 +818,6 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--dim-3);
 }
 
-.sess-menu {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
-}
-
 .sess-row {
   display: flex;
   align-items: center;
@@ -905,8 +832,7 @@ input[type="range"]::-webkit-slider-thumb {
   background: rgba(99, 102, 241, 0.2);
 }
 
-.sess-pick,
-.sess-new {
+.sess-pick {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
@@ -919,17 +845,6 @@ input[type="range"]::-webkit-slider-thumb {
   color: inherit;
   text-align: left;
   cursor: pointer;
-}
-
-/* In the menu's column, nothing grows: "New in a folder…" and the rows keep
-   their height, and the list just moves up when a session goes. */
-.sess-menu > .sess-new,
-.sess-menu > .sess-row {
-  flex: 0 0 auto;
-}
-
-.sess-new .sess-title {
-  color: #a5b4fc;
 }
 
 .sess-del {
@@ -975,144 +890,6 @@ input[type="range"]::-webkit-slider-thumb {
 
 .sess-empty {
   color: var(--dim-3);
-}
-
-.chip-row:empty {
-  display: none;
-}
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  font: 400 11.5px var(--font);
-  color: var(--ink-2);
-  border: 1.5px solid rgba(255, 255, 255, 0.75);
-  transform: scale(1.06);
-  transition: border-color 0.3s ease-out 0.45s, transform 0.3s ease-out 0.45s;
-}
-
-.chip.settled {
-  border-color: rgba(255, 255, 255, 0);
-  transform: scale(1);
-}
-
-.chip-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #ff6b5b, #f7b32b, #2dd4a7, #38bdf8, #a78bfa);
-}
-
-.chat-log {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 2px 0;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
-}
-
-.chat-row {
-  display: flex;
-}
-
-.chat-row.user {
-  justify-content: flex-end;
-  padding-left: 32px;
-}
-
-.bubble {
-  background: rgba(255, 255, 255, 0.13);
-  border-radius: 12px;
-  padding: 6px 10px;
-  font: 400 12.5px var(--font);
-  color: var(--ink-2);
-  white-space: pre-wrap;
-  user-select: text;
-}
-
-.reply {
-  font: 400 12.5px var(--font);
-  color: #b0b5be;
-  white-space: pre-wrap;
-  padding-right: 8px;
-  user-select: text;
-}
-
-.typing {
-  display: flex;
-  gap: 4px;
-  padding: 4px 2px;
-}
-
-.typing i {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--dim-3);
-  animation: typing 0.9s ease-in-out infinite;
-}
-
-.typing i:nth-child(2) {
-  animation-delay: 0.14s;
-}
-
-.typing i:nth-child(3) {
-  animation-delay: 0.28s;
-}
-
-@keyframes typing {
-  0%, 100% { transform: scale(0.6); }
-  50% { transform: scale(1.2); }
-}
-
-.chat-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.07);
-  border-radius: 12px;
-}
-
-.chat-input {
-  flex: 1 1 auto;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: var(--ink);
-  font: 400 13px var(--font);
-  outline: none;
-  cursor: text;
-}
-
-.chat-input::placeholder {
-  color: var(--dim-3);
-}
-
-.send-btn {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
-  border: 0;
-  border-radius: 50%;
-  background: var(--ink);
-  color: #0b0c0e;
-  display: grid;
-  place-items: center;
-  cursor: default;
-  transition: transform 0.08s ease-out;
-}
-
-.send-btn:active {
-  transform: scale(0.94);
 }
 
 /* ── Drop zone ──────────────────────────────────────────────────────────── */
@@ -4293,7 +4070,7 @@ button.gh-block:hover {
   color: var(--dim-5);
 }
 
-/* ── Sessions view (internal view id "prompt") ──────────────────────────── */
+/* ── Sessions view (view id "sessions") ──────────────────────────── */
 
 .chat-body.sess-view {
   flex-direction: column;

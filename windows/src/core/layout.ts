@@ -16,7 +16,7 @@ export type IslandViewName =
   | "uploading"
   | "choose"
   | "mail"
-  | "prompt"
+  | "sessions"
   | "searching"
   | "result"
   | "note"
@@ -114,7 +114,8 @@ export const VIEW_LAYOUTS: Record<IslandViewName, ViewLayout> = {
   uploading: { height: 176, botX: 46, botY: 103, botDiameter: 20, agentMode: "none" },
   choose: { height: 176, botX: 60, botY: 101, botDiameter: 52, agentMode: "column" },
   mail: { height: 240, botX: 56, botY: null, botDiameter: 46, agentMode: "column" },
-  prompt: { height: 160, botX: 52, botY: null, botDiameter: 44, agentMode: "column" },
+  // 240 = what the Ask view always was with an empty conversation.
+  sessions: { height: 240, botX: 52, botY: null, botDiameter: 44, agentMode: "column" },
   searching: { height: 160, botX: 52, botY: null, botDiameter: 44, agentMode: "column" },
   result: { height: 160, botX: 52, botY: null, botDiameter: 44, agentMode: "column" },
   note: { height: 160, botX: 60, botY: null, botDiameter: 50, agentMode: "column" },
@@ -136,11 +137,6 @@ export const VIEW_LAYOUTS: Record<IslandViewName, ViewLayout> = {
 // The upload views above are only the fallback geometry. Once a file is actually
 // dropped the whole sequence — Mochi included — is drawn by src/upload, which
 // owns its own constants (USC) straight from UploadSequenceEngine.swift.
-
-/** Chat view grows with the conversation — IslandContainer.chatPromptHeight. */
-export function chatPromptHeight(messageCount: number): number {
-  return Math.min(300, 240 + messageCount * 40);
-}
 
 /**
  * A result card that tells an integration's news has one line more than a
@@ -182,7 +178,6 @@ export function fittedHeight(content: number, air = CARD_AIR): number {
 export function islandSize(
   mode: IslandMode,
   view: IslandViewName,
-  chatCount = 0,
   news = false,
   proposal = false,
   fitted: number | null = null,
@@ -197,7 +192,7 @@ export function islandSize(
     case "compact":
       return { w: compactW, h: NOTCH_H };
     case "expanded": {
-      const h = fitted ?? (view === "prompt" ? chatPromptHeight(chatCount) : VIEW_LAYOUTS[view].height);
+      const h = fitted ?? VIEW_LAYOUTS[view].height;
       const grown = news && (view === "finished" || view === "error") ? NEWS_LINE : 0;
       const room = proposal && view === "approval" ? PROPOSAL_ROOM : 0;
       return { w: EXPANDED_W, h: h + grown + room };
@@ -213,20 +208,11 @@ export interface BotPlacement {
 }
 
 /** IslandRootView.botPosition — cy is measured from the island's top edge. */
-/**
- * The Ask view split for Mochi's sessions (local Claude Code): Mochi sits at the
- * top of the left column, centred over the session menu. Island coordinates:
- * content starts at x = 10 (#content padding) + 16 (chat-body padding) and
- * y = 42 (header) + 12; the column is 156 wide.
- */
-export const SESSIONS_COLUMN = { left: 26, width: 156, top: 54 };
-
 export function botPosition(
   mode: IslandMode,
   view: IslandViewName,
   islandH: number,
   uploadProgress = 0,
-  sessionsColumn = false,
 ): BotPlacement {
   switch (mode) {
     case "hidden":
@@ -235,15 +221,6 @@ export function botPosition(
       return { cx: COMPACT_BOT_CX, cy: 16, diameter: COMPACT_BOT_D, opacity: 1 };
     case "expanded": {
       const layout = VIEW_LAYOUTS[view];
-      if (view === "prompt" && sessionsColumn) {
-        const d = layout.botDiameter;
-        return {
-          cx: SESSIONS_COLUMN.left + SESSIONS_COLUMN.width / 2,
-          cy: SESSIONS_COLUMN.top + d / 2,
-          diameter: d,
-          opacity: 1,
-        };
-      }
       if (view === "uploading") {
         return {
           cx: 36 + uploadProgress * 526,
