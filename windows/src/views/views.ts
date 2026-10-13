@@ -496,8 +496,9 @@ function buildOverview(actions: ViewActions, onResize: () => void): ViewHost {
 
 /** The Timer tab: presets and a stopwatch; while one runs, the readout, a bar and pause/cancel. */
 function buildTimerView(): ViewHost {
-  const body = h("div", { class: "timer-body" });
-  const el = h("div", { class: "view timer-view" }, body);
+  const body = stack(84, 16);
+  const el = h("div", { class: "view" }, card(null, body));
+  const label = h("div", { class: "timer-label" });
   const readout = h("div", { class: "timer-readout" });
   const fill = h("i");
   const bar = h("div", { class: "timer-progress" }, fill);
@@ -505,27 +506,35 @@ function buildTimerView(): ViewHost {
   const draw = () => {
     const next = Timer.status;
     clear(body);
-    body.append(h("div", { class: "timer-title", text: "Timer" }));
+    el.classList.toggle("paused", next === "paused");
     if (next === "idle") {
-      const mins = h("input", { class: "timer-min", type: "number", min: 1, max: 600, placeholder: "min" });
+      const mins = h("input", { class: "island-field timer-min", type: "number", min: 1, max: 600, placeholder: "min", autocomplete: "off" });
       const go = () => {
         const m = Math.floor(Number(mins.value));
         if (m >= 1 && m <= 600) Timer.startCountdown(m);
+        else mins.style.borderColor = "var(--red)";
       };
+      mins.addEventListener("input", () => (mins.style.borderColor = ""));
       mins.addEventListener("keydown", (e) => e.key === "Enter" && go());
-      const chip = (label: string, onClick: () => void) => h("button", { class: "chip timer-chip", text: label, onclick: onClick });
       body.append(
-        h("div", { class: "timer-presets" },
-          ...[5, 10, 25].map((m) => chip(`${m} min`, () => Timer.startCountdown(m))),
-          mins, chip("Iniciar", go), chip("Cronômetro", () => Timer.startStopwatch())),
+        h("div", { class: "title", text: "Timer" }),
+        h("div", { class: "sub", text: "Escolha um tempo ou digite os minutos." }),
+        h("div", { class: "actions timer-row" },
+          ...[5, 10, 25].map((m) => btn(`${m} min`, "secondary", () => Timer.startCountdown(m))),
+          mins, btn("Iniciar", "primary", go), h("div", { class: "grow" }),
+          h("button", { class: "link-btn q-link", text: "Cronômetro", onclick: () => Timer.startStopwatch() })),
       );
     } else {
+      const stopwatch = Timer.kind === "stopwatch";
+      label.textContent = (stopwatch ? "Cronômetro" : `Timer · ${Math.round(Timer.total / 60_000)} min`) + (next === "paused" ? " · pausado" : "");
+      bar.hidden = stopwatch;
       body.append(
-        readout, bar,
-        h("div", { class: "timer-actions" },
-          h("button", { class: "btn secondary", text: next === "running" ? "Pausar" : "Retomar",
-            onclick: () => (next === "running" ? Timer.pause() : Timer.resume()) }),
-          h("button", { class: "link-btn", text: "Cancelar", onclick: () => Timer.cancel() })),
+        label,
+        h("div", { class: "actions timer-row" },
+          readout, h("div", { class: "grow" }),
+          btn(next === "running" ? "Pausar" : "Retomar", "secondary", () => (next === "running" ? Timer.pause() : Timer.resume())),
+          h("button", { class: "link-btn q-link", text: "Cancelar", onclick: () => Timer.cancel() })),
+        bar,
       );
     }
   };
