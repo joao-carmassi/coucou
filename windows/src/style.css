@@ -507,10 +507,12 @@ body {
 .timer-row { align-items: center; }
 .timer-min { flex: 0 0 64px; height: 30px; text-align: center; padding: 0 8px; font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
 .timer-min::-webkit-inner-spin-button, .timer-min::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.timer-label { font: 400 11.5px var(--font); color: var(--dim); }
-.timer-readout { font: 600 30px/36px var(--font); font-variant-numeric: tabular-nums; letter-spacing: -0.5px; color: var(--ink); }
-.timer-progress { height: 4px; border-radius: 999px; background: var(--gh-track); overflow: hidden; margin-top: 4px; }
-.timer-progress > i { display: block; height: 100%; border-radius: inherit; background: var(--amber); transition: width 1s linear; }
+.timer-body { position: absolute; inset: 0; padding: 0 16px 0 84px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+.timer-title { font: 400 11px var(--font); color: var(--dim-2); }
+.timer-readout { font: 500 38px var(--font); font-variant-numeric: tabular-nums; color: var(--ink); line-height: 1.1; }
+.timer-progress { width: 100%; height: 14px; border-radius: 4px; background: var(--gh-track); overflow: hidden; }
+.timer-progress > i { display: block; height: 100%; border-radius: 4px; background: var(--amber); transition: width 1s linear; }
+.timer-actions { display: flex; align-items: center; gap: 12px; }
 .paused .timer-readout { color: var(--dim); }
 .paused .timer-progress > i { opacity: 0.45; }
 #activity-line { font-variant-numeric: tabular-nums; }
@@ -4532,8 +4534,6 @@ button.gh-block:hover {
 }
 
 /* Timer: selected preset / mode, disabled start, idle <-> running swap */
-.btn.sel { background: rgba(255, 255, 255, 0.16); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--amber); }
 .btn:disabled { opacity: 0.4; pointer-events: none; }
-.timer-min.sel { box-shadow: inset 0 0 0 1.5px var(--amber); }
 .timer-swap { animation: timer-swap 0.2s ease-out; }
 @keyframes timer-swap { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }

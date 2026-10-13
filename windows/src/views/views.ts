@@ -494,78 +494,49 @@ function buildOverview(actions: ViewActions, onResize: () => void): ViewHost {
   };
 }
 
-/** The Timer tab: presets and a stopwatch; while one runs, the readout, a bar and pause/cancel. */
+/** The Timer tab: pick a time (or stopwatch) -> ready page with Iniciar -> running page with Pausar. */
 function buildTimerView(): ViewHost {
-  const body = stack(84, 16);
-  const el = h("div", { class: "view" }, card(null, body));
-  const label = h("div", { class: "timer-label" });
+  const el = h("div", { class: "view" });
   const readout = h("div", { class: "timer-readout" });
   const fill = h("i");
   const bar = h("div", { class: "timer-progress" }, fill);
   let key = "";
   const draw = () => {
     const next = Timer.status;
-    clear(body);
-    // Replays the swap animation (CSS, 200 ms): no timers to leave running.
-    body.classList.remove("timer-swap");
-    void body.offsetWidth;
-    body.classList.add("timer-swap");
+    clear(el);
     el.classList.toggle("paused", next === "paused");
     if (next === "idle") {
-      // Nothing starts on a click of a preset: it only selects; "Iniciar" starts.
-      let sel: number | "watch" | null = null;
+      // A choice goes straight to the ready page: nothing runs until "Iniciar".
+      const body = stack(84, 16);
+      body.classList.add("timer-swap");
       const mins = h("input", { class: "island-field timer-min", type: "number", min: 1, max: 600, placeholder: "min", autocomplete: "off" }) as HTMLInputElement;
-      const sub = h("div", { class: "sub" });
-      const presets = [5, 10, 25].map((m) => btn(`${m} min`, "secondary", () => pick(m)));
-      const watch = btn("Cronômetro", "secondary", () => pick("watch"));
-      const start = btn("Iniciar", "primary", () => go()) as HTMLButtonElement;
-      const valid = () => { const m = Math.floor(Number(mins.value)); return m >= 1 && m <= 600 ? m : null; };
-      const paint = () => {
-        [5, 10, 25].forEach((m, i) => presets[i].classList.toggle("sel", sel === m && mins.value === String(m)));
-        watch.classList.toggle("sel", sel === "watch");
-        mins.classList.toggle("sel", typeof sel === "number" && !presets.some((_, i) => mins.value === String([5, 10, 25][i])));
-        start.disabled = sel == null;
-        sub.textContent = sel == null ? "Escolha um tempo, o cronômetro ou digite os minutos."
-          : sel === "watch" ? "Cronômetro · 00:00 — toque em Iniciar."
-          : `Timer de ${sel} min — toque em Iniciar.`;
-      };
-      function pick(v: number | "watch") {
-        sel = v;
-        mins.value = v === "watch" ? "" : String(v);
-        mins.style.borderColor = "";
-        paint();
-      }
-      function go() {
-        if (sel === "watch") Timer.startStopwatch();
-        else if (typeof sel === "number") Timer.startCountdown(sel);
+      const confirm = () => {
+        const m = Math.floor(Number(mins.value));
+        if (m >= 1 && m <= 600) Timer.prepare("countdown", m);
         else mins.style.borderColor = "var(--red)";
-      }
-      mins.addEventListener("input", () => {
-        mins.style.borderColor = "";
-        sel = valid();
-        paint();
-      });
-      mins.addEventListener("focus", () => { const m = valid(); if (m != null) { sel = m; paint(); } });
-      mins.addEventListener("keydown", (e) => e.key === "Enter" && valid() != null && go());
-      paint();
+      };
+      mins.addEventListener("input", () => { mins.style.borderColor = ""; });
+      mins.addEventListener("keydown", (e) => e.key === "Enter" && confirm());
       body.append(
         h("div", { class: "title", text: "Timer" }),
-        sub,
-        h("div", { class: "actions timer-row" }, ...presets, watch),
-        h("div", { class: "actions timer-row" }, mins, start),
+        h("div", { class: "sub", text: "Escolha um tempo, o cronômetro ou digite os minutos." }),
+        h("div", { class: "actions timer-row" },
+          ...[5, 10, 25].map((m) => btn(`${m} min`, "secondary", () => Timer.prepare("countdown", m))),
+          btn("Cronômetro", "secondary", () => Timer.prepare("stopwatch"))),
+        h("div", { class: "actions timer-row" }, mins, btn("Ok", "secondary", confirm)),
       );
+      el.append(card(null, body));
     } else {
       const stopwatch = Timer.kind === "stopwatch";
-      label.textContent = (stopwatch ? "Cronômetro" : `Timer · ${Math.round(Timer.total / 60_000)} min`) + (next === "paused" ? " · pausado" : "");
       bar.hidden = stopwatch;
-      body.append(
-        label,
-        h("div", { class: "actions timer-row" },
-          readout, h("div", { class: "grow" }),
-          btn(next === "running" ? "Pausar" : "Retomar", "secondary", () => (next === "running" ? Timer.pause() : Timer.resume())),
-          h("button", { class: "link-btn q-link", text: "Cancelar", onclick: () => Timer.cancel() })),
-        bar,
-      );
+      const main = next === "ready" ? btn("Iniciar", "primary", () => Timer.start())
+        : btn(next === "running" ? "Pausar" : "Retomar", "secondary", () => (next === "running" ? Timer.pause() : Timer.resume()));
+      el.append(h("div", { class: "timer-body timer-swap" },
+        h("div", { class: "timer-title", text: stopwatch ? "Cronômetro" : "Timer" }),
+        readout, bar,
+        h("div", { class: "timer-actions" }, main,
+          h("button", { class: "link-btn", text: "Cancelar", onclick: () => Timer.cancel() })),
+      ));
     }
   };
   return {

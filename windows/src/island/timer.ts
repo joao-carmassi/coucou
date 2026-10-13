@@ -6,7 +6,7 @@ import { Sound } from "../core/sound";
 import { State } from "../core/state";
 
 type Kind = "countdown" | "stopwatch";
-type Status = "idle" | "running" | "paused";
+type Status = "idle" | "ready" | "running" | "paused";
 
 class TimerClock {
   kind: Kind = "countdown";
@@ -22,21 +22,25 @@ class TimerClock {
   private tickId: number | null = null;
   private doneId: number | null = null;
 
+  /** Running or paused; "ready" (time chosen, not started) is not active. */
   get active() {
-    return this.status !== "idle";
+    return this.status === "running" || this.status === "paused";
   }
 
-  startCountdown(minutes: number) {
-    this.begin("countdown");
-    this.base = this.total = Math.max(1, minutes) * 60_000;
-    this.endAt = Date.now() + this.base;
+  /** Picks the time and shows it without starting. */
+  prepare(kind: Kind, minutes = 0) {
+    this.kind = kind;
+    this.status = "ready";
+    this.total = kind === "countdown" ? Math.max(1, minutes) * 60_000 : 0;
+    this.base = this.total; // remaining (countdown) / elapsed 0 (stopwatch)
     this.sync();
   }
 
-  startStopwatch() {
-    this.begin("stopwatch");
-    this.base = 0;
-    this.startAt = Date.now();
+  start() {
+    if (this.status !== "ready") return;
+    if (this.kind === "countdown") this.endAt = Date.now() + this.base;
+    else this.startAt = Date.now();
+    this.status = "running";
     this.sync();
   }
 
@@ -94,11 +98,6 @@ class TimerClock {
       this.tickId = window.setInterval(() => State.notify(), 1000);
     }
     State.notify();
-  }
-
-  private begin(kind: Kind) {
-    this.kind = kind;
-    this.status = "running";
   }
 
   private finish() {
