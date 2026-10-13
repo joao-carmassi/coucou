@@ -18,3 +18,6 @@ import "../modules/claude/chat.css";
 import "../modules/claude/panel.css";
 import "../modules/claude/claude.css";
 import "../modules/timer/timer.css";
+
+// Integrations: the GitHub panel and the integration cards (loaded last, as in the old style.css).
+import "../modules/integrations/integrations.css";

@@ -2,5 +2,6 @@
 import type { ModuleDef } from "../core/moduleApi";
 import { claude } from "./claude";
 import { timerModule } from "./timer";
+import { integrations } from "./integrations";
 
-export const MODULES: ModuleDef[] = [claude, timerModule];
+export const MODULES: ModuleDef[] = [claude, timerModule, integrations];

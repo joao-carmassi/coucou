@@ -42,6 +42,10 @@ export interface Overlay {
   place?(islandW: number): void;
   leaving?(nextView: string): void;
 }
+/** A card a module draws for a pill it owns, in the Claude overview's left card; `key` changes when it must be redrawn. */
+export interface TaskCard { key: string; build(): HTMLElement }
+/** News a module's pill tells: the finished and error cards show it in place of a session's result. */
+export interface TaskNews { says: string; title: string; facts: Node[] }
 export interface HomeRequest { view: string; pin: boolean; priority: number }
 export interface IslandHooks {
   homeView(): HomeRequest | null;
@@ -50,6 +54,8 @@ export interface IslandHooks {
   followNews(): boolean;
   mochiDrop(): void;
   launchFile(path: string, ingest: boolean): Promise<void>;
+  taskCard(taskId: string): TaskCard | null;
+  taskNews(taskId: string): TaskNews | null;
 }
 
 /** What Island lends the registry. */
@@ -73,6 +79,7 @@ export interface IslandHost {
   avatarEmote(e: BotEmoteName): void;
   avatarMorph(v: number): void;
   avatarGulp(): void;
+  avatarTint(color: string | null): void;
 }
 
 export interface IslandApi {
@@ -83,7 +90,7 @@ export interface IslandApi {
   timeout(fn: () => void, ms: number): Disposer;
   interval(fn: () => void, ms: number, opts?: { whenVisible?: boolean }): Disposer;
   status: { set(line: StatusLine | null): void };
-  avatar: { publish(sig: AvatarSignal | null): void; emote(e: BotEmoteName): void; morph(v: number): void; gulp(): void };
+  avatar: { publish(sig: AvatarSignal | null): void; emote(e: BotEmoteName): void; morph(v: number): void; gulp(): void; tint(color: string | null): void };
   island: {
     open(view: string, opts?: { pinMs?: number }): void; setView(view: string): void; close(): void; wake(): void; hide(): void;
     keepAwake(pred: () => boolean): Disposer; isVisible(): boolean; mode(): IslandMode; fsmState(): FsmState; mouseInside(): boolean; view(): string;
