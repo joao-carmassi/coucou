@@ -1,7 +1,9 @@
 // Coucou for Windows — app wiring and the commands the island calls.
 
 mod core;
+mod modules;
 
+use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
@@ -9,6 +11,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::{ManagerExt, MacosLauncher};
 
+use crate::core::host::ModuleHost;
 use crate::core::{island, log, platform, settings, tray};
 
 use island::{PollGate, ScreenInfo};
@@ -31,10 +34,11 @@ pub struct BootInfo {
     /// False where the OS has no global cursor (Wayland): the page then reports
     /// the cursor from its own mouse events.
     cursor_poll: bool,
+    modules: BTreeMap<String, bool>,
 }
 
 #[tauri::command]
-fn boot(app: AppHandle, shared: State<Shared>) -> BootInfo {
+fn boot(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>) -> BootInfo {
     let settings = shared.settings.lock().unwrap().clone();
     let screen = island::screen_info(&app, &settings.screen);
     BootInfo {
@@ -42,13 +46,18 @@ fn boot(app: AppHandle, shared: State<Shared>) -> BootInfo {
         screen,
         version: env!("CARGO_PKG_VERSION").to_string(),
         cursor_poll: platform::CURSOR_POLL,
+        modules: host.state(),
     }
 }
 
 #[tauri::command]
-fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
+fn save_settings(app: AppHandle, shared: State<Shared>, mut settings: Settings) {
     let (screen_changed, autostart_changed) = {
         let mut current = shared.settings.lock().unwrap();
+        // A caller that does not know about modules must not wipe the switches.
+        if settings.modules_enabled.is_empty() {
+            settings.modules_enabled = current.modules_enabled.clone();
+        }
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
         *current = settings.clone();
@@ -68,6 +77,8 @@ fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
         let collapsed = shared.gate.collapsed.load(Ordering::Relaxed);
         island::apply_geometry(&app, &settings.screen, collapsed);
     }
+    // After the Shared lock is released: a module's start may need it.
+    app.state::<ModuleHost>().sync(&app, &settings);
     // Keep the other window in step (island ⇄ settings window).
     let _ = app.emit("settings-changed", settings);
 }
@@ -249,7 +260,10 @@ fn open_settings_window(app: AppHandle) {
 
 pub fn run() {
     platform::prepare_environment();
-    let loaded = settings::load();
+    let mut loaded = settings::load();
+    if settings::migrate_modules(&mut loaded) {
+        let _ = settings::save(&loaded);
+    }
     let gate = Arc::new(PollGate::new());
 
     tauri::Builder::default()
@@ -257,6 +271,7 @@ pub fn run() {
             let _ = app.emit_to(island::WINDOW_LABEL, "tray", "open".to_string());
         }))
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
+        .manage(ModuleHost::new(modules::CATALOG, modules::registry()))
         .manage(Shared {
             settings: Mutex::new(loaded.clone()),
             gate: gate.clone(),
@@ -297,7 +312,7 @@ pub fn run() {
             island::spawn_cursor_poll(handle.clone(), gate.clone());
 
             log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
-            log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
+            handle.state::<ModuleHost>().sync(&handle, &loaded);
             Ok(())
         })
         .run(tauri::generate_context!())
