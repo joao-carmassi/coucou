@@ -12,6 +12,7 @@ mod integrations;
 mod island;
 mod local_claude;
 mod log;
+mod media;
 mod pipe;
 mod platform;
 mod secrets;
@@ -978,6 +979,40 @@ fn open_settings_window(app: AppHandle) {
     show_settings_window(&app);
 }
 
+// ── Mídia ─────────────────────────────────────────────────────────────────────
+
+#[tauri::command]
+async fn media_list() -> Result<Vec<media::MediaItem>, String> {
+    blocking(media::list).await
+}
+
+/// A PNG of the file's preview, as raw bytes.
+#[tauri::command]
+async fn media_thumb(path: String, px: u32) -> Result<tauri::ipc::Response, String> {
+    blocking(move || media::thumb(&path, px.clamp(32, 512))).await?.map(tauri::ipc::Response::new)
+}
+
+#[tauri::command]
+async fn media_open(path: String) -> Result<(), String> {
+    blocking(move || media::open(&path)).await?
+}
+
+#[tauri::command]
+async fn media_open_with(path: String) -> Result<(), String> {
+    blocking(move || media::open_with(&path)).await?
+}
+
+#[tauri::command]
+async fn media_reveal(path: String) -> Result<(), String> {
+    blocking(move || media::reveal(&path)).await?
+}
+
+/// Off the list only; the file on disk stays.
+#[tauri::command]
+async fn media_remove(path: String) -> Result<(), String> {
+    blocking(move || media::remove(&path)).await
+}
+
 pub fn run() {
     platform::prepare_environment();
     let loaded = settings::load();
@@ -1055,6 +1090,12 @@ pub fn run() {
             open_settings_window,
             take_settings_section,
             set_paused,
+            media_list,
+            media_thumb,
+            media_open,
+            media_open_with,
+            media_reveal,
+            media_remove,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -1080,6 +1121,7 @@ pub fn run() {
             hooks::ensure_hook_exe(&handle);
             pipe::start(handle.clone());
             integrations::start(handle.clone());
+            media::start(handle.clone());
             offer_wsl_setup(handle.clone());
             Ok(())
         })

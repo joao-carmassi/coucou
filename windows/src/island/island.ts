@@ -264,6 +264,7 @@ export class Island {
         State.notify();
       },
       followNews: () => followNews(this),
+      launchFile: (path) => this.openFileInClaude(path),
     };
 
     this.wakeStrip = h("div", { id: "wake-strip" });
@@ -665,6 +666,20 @@ export class Island {
         this.engine.animateMorph(0);
         this.showError(err);
       });
+  }
+
+  /** A file from the Mídia list, taken in like a dropped one: copied into the inbox (the only place a session may attach from), then asked about. */
+  private async openFileInClaude(path: string) {
+    const file = await Bridge.ingestFile(path);
+    State.droppedFile = { name: file.name, path: file.path };
+    State.promptContext = { kind: "file", name: file.name, path: file.path };
+    if (State.settings.askMode === "mochi") {
+      State.chatHistory = [];
+      State.activeSession = null;
+      void Bridge.chatReset();
+      Sound.play("attach");
+      this.setView("prompt");
+    } else this.launchWith(file.path);
   }
 
   /** A new terminal session, in the front session's profile and folder, with the file attached. */
