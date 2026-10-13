@@ -18,3 +18,4 @@ import "../modules/claude/chat.css";
 import "../modules/claude/panel.css";
 import "../modules/claude/claude.css";
 import "../modules/timer/timer.css";
+import "../modules/media/media.css";

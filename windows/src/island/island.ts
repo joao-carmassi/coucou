@@ -575,7 +575,7 @@ export class Island implements IslandHost {
     State.mouse = { x, y };
     const rect = this.islandRect();
     State.mouseInIsland = { x: x - rect.x, y: y - rect.y };
-    for (const o of this.overlays) o.cursor?.(State.mouseInIsland.x, State.mouseInIsland.y);
+    for (const o of this.overlays) o.cursor?.(State.mouseInIsland.x, State.mouseInIsland.y, down);
 
     const released = this.lastDown && !down;
     const pressed = down && !this.lastDown;
@@ -590,6 +590,7 @@ export class Island implements IslandHost {
     if (this.botPress && down && Math.hypot(x - this.botPress.x, y - this.botPress.y) > 7) {
       this.botPress = null;
       this.cancelBotHover();
+      Hooks.all("mochiDrop"); // pulled out of the island: a module may carry him on (media: drop on a window)
     }
 
     // A click elsewhere on screen folds the island (#31). Judged on the release, so a file

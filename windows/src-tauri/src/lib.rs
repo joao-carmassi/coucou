@@ -325,6 +325,13 @@ pub fn run() {
             modules::claude::commands::approval_decline,
             modules::claude::commands::approval_answer,
             modules::claude::commands::ingest_file,
+            modules::media::commands::attach_window,
+            modules::media::commands::media_list,
+            modules::media::commands::media_thumb,
+            modules::media::commands::media_open,
+            modules::media::commands::media_open_with,
+            modules::media::commands::media_reveal,
+            modules::media::commands::media_remove,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();

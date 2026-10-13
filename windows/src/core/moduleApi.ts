@@ -38,7 +38,7 @@ export interface Overlay {
   active(): boolean;
   /** Draws; true while it needs another frame. */
   frame(nowMs: number): boolean;
-  cursor?(x: number, y: number): void;
+  cursor?(x: number, y: number, down?: boolean): void;
   place?(islandW: number): void;
   leaving?(nextView: string): void;
 }
