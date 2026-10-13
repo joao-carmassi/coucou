@@ -34,6 +34,9 @@ const TINT_RATE = 5.5;
 /** Closer than this on every channel (0…1), the body has its colour: a unit of 8-bit colour. */
 const TINT_SETTLED = 0.004;
 
+/** Minimum frame interval while compact with only the looping avatar animating. */
+const IDLE_FRAME_MS = 60;
+
 export class Island implements IslandHost {
   readonly fsm = new IslandStateMachine();
   readonly actions: ViewActions;
@@ -713,13 +716,15 @@ export class Island implements IslandHost {
   }
 
   private frame = (nowMs: number) => {
-    // Compact, cursor away, only the looping avatar idle (breathe/scan/sweat/zz): 30 fps.
-    // The skipped rAF is a no-op; dt keeps accumulating (capped below) so motion speed is unchanged.
+    // Compact, cursor away, only the looping avatar idle (breathe/scan/sweat/zz): ~15 fps.
+    // Every presented frame costs the GPU process ~4 ms of CPU (a 720x320 transparent window), so
+    // the rate is the cost. The skipped frame is a timer, not a rAF poll: polling woke the main
+    // thread on every vsync (240 Hz). dt keeps accumulating (capped below) so motion speed is unchanged.
     if (State.mode === "compact" && !this.wasInIsland && !this.dirty && !this.lastOverlayBusy &&
         !this.width.animating && !this.height.animating && !this.radius.animating && this.offsetX.settled &&
         this.botCx.settled && this.botCy.settled && this.botSize.settled && !this.tintSettling &&
-        !this.engine.animating && nowMs - this.lastFrame < 30) {
-      requestAnimationFrame(this.frame);
+        !this.engine.animating && nowMs - this.lastFrame < IDLE_FRAME_MS) {
+      window.setTimeout(() => requestAnimationFrame(this.frame), IDLE_FRAME_MS - (nowMs - this.lastFrame) - 8);
       return;
     }
     const dt = Math.min(0.05, (nowMs - this.lastFrame) / 1000);
@@ -754,6 +759,7 @@ export class Island implements IslandHost {
     }
 
     tickMiniBots(dt);
+    this.shimmer(nowMs);
     this.views.get(State.view)?.tick?.(nowMs);
     let overlayBusy = false;
     for (const o of this.overlays) {
@@ -774,6 +780,7 @@ export class Island implements IslandHost {
       : settling ||
         !this.botCx.settled || !this.botCy.settled || !this.botSize.settled ||
         greetingActive || this.engine.busy || this.tintSettling || overlayBusy ||
+        (State.mode === "compact" && this.activityShown) ||
         // The auto-close countdown bar is only redrawn here; a stopped loop froze
         // it and it caught up in jumps whenever something else animated.
         (State.mode === "expanded" && !State.isPinned && this.homeCollapseAt != null);
@@ -785,6 +792,17 @@ export class Island implements IslandHost {
       Sound.idle();
     }
   };
+
+  /** Text shimmer of the compact status line, stepped here so each repaint lands in the frame the avatar
+   *  is drawn in: a CSS animation of its own presented a second frame to the GPU process, at the same
+   *  rate, out of phase (60 presents/s instead of 30, ~4 ms of GPU-process CPU each). */
+  private shimmer(nowMs: number) {
+    if (State.mode !== "compact" || !this.activityShown) return;
+    const span = this.activityEl.lastElementChild as HTMLElement | null;
+    if (!span) return;
+    const pos = `${100 - Math.floor((nowMs % 2000) / 33.34) * (100 / 60)}% center, 0 0`;
+    if (span.style.backgroundPosition !== pos) span.style.backgroundPosition = pos;
+  }
 
   private updateBotTargets() {
     const p = botPosition(State.mode, State.view, this.height.value);
