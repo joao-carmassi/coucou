@@ -16,10 +16,6 @@ pub struct Settings {
     pub screen: String,
     pub autostart: bool,
     pub hooks_installed: bool,
-    /// Claude model used by the chat. Changeable in the settings window.
-    /// Defaulted explicitly so a settings.json written by an older build still loads.
-    #[serde(default = "default_model")]
-    pub model: String,
     /// GitHub projects ("owner/name") whose news the pill keeps to itself: a
     /// project not listed here speaks up, so a new one does by default.
     #[serde(default)]
@@ -31,10 +27,6 @@ pub struct Settings {
     /// The first-launch offer to set up WSL has been made. Shown once, ever.
     #[serde(default)]
     pub wsl_prompted: bool,
-    /// Where Mochi's chat goes: "api" (the API key), "windows" (Claude Code on
-    /// Windows) or "wsl:<distro>" (Claude Code inside that distro).
-    #[serde(default = "default_backend")]
-    pub chat_backend: String,
     /// A second Claude account: the folder Claude Code on Windows keeps its
     /// sign-in and sessions in (`CLAUDE_CONFIG_DIR`). Empty = the default `~/.claude`.
     #[serde(default)]
@@ -43,15 +35,9 @@ pub struct Settings {
     /// Claude Code in a new terminal, in the home folder.
     #[serde(default)]
     pub idle_open: String,
-    /// The session Mochi's chat is in, kept across restarts. Owned by Rust.
-    #[serde(default)]
-    pub mochi_session: Option<crate::local_claude::ActiveSession>,
     /// Seconds the minimized island waits before hiding. 0 = never hide.
     #[serde(default = "default_compact_hide")]
     pub compact_hide_interval: f64,
-    /// What the Ask tab is: "sessions" (the Sessions manager) or "mochi" (Mochi's chat).
-    #[serde(default = "default_ask_mode")]
-    pub ask_mode: String,
     /// Voice input (voice.rs). Off until the user switches it on.
     #[serde(default)]
     pub voice_enabled: bool,
@@ -60,6 +46,10 @@ pub struct Settings {
     /// Global hotkey that emits `go-to-alert`; empty = none.
     #[serde(default = "default_alert_hotkey")]
     pub alert_hotkey: String,
+    /// Keys this build no longer knows (the removed chat's `model`, `chatBackend`…):
+    /// kept so saving never drops them from an installed settings.json.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 fn default_voice_hotkey() -> String {
@@ -70,20 +60,8 @@ fn default_alert_hotkey() -> String {
     String::new()
 }
 
-fn default_ask_mode() -> String {
-    "sessions".into()
-}
-
 fn default_compact_hide() -> f64 {
     60.0
-}
-
-fn default_backend() -> String {
-    "api".into()
-}
-
-fn default_model() -> String {
-    crate::claude::DEFAULT_MODEL.to_string()
 }
 
 impl Default for Settings {
@@ -102,19 +80,16 @@ impl Default for Settings {
             screen: "primary".into(),
             autostart: false,
             hooks_installed: false,
-            model: default_model(),
             github_muted: Vec::new(),
             wsl_hooks: Vec::new(),
             wsl_prompted: false,
-            chat_backend: default_backend(),
             claude_config_dir: String::new(),
             idle_open: String::new(),
-            mochi_session: None,
             compact_hide_interval: default_compact_hide(),
-            ask_mode: default_ask_mode(),
             voice_enabled: false,
             voice_hotkey: default_voice_hotkey(),
             alert_hotkey: default_alert_hotkey(),
+            extra: Default::default(),
         }
     }
 }
@@ -157,4 +132,20 @@ pub fn save(settings: &Settings) -> std::io::Result<()> {
     let json = serde_json::to_vec_pretty(settings)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     std::fs::write(settings_path(), json)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn removed_keys_round_trip() {
+        let sample = r#"{"soundEnabled":true,"soundVolume":0.12,"autoCloseInterval":10.0,"absenceInterval":180.0,"activeIntegrations":[],"screen":"primary","autostart":true,"hooksInstalled":true,"model":"claude-opus-5","githubMuted":[],"wslHooks":[],"wslPrompted":true,"chatBackend":"windows","claudeConfigDir":"","idleOpen":"terminal","mochiSession":{"backend":"windows","id":"x","cwd":null},"compactHideInterval":30.0,"askMode":"sessions"}"#;
+        let want: serde_json::Value = serde_json::from_str(sample).unwrap();
+        let parsed: Settings = serde_json::from_str(sample).unwrap();
+        let back = serde_json::to_value(&parsed).unwrap();
+        for (k, v) in want.as_object().unwrap() {
+            assert_eq!(back.get(k), Some(v), "key {k}");
+        }
+    }
 }

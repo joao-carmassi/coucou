@@ -18,33 +18,12 @@ use std::time::UNIX_EPOCH;
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::local_claude::Backend;
 
 /// Each profile lists its most recent sessions; older ones stay on disk.
 const MAX_LISTED: usize = 50;
 /// Head and tail read to find a session's folder and title without loading a
 /// transcript that can run to megabytes.
-/// The conversation view shows the end of a long session, not all of it.
-const MAX_HISTORY: usize = 40;
 const PEEK: u64 = 96 * 1024;
-
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct SessionInfo {
-    pub id: String,
-    /// The working folder, as that Claude Code sees it (Linux path under WSL).
-    pub cwd: String,
-    pub title: String,
-    /// Last change, milliseconds since the epoch.
-    pub updated: u64,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HistoryItem {
-    pub role: &'static str,
-    pub text: String,
-}
 
 /// One Claude Code account: the same claude.exe with its own CLAUDE_CONFIG_DIR.
 #[derive(Serialize, Clone)]
@@ -270,21 +249,6 @@ fn user_text(rec: &Value) -> Option<String> {
     (!t.is_empty() && !plumbing).then(|| t.to_string())
 }
 
-fn assistant_text(rec: &Value) -> Option<String> {
-    if rec.get("isSidechain").and_then(Value::as_bool) == Some(true) {
-        return None;
-    }
-    let parts = rec.get("message")?.get("content")?.as_array()?;
-    let text = parts
-        .iter()
-        .filter(|p| p.get("type").and_then(Value::as_str) == Some("text"))
-        .filter_map(|p| p.get("text").and_then(Value::as_str))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let t = text.trim();
-    (!t.is_empty()).then(|| t.to_string())
-}
-
 fn one_line(s: &str, max: usize) -> String {
     let flat = s.split_whitespace().collect::<Vec<_>>().join(" ");
     if flat.chars().count() <= max {
@@ -376,132 +340,6 @@ pub fn erase(profile: &str, id: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// `~/.claude/projects` of the Claude Code Mochi uses.
-fn mochi_projects_dir(backend: &Backend) -> Result<PathBuf, String> {
-    match backend {
-        Backend::Api => Err("As sessões precisam do Claude Code: ative \"Usar no Mochi\" nas Configurações.".into()),
-        Backend::Windows => match crate::settings::claude_config_dir() {
-            Some(dir) => Ok(dir.join("projects")),
-            None => std::env::var_os("USERPROFILE")
-                .map(|h| PathBuf::from(h).join(".claude").join("projects"))
-                .ok_or_else(|| "Sem perfil de usuário.".into()),
-        },
-        Backend::Wsl(distro) => Ok(crate::wsl::home_unc(distro)?.join(".claude").join("projects")),
-    }
-}
-
-/// The most recent sessions, newest first.
-pub fn list(backend: &Backend) -> Result<Vec<SessionInfo>, String> {
-    let mut files = transcripts(&mochi_projects_dir(backend)?);
-    files.sort_by(|a, b| b.1.cmp(&a.1));
-    Ok(files
-        .into_iter()
-        .take(MAX_LISTED)
-        .filter_map(|(p, t)| describe(&p, t, ""))
-        .map(|s| SessionInfo { id: s.id, cwd: s.cwd, title: s.title, updated: s.updated })
-        .collect())
-}
-
-fn find(backend: &Backend, id: &str) -> Result<PathBuf, String> {
-    if !is_session_id(id) {
-        return Err("ID de sessão inválido.".into());
-    }
-    let projects = mochi_projects_dir(backend)?;
-    transcripts(&projects)
-        .into_iter()
-        .map(|(p, _)| p)
-        .find(|p| p.file_stem().and_then(|s| s.to_str()) == Some(id))
-        .ok_or_else(|| "Essa sessão não existe mais.".into())
-}
-
-/// What was said, user and assistant, without the tool calls in between.
-pub fn history(backend: &Backend, id: &str) -> Result<Vec<HistoryItem>, String> {
-    let text = std::fs::read_to_string(find(backend, id)?).map_err(|e| e.to_string())?;
-    let mut items: Vec<HistoryItem> = Vec::new();
-    for rec in records(&text) {
-        let item = match rec.get("type").and_then(Value::as_str) {
-            Some("user") => user_text(&rec).map(|text| HistoryItem { role: "user", text }),
-            Some("assistant") => assistant_text(&rec).map(|text| HistoryItem { role: "assistant", text }),
-            _ => None,
-        };
-        let Some(item) = item else { continue };
-        // A turn is often several records; show it as one reply.
-        match items.last_mut() {
-            Some(last) if last.role == "assistant" && item.role == "assistant" => {
-                last.text.push_str("\n\n");
-                last.text.push_str(&item.text);
-            }
-            _ => items.push(item),
-        }
-    }
-    let skip = items.len().saturating_sub(MAX_HISTORY);
-    Ok(items.into_iter().skip(skip).collect())
-}
-
-/// Erases a session's transcript, and the folder Claude Code keeps beside it
-/// for that session (subagents, tool output) if there is one.
-pub fn delete(backend: &Backend, id: &str) -> Result<(), String> {
-    let file = find(backend, id)?;
-    let projects = mochi_projects_dir(backend)?;
-    if !file.starts_with(&projects) {
-        return Err("Recusei apagar fora da pasta de projetos do Claude Code.".into());
-    }
-    std::fs::remove_file(&file).map_err(|e| format!("Não foi possível apagar a sessão: {e}"))?;
-    let side = file.with_extension("");
-    if side.is_dir() && side.file_name().and_then(|s| s.to_str()) == Some(id) {
-        let _ = std::fs::remove_dir_all(side);
-    }
-    Ok(())
-}
-
-/// The folder picker, for a new session in a folder of the user's choosing.
-/// Returns the path as the backend's Claude Code will see it.
-pub fn pick_folder(backend: &Backend, owner: Option<isize>) -> Result<Option<String>, String> {
-    let Some(picked) = folder_dialog(owner) else { return Ok(None) };
-    match backend {
-        Backend::Api => Err("As sessões precisam do Claude Code.".into()),
-        Backend::Windows => Ok(Some(picked)),
-        Backend::Wsl(distro) => crate::wsl::to_linux_path(distro, &picked).map(Some),
-    }
-}
-
-/// The shell's own folder dialog, on a thread of its own: it needs a COM
-/// apartment and runs a modal loop, neither of which belongs on the main thread.
-fn folder_dialog(owner: Option<isize>) -> Option<String> {
-    use windows::core::w;
-    use windows::Win32::Foundation::HWND;
-    use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_INPROC_SERVER,
-        COINIT_APARTMENTTHREADED,
-    };
-    use windows::Win32::UI::Shell::{
-        FileOpenDialog, IFileOpenDialog, FOS_FORCEFILESYSTEM, FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
-    };
-
-    std::thread::spawn(move || unsafe {
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-        let picked = (|| {
-            let dialog: IFileOpenDialog = CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER).ok()?;
-            let options = dialog.GetOptions().ok()?;
-            dialog.SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM).ok()?;
-            let _ = dialog.SetTitle(w!("Uma pasta para uma nova sessão do Mochi"));
-            // Owned by the island, so it comes up above it rather than behind.
-            let owner = owner.map(|h| HWND(h as *mut _));
-            dialog.Show(owner).ok()?; // cancelled → Err
-            let item = dialog.GetResult().ok()?;
-            let raw = item.GetDisplayName(SIGDN_FILESYSPATH).ok()?;
-            let path = raw.to_string().ok();
-            CoTaskMemFree(Some(raw.0 as *const _));
-            path
-        })();
-        CoUninitialize();
-        picked
-    })
-    .join()
-    .ok()
-    .flatten()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -540,9 +378,6 @@ mod tests {
         assert_eq!(info.cwd, "/home/me/proj");
         assert_eq!(info.title, "Fix login bug");
 
-        let text = std::fs::read_to_string(&files[0].0).unwrap();
-        let said: Vec<_> = records(&text).filter_map(|r| assistant_text(&r)).collect();
-        assert_eq!(said, ["Found it.", "Fixed in auth.ts."]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
