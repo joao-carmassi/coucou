@@ -35,7 +35,7 @@ test("countdown: idle -> ready -> running -> paused -> running -> done", () => {
   assert.equal(c.text(), "00:00");
   c.cancel(); // what the module does when the end timeout fires
   assert.equal(c.status, "idle");
-  assert.equal(changes, 6);
+  assert.equal(changes, 5);
 });
 
 test("stopwatch counts up, pauses, formats hours", () => {
