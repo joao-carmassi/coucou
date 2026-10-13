@@ -584,10 +584,11 @@ export class Island {
         this.dragOrigin ??= { state: this.fsm.state, view: State.view };
         State.fileDragOver = true;
         this.engine.animateMorph(1);
-        // enterZone must run before the island expands, so the sequence is
-        // already active by the time the view becomes `upload`.
-        UploadSeq.enterZone(State.mouseInIsland.x, State.mouseInIsland.y);
         this.alert("upload");
+        // After alert, not before: from a hidden/compact island forceHome first
+        // expands to the default view, which deactivates any running sequence —
+        // the drop then sat on "0 %" forever with no frame driving it.
+        UploadSeq.enterZone(State.mouseInIsland.x, State.mouseInIsland.y);
         break;
       }
       case "leave": {
@@ -679,7 +680,6 @@ export class Island {
       void Bridge.chatReset();
     }
 
-    UploadSeq.performDrop(State.uploadDuration);
     this.uploadTens = 0;
     this.uploadDone = false;
 
@@ -690,6 +690,13 @@ export class Island {
 
     State.uploadProgress = 0;
     this.setView("uploading");
+    // setView on a closed island goes through forceHome, which stops the
+    // sequence; without it nothing advances past "0 %" or reaches `choose`.
+    if (!UploadSeq.isActive) {
+      void Bridge.log("drop: sequence was not running, restarted");
+      UploadSeq.enterZone(State.mouseInIsland.x, State.mouseInIsland.y);
+    }
+    UploadSeq.performDrop(State.uploadDuration);
     this.ensureRunning();
 
     void Bridge.ingestFile(path)
@@ -707,7 +714,7 @@ export class Island {
 
   /** A file from the Mídia list, taken in like a dropped one: copied into the inbox (the only place a session may attach from), then asked about. */
   private async openFileInClaude(path: string) {
-    const name = path.split(/[\/]/).pop() || "file";
+    const name = path.split(/[\\/]/).pop() || "file";
     const mochi = State.settings.askMode === "mochi";
     if (mochi) {
       // Up at once with the path we have; the copy (none, for a file already in the inbox) swaps it in.

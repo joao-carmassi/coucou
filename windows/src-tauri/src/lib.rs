@@ -719,7 +719,7 @@ async fn session_launch(
     attach: Option<String>,
     prompt: Option<String>,
 ) -> Result<(), String> {
-    blocking(move || {
+    let r = blocking(move || {
         let p = sessions::profiles()
             .into_iter()
             .find(|p| p.key == profile)
@@ -759,10 +759,16 @@ async fn session_launch(
             .unwrap_or_else(platform::home_dir);
         let cli = local_claude::windows_cli().ok_or("O Claude Code não está instalado no Windows.")?;
         let config = (!p.is_default).then(|| std::path::PathBuf::from(&p.config_dir));
+        log::line(format!("session launch: attach={} dir={}", attach.is_some(), dir.display()));
         claude_console(&cli, &args, &dir, config.as_deref(), prompt.as_deref())
             .map_err(|e| format!("Não foi possível iniciar o Claude Code: {e}"))
     })
-    .await?
+    .await?;
+    log::line(match &r {
+        Ok(()) => "session launch: spawned".to_string(),
+        Err(e) => format!("session launch failed: {e}"),
+    });
+    r
 }
 
 /// `\\?\C:\x` → `C:\x`: what canonicalize returns is not what Claude Code expects.
@@ -781,7 +787,13 @@ async fn session_erase(profile: String, id: String) -> Result<(), String> {
 #[tauri::command]
 async fn ingest_file(path: String) -> Result<DroppedFile, String> {
     // Off the main thread: a big copy must not freeze the webview.
-    blocking(move || files::ingest(&path)).await?
+    log::line("ingest start");
+    let r = blocking(move || files::ingest(&path)).await?;
+    log::line(match &r {
+        Ok(f) => format!("ingest done: {} ({} bytes)", f.name, f.size),
+        Err(e) => format!("ingest failed: {e}"),
+    });
+    r
 }
 
 /// Screenshots the window under the cursor into the inbox (Mochi dragged onto it).
