@@ -73,16 +73,6 @@
   white-space: nowrap;
 }
 
-.q-link {
-  flex: 0 0 auto;
-  color: var(--dim-3);
-  white-space: nowrap;
-}
-
-.q-link:hover {
-  color: var(--ink-2);
-}
-
 /* A session at work is its card: the whole of it opens the session panel. */
 .card.opens:hover {
   background: color-mix(in srgb, var(--card), #fff 2.5%);
@@ -281,29 +271,6 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
   flex: 0 0 auto;
-}
-
-/* A text field of the island's own — a typed answer to a question: the chat's,
-   at a card's scale. */
-.island-field {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 28px;
-  padding: 0 11px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--ink);
-  font: 400 12.5px var(--font);
-  outline: none;
-}
-
-.island-field::placeholder {
-  color: var(--dim-3);
-}
-
-.island-field:focus {
-  border-color: rgba(255, 255, 255, 0.2);
 }
 
 /* Options that explain themselves: one to a line, its name then what it means,

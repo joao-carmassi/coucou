@@ -95,7 +95,7 @@ class AppState {
 
   /** The home view: what the strongest module asks for (Hooks.home), else the empty card. */
   defaultView(): IslandViewName {
-    return Hooks.home()?.view ?? "empty";
+    return Hooks.home(false)?.view ?? "empty";
   }
 }
 

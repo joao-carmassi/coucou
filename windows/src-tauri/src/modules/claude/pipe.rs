@@ -74,11 +74,19 @@ pub fn start(app: AppHandle) -> tauri::async_runtime::JoinHandle<()> {
         let name = pipe_name();
         // first_pipe_instance also means we refuse to join a pipe somebody else
         // already owns under our name, rather than serving on top of it.
-        let mut server = match ServerOptions::new().first_pipe_instance(true).create(&name) {
-            Ok(s) => s,
-            Err(err) => {
-                log::line(format!("cannot open the relay pipe: {err}"));
-                return;
+        // Retry: after a stop/start the previous instance may take a moment to close.
+        let mut tries = 0;
+        let mut server = loop {
+            match ServerOptions::new().first_pipe_instance(true).create(&name) {
+                Ok(s) => break s,
+                Err(_) if tries < 50 => {
+                    tries += 1;
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+                }
+                Err(err) => {
+                    log::line(format!("cannot open the relay pipe: {err}"));
+                    return;
+                }
             }
         };
         loop {

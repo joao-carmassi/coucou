@@ -1,9 +1,6 @@
 // Order matters: the pieces are the original style.css, cut at its section headers, and
-// keep its cascade order.
+// keep its cascade order. ui.css (shared pieces) first; each module imports its own CSS.
+import "./ui.css";
 import "./core.css";
 import "./overview.css";
-import "../modules/claude/base.css";
 import "./settings.css";
-import "../modules/claude/chat.css";
-import "../modules/claude/panel.css";
-import "../modules/claude/claude.css";

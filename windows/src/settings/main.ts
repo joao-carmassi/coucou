@@ -126,7 +126,7 @@ function generalSection(): HTMLElement {
 const modulesBox = h("div", {});
 /** The sections of the modules that are on, in catalog order: they sit between the switches and the footer. */
 const sectionsBox = h("div", { style: "display:contents" });
-const sections = new Map<string, HTMLElement>();
+const sections = new Map<string, { el: HTMLElement; dispose?(): void }>();
 
 /** A module's section exists only while the module is on. */
 function renderSections(effective: Record<string, boolean>) {
@@ -135,14 +135,15 @@ function renderSections(effective: Record<string, boolean>) {
     const on = effective[def.id] === true;
     const has = sections.get(def.id);
     if (!on && has) {
-      has.remove();
+      has.el.remove();
+      has.dispose?.();
       sections.delete(def.id);
     } else if (on && !has) {
       sections.set(def.id, def.settings());
     }
   }
   const order = MODULES.map((m) => m.id);
-  sectionsBox.replaceChildren(...[...sections].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0])).map(([, el]) => el));
+  sectionsBox.replaceChildren(...[...sections].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0])).map(([, s]) => s.el));
 }
 
 /** `effective` comes from Rust (modules-changed); until then it is computed from the stored switches. */

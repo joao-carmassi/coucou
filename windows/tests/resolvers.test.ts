@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Compact } from "../src/core/compact.ts";
 import { Avatar } from "../src/core/avatar.ts";
+import { Hooks } from "../src/core/hooks.ts";
 import { resolveEnabled } from "../src/core/moduleApi.ts";
 import { MODULE_INFO } from "../src/modules/catalog.ts";
 
@@ -51,4 +52,11 @@ test("resolveEnabled: defaults and requirements", () => {
   const r = resolveEnabled(MODULE_INFO, { claude: false, voice: true });
   assert.equal(r.voice, false);
   assert.equal(r.upload, false);
+});
+
+test("Hooks.home(false) ignores pinned requests", () => {
+  const off = Hooks.provide("homeView", () => ({ view: "approval", pin: true, priority: 90 }));
+  assert.equal(Hooks.home()?.view, "approval");
+  assert.equal(Hooks.home(false), null);
+  off();
 });

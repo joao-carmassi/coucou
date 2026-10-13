@@ -40,6 +40,8 @@ impl Module for Claude {
 
     fn stop(&self, ctx: &ModuleCtx) {
         hotkeys::clear(&ctx.app, "alert");
+        // Release the pipe: handlers waiting for a reply end when their sender is dropped.
+        ctx.app.state::<pipe::Pending>().0.lock().unwrap().clear();
     }
 }
 

@@ -336,7 +336,11 @@ export class Island implements IslandHost {
 
   /** The mouse reaches a hidden island: it just peeks. */
   private mouseEnter() {
-    this.fsm.mouseEntered();
+    const r = this.fsm.state === "hidden" ? Hooks.home() : null;
+    if (r?.pin) {
+      this.fsm.pinned = true;
+      this.fsm.forceHome();
+    } else this.fsm.mouseEntered();
   }
 
   /** A line on the note card for a moment, then back — unless the island moved on meanwhile. */

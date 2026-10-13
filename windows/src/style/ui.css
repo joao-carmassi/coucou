@@ -1,0 +1,116 @@
+/* Shared UI pieces (buttons, fields, variables) used by the core and by more than one module. */
+:root {
+  --gh-text: #c5c8cd;      /* a line's words: between the ink and the dims */
+  --gh-edge: rgba(255, 255, 255, 0.05);   /* the panel's border */
+  --gh-hover: rgba(255, 255, 255, 0.05);  /* a line under the mouse */
+  --gh-track: rgba(255, 255, 255, 0.06);  /* the empty length of a bar */
+  --gh-plate: rgba(255, 255, 255, 0.07);  /* a round button, the step on show, a tag */
+  --gh-tile: color-mix(in srgb, var(--card), #fff 3.5%);     /* a block of a sheet */
+  --gh-tile-hover: color-mix(in srgb, var(--card), #fff 7%);
+
+  --on-light: #0b0c0e;       /* a mark or a word on a light or a coloured ground */
+
+  --code: #d6d9df;
+  --code-keyword: #c792ea;
+  --code-string: #c3e88d;
+  --code-call: #82aaff;      /* a call, a property */
+  --code-constant: #f78c6c;  /* a number, a constant */
+  --code-type: #ffcb6b;
+  --code-comment: #5c6370;
+  --code-added: #6ee7b7;     /* the number and the sign of a line added */
+  --code-gone: #b86f78;      /* the words of a line removed */
+}
+@property --accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: rgba(0, 0, 0, 0);
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+
+.btn {
+  font: 500 12.5px var(--font);
+  padding: 7px 13px;
+  border: 0;
+  border-radius: 999px;
+  cursor: default;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: transform 0.08s ease-out, background 0.12s ease-out;
+}
+.btn:active {
+  transform: scale(0.94);
+}
+.btn.primary {
+  background: var(--ink);
+  color: #0b0c0e;
+}
+.btn.secondary {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--ink-2);
+}
+.btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+.btn .kbd {
+  font-size: 10.5px;
+  padding: 0 4px;
+  border-radius: 4px;
+  opacity: 0.55;
+}
+.btn.primary .kbd {
+  border: 1px solid rgba(0, 0, 0, 0.4);
+}
+.btn.secondary .kbd {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+.icon-btn {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--dim-4);
+  display: grid;
+  place-items: center;
+  cursor: default;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.q-link {
+  flex: 0 0 auto;
+  color: var(--dim-3);
+  white-space: nowrap;
+}
+
+.q-link:hover {
+  color: var(--ink-2);
+}
+
+/* A text field of the island's own — a typed answer to a question: the chat's,
+   at a card's scale. */
+.island-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 28px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  font: 400 12.5px var(--font);
+  outline: none;
+}
+
+.island-field::placeholder {
+  color: var(--dim-3);
+}
+
+.island-field:focus {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+

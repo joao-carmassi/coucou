@@ -39,10 +39,13 @@ pub struct BootInfo {
 
 #[tauri::command]
 fn boot(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>) -> BootInfo {
-    let mut settings = shared.settings.lock().unwrap().clone();
-    if host.is_enabled("claude") {
-        modules::claude::cfg::refresh_hooks_installed(&mut settings);
-    }
+    let settings = {
+        let mut current = shared.settings.lock().unwrap();
+        if host.is_enabled("claude") {
+            modules::claude::cfg::refresh_hooks_installed(&mut current);
+        }
+        current.clone()
+    };
     let screen = island::screen_info(&app, &settings.screen);
     BootInfo {
         settings,
@@ -62,6 +65,11 @@ fn save_settings(app: AppHandle, shared: State<Shared>, mut settings: Settings) 
             settings.modules_enabled = current.modules_enabled.clone();
         }
         modules::claude::cfg::keep_rust_owned(&current, &mut settings);
+        if let Some(v) = settings.extra.get_mut("alertHotkey") {
+            if let Some(s) = v.as_str() {
+                *v = serde_json::json!(core::hotkeys::clean(s, ""));
+            }
+        }
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
         *current = settings.clone();

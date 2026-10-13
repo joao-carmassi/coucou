@@ -16,13 +16,9 @@ export const SETTINGS_SHOWN = "coucou:settings-shown";
 
 const save = () => Bridge.saveSettings(State.settings);
 
-/** Runs `fn` every time the window comes up, for as long as `el` is on the page. */
-function onShown(el: HTMLElement, fn: () => void) {
-  const on = () => {
-    if (el.isConnected) fn();
-    else window.removeEventListener(SETTINGS_SHOWN, on);
-  };
-  window.addEventListener(SETTINGS_SHOWN, on);
+/** Runs `fn` every time the window comes up, until `signal` aborts (the section is removed). */
+function onShown(signal: AbortSignal, fn: () => void) {
+  window.addEventListener(SETTINGS_SHOWN, fn, { signal });
 }
 
 /** Green for what is in place, red for what is missing. */
@@ -171,7 +167,7 @@ async function previewFlow(body: HTMLElement, install: boolean, ops: FlowOps) {
 
 const NO_STATUS: HookStatus = { installed: false, settingsPath: "", hookPath: "", hookReady: false, claudeCli: null };
 
-function hooksSection(status: HookStatus): HTMLElement {
+function hooksSection(status: HookStatus, signal: AbortSignal): HTMLElement {
   const body = h("div", { style: "display:flex;flex-direction:column;gap:12px" });
   const section = h(
     "section",
@@ -265,7 +261,7 @@ function hooksSection(status: HookStatus): HTMLElement {
   }
 
   // Claude Code may have been installed (or signed in) since launch.
-  onShown(section, () => void rebuild());
+  onShown(signal, () => void rebuild());
 
   void rebuild();
   return section;
@@ -277,7 +273,7 @@ function hooksSection(status: HookStatus): HTMLElement {
 // Asking a distro for its state starts it, so this only runs while the window
 // is on screen (the shown cue), never at launch.
 
-function wslSection(status: HookStatus): HTMLElement {
+function wslSection(status: HookStatus, signal: AbortSignal): HTMLElement {
   const dot = statusDot(false);
   const body = h("div", { style: "display:flex;flex-direction:column;gap:14px" });
   const section = h("section", { id: "wsl" }, h("h2", {}, dot, h("span", { text: "WSL" })), body);
@@ -385,13 +381,15 @@ function wslSection(status: HookStatus): HTMLElement {
     return block;
   }
 
-  onShown(section, () => void refresh());
+  onShown(signal, () => void refresh());
   return section;
 }
 
 /** The module's section: hooks, then WSL. */
-export function claudeSettingsSection(): HTMLElement {
+export function claudeSettingsSection(): { el: HTMLElement; dispose(): void } {
+  const ac = new AbortController();
   // Shared by both sections: the hooks one refreshes it, the WSL one reads it when it draws.
   const status: HookStatus = { ...NO_STATUS };
-  return h("div", { style: "display:flex;flex-direction:column;gap:22px" }, hooksSection(status), wslSection(status));
+  const el = h("div", { style: "display:flex;flex-direction:column;gap:22px" }, hooksSection(status, ac.signal), wslSection(status, ac.signal));
+  return { el, dispose: () => ac.abort() };
 }
