@@ -2,10 +2,6 @@
 // the sessions manager and the session panel. Everything it knows lives in its own store
 // (store.ts); the core only receives a status line, an avatar signal, a pill, and hooks.
 
-import "./base.css";
-import "./chat.css";
-import "./panel.css";
-import "./claude.css";
 import type { ModuleDef, ViewContext, ViewDef } from "../../core/moduleApi";
 import { PANEL_H } from "../../core/layout";
 import { svg } from "../../views/dom";

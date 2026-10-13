@@ -1,4 +1,3 @@
-import "./timer.css";
 import { svg } from "../../views/dom";
 import { ICONS } from "../../views/icons";
 import { Sound } from "../../core/sound";

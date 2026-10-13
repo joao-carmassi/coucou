@@ -435,3 +435,47 @@
 .gh-del {
   color: var(--red-text);
 }
+
+@keyframes gh-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes gh-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.gh-pm {
+  flex: 0 0 auto;
+  font: 500 10.5px var(--mono);
+  white-space: nowrap;
+}
+/* A file's kind as an editor's tab shows it: its letters on its language's
+   colour. */
+.gh-ext {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  min-width: 17px;
+  height: 13px;
+  padding: 0 3px;
+  border-radius: 3.5px;
+  background: var(--c);
+  color: #fff;
+  font: 700 7.5px/1 var(--font);
+  font-style: normal;
+  white-space: nowrap;
+  /* Centred on the line's box, a badge reads as standing on the name's
+     baseline: a name's weight is in its lower-case letters, which sit below
+     the middle of the line. A pixel down puts both on one axis. */
+  translate: 0 1px;
+}
+
+.gh-ext.dark {
+  color: var(--card);
+}
+
