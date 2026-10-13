@@ -18,6 +18,7 @@ import { markdown } from "./markdown";
 import { hasPreview, stepIcon, stepName, stepPreview } from "./step";
 import { COLOR } from "./palette";
 import { Bridge, type IntegrationNews } from "../core/bridge";
+import { Timer } from "../island/timer";
 
 export interface ViewActions {
   setView(v: IslandViewName): void;
@@ -58,6 +59,8 @@ export interface ViewActions {
   answer(answers: Record<string, string>): void;
   /** The question on the card goes unanswered: Claude is told so and carries on without. */
   skipQuestion(): void;
+  /** "Aguardar": folds the island and leaves the request pending, nothing sent. */
+  deferAlert(): void;
   /** Leaves the question on the card to Claude Code's own window. */
   passQuestion(): void;
   /** A text field wants the keyboard, or gives it back: the island never takes it on its own. */
@@ -324,9 +327,11 @@ function buildOverview(actions: ViewActions, onResize: () => void): ViewHost {
   const pills = h("div", { class: "pills" });
   const right = card(null, pills);
 
+  const timerBar = buildTimerBar();
   const el = h("div", { class: "view overview" },
     h("div", { class: "left" }, left),
     h("div", { class: "right" }, right),
+    timerBar,
   );
 
   let pillIds = "";
@@ -481,6 +486,31 @@ function buildOverview(actions: ViewActions, onResize: () => void): ViewHost {
       }
     },
   };
+}
+
+/** Presets and a stopwatch; while one runs: pause/resume and cancel. Rebuilt only when the timer's status changes. */
+function buildTimerBar(): HTMLElement {
+  const bar = h("div", { class: "timer-bar" });
+  let key = "";
+  const chip = (label: string, onClick: () => void) => h("button", { class: "chip timer-chip", text: label, onclick: onClick });
+  const draw = () => {
+    const next = Timer.status;
+    if (next === key) return;
+    key = next;
+    clear(bar);
+    if (next === "idle") {
+      for (const m of [5, 10, 25]) bar.append(chip(`${m} min`, () => Timer.startCountdown(m)));
+      bar.append(chip("Cronômetro", () => Timer.startStopwatch()));
+    } else {
+      bar.append(
+        chip(next === "running" ? "Pausar" : "Retomar", () => (next === "running" ? Timer.pause() : Timer.resume())),
+        chip("Cancelar", () => Timer.cancel()),
+      );
+    }
+  };
+  draw();
+  State.subscribe(draw);
+  return bar;
 }
 
 function buildPill(task: AgentTask, actions: ViewActions): HTMLElement {
@@ -641,12 +671,14 @@ function buildApproval(actions: ViewActions, onResize: () => void): ViewHost {
         if (kind === "plan") {
           // What Claude Code offers at the end of plan mode, minus the typed feedback.
           row.append(
+            btn("Aguardar", "secondary", () => actions.deferAlert()),
             btn("Continuar planejando", "secondary", () => actions.decide("plan-keep"), "N"),
             btn("Manual", "secondary", () => actions.decide("plan-manual")),
             btn("Modo auto", "primary", () => actions.decide("plan-auto"), "Y"),
           );
         } else {
           row.append(
+            btn("Aguardar", "secondary", () => actions.deferAlert()),
             btn("Negar", "secondary", () => actions.decide("deny"), "N"),
             btn("Aprovar", "primary", () => actions.decide("allow"), "Y"),
           );
@@ -677,7 +709,7 @@ function buildQuestion(actions: ViewActions, onResize: () => void): ViewHost {
   const hint = h("span", { class: "q-hint" });
   const back = h("button", { class: "link-btn q-link", text: "‹ Anterior" });
   const pass = h("button", { class: "link-btn q-link", onclick: () => actions.passQuestion() });
-  const skip = h("button", { class: "btn secondary q-skip", text: "Pular", title: "Deixar esta pergunta sem resposta", onclick: () => actions.skipQuestion() });
+  const skip = h("button", { class: "btn secondary q-skip", text: "Aguardar", title: "Fechar a ilha e responder depois", onclick: () => actions.deferAlert() });
   // Under a list of options: "Other…", and Send when several can be picked.
   const tail = h("div", { class: "q-tail" });
   const foot = h("div", { class: "q-foot" }, tail, hint, h("div", { class: "grow" }), back, pass, skip);

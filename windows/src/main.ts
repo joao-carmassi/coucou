@@ -50,6 +50,9 @@ async function main() {
     }
   });
 
+  // Hotkey (Rust): straight to the card waiting for an answer.
+  await onEvent<null>("go-to-alert", () => island.goToAlert());
+
   await onEvent<null>("screen-changed", () => void Bridge.reposition());
 
   // A hidden page gets no animation frames: the island would be heard but not seen.

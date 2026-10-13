@@ -25,6 +25,7 @@ import { h } from "../views/dom";
 import { usesSessions } from "../views/sessionMenu";
 import { IslandStateMachine, type FsmState } from "./fsm";
 import { activityLine } from "./activity";
+import { Timer } from "./timer";
 
 const BOT_OVERHANG = 40;
 /** The dragged Mochi's canvas: the body is 0.6 of the width, like the island's own. */
@@ -144,6 +145,10 @@ export class Island {
     this.wireInput();
     this.engine.onDizzy = () => this.handleDizzy();
     this.greeting.onComplete = () => this.fsm.greetComplete();
+    Timer.onDone = () => {
+      // A request waiting keeps the island: the sound is enough then.
+      if (!this.hasPending()) this.showNote("Temporizador concluído");
+    };
     State.subscribe(() => {
       this.dirty = true;
       this.ensureRunning();
@@ -214,6 +219,9 @@ export class Island {
         this.noteOutcome(QUESTION_TOOL, (step) => (step.state = "failed"));
         this.settleRequest();
       },
+      // shortcut: relay gives up after ~108 s, then the terminal takes over
+      // Closes the island and leaves the request as it is: no decision is sent.
+      deferAlert: () => this.collapse(),
       passQuestion: () => {
         const req = State.pendingQuestion;
         if (!req) return;
@@ -331,7 +339,8 @@ export class Island {
     this.fsm.homeToPetitDelay = State.settings.autoCloseInterval;
     this.fsm.petitToHiddenDelay = State.settings.compactHideInterval;
     // A session at work keeps the compact island up; one silent for 15 min is presumed dead.
-    this.fsm.keepAwake = () => State.sessions.some(
+    // So does a request waiting for an answer, and a running timer.
+    this.fsm.keepAwake = () => Timer.active || this.hasPending() || State.sessions.some(
       (s) => (s.state === "working" || s.state === "thinking") && Date.now() - s.heardAt < 15 * 60_000,
     );
     this.fsm.onTransition = (from, to) => {
@@ -351,6 +360,8 @@ export class Island {
           const card = State.focusId !== CLAUDE_ID ? null
             : State.pendingQuestion ? "question" : State.pendingApproval ? "approval" : null;
           this.expand(card ?? State.defaultView());
+          // collapse() clears the pin: a card showing a request holds the island open again.
+          if (card) State.isPinned = this.fsm.pinned = true;
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
         }
@@ -393,6 +404,8 @@ export class Island {
       // nothing while hidden.
       UploadSeq.deactivate();
     }
+    // The 1 s tick runs only while the island is on screen.
+    if (Timer.status === "running" && (mode === "hidden" || prev === "hidden")) Timer.sync();
     this.updateWindowCollapsed();
     this.animateGeometry(modeOrder(mode) < modeOrder(prev));
     State.notify();
@@ -516,6 +529,24 @@ export class Island {
 
   reveal() {
     this.fsm.reveal();
+  }
+
+  /** Any session with a request waiting for an answer. */
+  private hasPending(): boolean {
+    return State.sessions.some((s) => s.approval != null || s.question != null);
+  }
+
+  /** Hotkey: straight to the card waiting for an answer (or home). */
+  goToAlert() {
+    this.fsm.forceHome();
+  }
+
+  /** The mouse reaches a hidden island: with a request pending it opens on the card, else just peeks. */
+  private mouseEnter() {
+    if (this.fsm.state === "hidden" && this.hasPending()) {
+      this.fsm.pinned = true;
+      this.fsm.forceHome();
+    } else this.fsm.mouseEntered();
   }
 
   // ── File drop ───────────────────────────────────────────────────────────────
@@ -683,7 +714,7 @@ export class Island {
   }
 
   /** A line on the note card for a moment, then back — unless the island moved on meanwhile. */
-  private showNote(message: string) {
+  showNote(message: string) {
     State.noteMessage = message;
     this.setView("note");
     if (this.noteTimer != null) window.clearTimeout(this.noteTimer);
@@ -823,7 +854,7 @@ export class Island {
     // An open session menu wants the room: the chat grows to its tallest.
     const chatCount = State.sessionsMenuOpen ? Infinity : State.chatHistory.length;
     const line = this.compactLine();
-    const cw = compactWidth(State.otherTasks.length, line ? this.textWidth(line) : 0);
+    const cw = compactWidth(this.textOverGrid() ? 0 : State.otherTasks.length, line ? this.textWidth(line) : 0);
     const { w, h } = islandSize(State.mode, State.view, chatCount, news, proposal, fitted, cw);
     const r = State.mode === "expanded" ? EXPANDED_CORNER : ROUNDED_CORNER;
     return { w, h, r };
@@ -831,7 +862,15 @@ export class Island {
 
   /** What the compact island says: Claude's status, when no other integration is up. */
   private compactLine(): string {
-    return State.otherTasks.length === 0 ? activityLine(State.session) : "";
+    const base = State.otherTasks.length === 0 ? activityLine(State.session) : "";
+    if (!Timer.active) return base;
+    // "esperando você" wins; otherwise the timer shows even beside a session or an integration pill.
+    return base === "esperando você" ? base : Timer.text();
+  }
+
+  /** The text takes the place of the mini grid (a timer beside integration pills). */
+  private textOverGrid(): boolean {
+    return Timer.active && this.compactLine() !== "";
   }
 
   /** New word rises from below while the old one leaves upward; instant if nothing was showing. */
@@ -967,7 +1006,7 @@ export class Island {
     // The wake strip is the only thing the OS can hit while the island is hidden.
     this.wakeStrip.addEventListener("mouseenter", () => {
       Sound.resume();
-      if (State.mode === "hidden") this.fsm.mouseEntered();
+      if (State.mode === "hidden") this.mouseEnter();
     });
 
     this.islandEl.addEventListener("mousedown", (e) => {
@@ -1062,7 +1101,7 @@ export class Island {
 
     if (inIsland && !this.wasInIsland) {
       if (this.fsm.state === "coucou") this.greeting.hover();
-      this.fsm.mouseEntered();
+      this.mouseEnter();
       this.homeCollapseAt = null;
     }
     if (!inIsland && this.wasInIsland) {
@@ -1383,7 +1422,7 @@ export class Island {
     }
 
     // Compact mini grid
-    const showGrid = State.mode === "compact";
+    const showGrid = State.mode === "compact" && !this.textOverGrid();
     this.miniGrid.style.opacity = showGrid ? "1" : "0";
     if (showGrid) {
       const others = State.otherTasks.slice(0, 4);

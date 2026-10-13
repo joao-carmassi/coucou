@@ -503,6 +503,25 @@ body {
   flex: 0 0 auto;
 }
 
+/* Timer start/stop chips, top right of the overview, left of the arrow. */
+.timer-bar {
+  position: absolute;
+  top: 6px;
+  right: 34px;
+  z-index: 2;
+  display: flex;
+  gap: 4px;
+}
+.timer-chip {
+  padding: 2px 8px;
+  font-size: 10.5px;
+  cursor: pointer;
+  transform: none;
+  transition: background 0.15s;
+}
+.timer-chip:hover { background: rgba(255, 255, 255, 0.18); }
+#activity-line { font-variant-numeric: tabular-nums; }
+
 .jump {
   position: absolute;
   top: 8px;
