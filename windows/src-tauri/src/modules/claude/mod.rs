@@ -2,7 +2,6 @@
 
 pub mod cfg;
 pub mod commands;
-#[allow(dead_code)] // save_capture is for the media port
 pub mod files;
 pub mod focus;
 pub mod hooks;

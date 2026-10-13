@@ -1,7 +1,9 @@
-// M5 adds one entry per ported module. Order = start order (a requirement comes first).
+// One entry per ported module. Order = start order (a requirement comes first); it must
+// match the catalog order in modules/catalog.ts and src-tauri/src/modules/mod.rs.
 import type { ModuleDef } from "../core/moduleApi";
 import { claude } from "./claude";
-import { timerModule } from "./timer";
+import { media } from "./media";
 import { uploadModule } from "./upload";
+import { timerModule } from "./timer";
 
-export const MODULES: ModuleDef[] = [claude, timerModule, uploadModule];
+export const MODULES: ModuleDef[] = [claude, media, uploadModule, timerModule];
