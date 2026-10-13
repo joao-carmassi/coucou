@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "node --test tests/resolvers.test.ts tests/timer.test.ts tests/upload.test.ts",
     "icons": "node scripts/gen-icons.mjs",
+    "idle-audit": "node scripts/idle-audit.mjs",
     "tauri": "tauri",
     "predev": "cargo build --release -p coucou-hook",
     "prebuild": "cargo build --release -p coucou-hook",

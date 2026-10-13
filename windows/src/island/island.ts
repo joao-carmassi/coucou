@@ -124,7 +124,9 @@ export class Island implements IslandHost {
     this.greeting.onComplete = () => this.fsm.greetComplete();
     State.subscribe(() => {
       this.dirty = true;
-      this.ensureRunning();
+      // Hidden draws nothing (h 0, bot opacity 0): keep the flag only; the next
+      // mode change runs animateGeometry/ensureRunning and the frame does syncDom.
+      if (State.mode !== "hidden") this.ensureRunning();
     });
   }
 
@@ -988,7 +990,7 @@ export class Island implements IslandHost {
 
   redraw() {
     this.dirty = true;
-    this.ensureRunning();
+    if (State.mode !== "hidden") this.ensureRunning(); // hidden: lazy, see the subscribe above
   }
 
   addView(def: ViewDef, ctx: ViewContext): Disposer {
