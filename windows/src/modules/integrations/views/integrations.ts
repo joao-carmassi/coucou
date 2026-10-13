@@ -4,22 +4,12 @@
 // Cal.com is the one simplification: macOS shows a three-level calendar
 // (month → day → booking); here it is the list of upcoming bookings.
 
-import { h, svg, clear, dot } from "./dom";
-import { ICONS } from "./icons";
-import { COLOR } from "./palette";
-import { State, type AgentTask } from "../core/state";
-import { Bridge, type GithubActivityKind, type GithubData, type GithubTarget } from "../core/bridge";
-
-/** Same shape as the Swift `timeAgo` computed properties. */
-export function timeAgo(value: unknown): string {
-  const date = typeof value === "number" ? new Date(value) : new Date(String(value));
-  const diff = (Date.now() - date.getTime()) / 1000;
-  if (!Number.isFinite(diff)) return "";
-  if (diff < 60) return "agora";
-  if (diff < 3600) return `${Math.floor(diff / 60)}min`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-  return `${Math.floor(diff / 86400)}d`;
-}
+import { h, svg, clear, dot } from "../../../views/dom";
+import { ICONS } from "../../../views/icons";
+import { COLOR } from "../../../views/palette";
+import { State, type AgentTask } from "../../../core/state";
+import { timeAgo } from "../../../core/format";
+import { Bridge, type GithubActivityKind, type GithubData, type GithubTarget } from "../../../core/bridge";
 
 function header(color: string, name: string, kind: string, extra?: Node): HTMLElement {
   const row = h("div", { class: "int-head" }, dot(color, 7), h("b", { text: name }), h("span", { text: kind }));

@@ -1,6 +1,6 @@
 // The island's colours by what they say, for the code that picks a colour from
 // data — a build's state, a kind of activity, a file's language — where a
-// style sheet can't. The same values as :root in style.css and as Mochi's
+// style sheet can't. The same values as :root in style/core.css and as Mochi's
 // states in mochi/engine.ts: a colour is written once on this side, here.
 
 export const COLOR = {

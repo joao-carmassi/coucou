@@ -3,11 +3,11 @@
 // erased (two clicks). The 5 s poll of the running ones lives only while the
 // view is on screen — hidden, the island costs nothing.
 
-import { h } from "./dom";
-import { timeAgo } from "./integrations";
-import { Bridge, type ClaudeProfile, type LiveSession, type ManagedSession } from "../core/bridge";
-import { State } from "../core/state";
-import type { ViewHost } from "./views";
+import { h } from "../../../views/dom";
+import { timeAgo } from "../../../core/format";
+import { Bridge, type ClaudeProfile, type LiveSession, type ManagedSession } from "../../../core/bridge";
+import { State } from "../../../core/state";
+import type { ViewHost } from "../../../views/views";
 
 
 const folderName = (p: string) => p.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";

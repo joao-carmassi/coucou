@@ -7,19 +7,19 @@ import { ICONS } from "./icons";
 import { CLAUDE_ID, State, TURN_DONE, turnSteps, type AgentTask, type ClaudeSession, type SessionStep } from "../core/state";
 import { CARD_AIR_MIN, VIEW_LAYOUTS, fittedHeight, washRGBA, type BotEmoteName, type BotStateName, type IslandViewName, type Wash } from "../core/layout";
 import { createMiniBot, pruneMiniBots } from "../mochi/minibots";
-import { buildSessionsView } from "./sessions";
-import { buildChoose, buildUpload, buildUploading } from "./upload";
-import { renderIntegrationCard, type GithubOpening, type IntegrationCardHooks } from "./integrations";
-import { buildGithub, enterGithubPanel, newsFacts } from "./github";
-import { buildSession, sessionName, sessionsChip } from "./session";
-import { buildMedia } from "./media";
-import { diffLine, fileKind, plusMinus, readPatch } from "./code";
-import { markdown } from "./markdown";
-import { hasPreview, stepIcon, stepName, stepPreview } from "./step";
+import { buildSessionsView } from "../modules/claude/views/sessions";
+import { buildChoose, buildUpload, buildUploading } from "../modules/upload/view";
+import { renderIntegrationCard, type GithubOpening, type IntegrationCardHooks } from "../modules/integrations/views/integrations";
+import { buildGithub, enterGithubPanel, newsFacts } from "../modules/integrations/views/github";
+import { buildSession, sessionName, sessionsChip } from "../modules/claude/views/session";
+import { buildMedia } from "../modules/media/view";
+import { diffLine, fileKind, plusMinus, readPatch } from "../modules/claude/views/code";
+import { markdown } from "../modules/claude/views/markdown";
+import { hasPreview, stepIcon, stepName, stepPreview } from "../modules/claude/views/step";
 import { COLOR } from "./palette";
-import { buildVoice } from "./voice";
+import { buildVoice } from "../modules/voice/view";
+import { buildTimerView } from "../modules/timer/view";
 import { Bridge, type IntegrationNews } from "../core/bridge";
-import { Timer } from "../island/timer";
 
 export interface ViewActions {
   setView(v: IslandViewName): void;
@@ -177,13 +177,13 @@ const TARGETED = new Set([
 ]);
 const hasTarget = (task: AgentTask | null) => !!task && TARGETED.has(task.id);
 
-function card(wash: Wash, ...children: (Node | string)[]): HTMLElement {
+export function card(wash: Wash, ...children: (Node | string)[]): HTMLElement {
   const el = h("div", { class: wash ? "card wash" : "card" }, ...children);
   if (wash) el.style.setProperty("--wash", washRGBA(wash));
   return el;
 }
 
-function btn(
+export function btn(
   label: string,
   kind: "primary" | "secondary",
   onClick: () => void,
@@ -223,7 +223,7 @@ function sessionWho(label: string): HTMLElement {
   return row;
 }
 
-function stack(padLeft: number, padRight: number, ...children: Node[]): HTMLElement {
+export function stack(padLeft: number, padRight: number, ...children: Node[]): HTMLElement {
   const el = h("div", { class: "stack" }, ...children);
   el.style.padding = `4px ${padRight}px 4px ${padLeft}px`;
   return el;
@@ -488,69 +488,6 @@ function buildOverview(actions: ViewActions, onResize: () => void): ViewHost {
         for (const t of others) pills.append(buildPill(t, actions));
         pruneMiniBots();
       }
-    },
-  };
-}
-
-/** The Timer tab: pick a time (or stopwatch) -> ready page with Iniciar -> running page with Pausar. */
-function buildTimerView(): ViewHost {
-  const body = stack(84, 16);
-  const el = h("div", { class: "view" }, card(null, body));
-  const label = h("div", { class: "timer-label" });
-  const readout = h("div", { class: "timer-readout" });
-  const fill = h("i");
-  const bar = h("div", { class: "timer-progress" }, fill);
-  let key = "";
-  const draw = () => {
-    const next = Timer.status;
-    clear(body);
-    el.classList.toggle("paused", next === "paused");
-    // Restart the short fade on every redraw (a class already present would not replay).
-    body.classList.remove("timer-swap");
-    void body.offsetWidth;
-    body.classList.add("timer-swap");
-    if (next === "idle") {
-      // A choice goes straight to the ready page: nothing runs until "Iniciar".
-      const mins = h("input", { class: "island-field timer-min", type: "number", min: 1, max: 600, placeholder: "min", autocomplete: "off" }) as HTMLInputElement;
-      const go = () => {
-        const m = Math.floor(Number(mins.value));
-        if (m >= 1 && m <= 600) Timer.prepare("countdown", m);
-        else mins.style.borderColor = "var(--red)";
-      };
-      mins.addEventListener("input", () => (mins.style.borderColor = ""));
-      mins.addEventListener("keydown", (e) => e.key === "Enter" && go());
-      body.append(
-        h("div", { class: "title", text: "Timer" }),
-        h("div", { class: "sub", text: "Escolha um tempo ou digite os minutos." }),
-        h("div", { class: "actions timer-row" },
-          ...[5, 10, 25].map((m) => btn(`${m} min`, "secondary", () => Timer.prepare("countdown", m))),
-          mins, btn("Ok", "secondary", go), h("div", { class: "grow" }),
-          h("button", { class: "link-btn q-link", text: "Cronômetro", onclick: () => Timer.prepare("stopwatch") })),
-      );
-    } else {
-      const stopwatch = Timer.kind === "stopwatch";
-      label.textContent = (stopwatch ? "Cronômetro" : `Timer · ${Math.round(Timer.total / 60_000)} min`) + (next === "paused" ? " · pausado" : "");
-      bar.hidden = stopwatch;
-      const main = next === "ready" ? btn("Iniciar", "primary", () => Timer.start())
-        : btn(next === "running" ? "Pausar" : "Retomar", "secondary", () => (next === "running" ? Timer.pause() : Timer.resume()));
-      body.append(
-        label,
-        h("div", { class: "actions timer-row" },
-          readout, h("div", { class: "grow" }), main,
-          h("button", { class: "link-btn q-link", text: "Cancelar", onclick: () => Timer.cancel() })),
-        bar,
-      );
-    }
-  };
-  return {
-    el,
-    sync() {
-      // Nothing is touched while the tab is hidden: the clock's own tick does the notifying.
-      if (State.view !== "timer") return;
-      if (Timer.status !== key) { key = Timer.status; draw(); }
-      if (key === "idle") return;
-      readout.textContent = Timer.text();
-      fill.style.width = `${Math.max(1.5, Timer.fraction() * 100)}%`;
     },
   };
 }
