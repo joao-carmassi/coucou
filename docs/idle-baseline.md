@@ -57,3 +57,21 @@ Template, one row per module, hidden island, 60 s, no hook traffic:
 | all | ON | | | | | |
 
 Toggle each module 5 times and check threads/handles do not grow (log lines `[module] start|stop <id>`).
+
+## Visible-compact cost
+
+Measured on the installed build, island VISIBLE in compact mode (a Claude session 'working' => keepAwake):
+Coucou-owned WebView2 GPU process ~24 % of one core, island renderer ~5 %, main ~1.5 %, continuously.
+
+Cause: a looping avatar state (bounces/scans/breathes/zz/sweat) keeps `engine.busy` true, so
+`island.ts` `frame` ran at the display rate (60 fps): full avatar canvas wipe + redraw (several gradients,
+DPR up to 2), mini-bot redraws and `applyGeometry` style writes every frame; plus the
+`#activity-line span` `background-clip:text` shimmer (infinite, 60 repaints/s, main-thread paint).
+
+After (static estimate, not measured):
+- compact + cursor away + no transition/emote/overlay: frame body runs at 30 fps (rAF callbacks skipped by
+  time, geometry/emotes/greeting/hover/expanded keep full rate). Draw calls per second halved.
+- shimmer animation uses `steps(60)`: 30 paints/s.
+
+Re-measure: `pwsh scripts/idle-measure.ps1 -Seconds 60` (reports main + webview totals; keep the Claude
+session 'working' and the island compact). Result row to fill in after a live run.

@@ -150,7 +150,8 @@ body {
   background-repeat: no-repeat, no-repeat;
   -webkit-background-clip: text;
   background-clip: text;
-  animation: activity-shimmer 2s linear infinite;
+  /* steps(60): 30 repaints/s instead of 60; the sweep is slow, no visible change. */
+  animation: activity-shimmer 2s steps(60) infinite;
 }
 /* Don't burn frames shimmering while no status line is showing. */
 #activity-line:not(.on) span { animation-play-state: paused; }

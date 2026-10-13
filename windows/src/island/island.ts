@@ -82,6 +82,7 @@ export class Island implements IslandHost {
 
   private running = false;
   private lastFrame = 0;
+  private lastOverlayBusy = false;
   private dirty = true;
   private canvasPx = 0;
 
@@ -712,6 +713,15 @@ export class Island implements IslandHost {
   }
 
   private frame = (nowMs: number) => {
+    // Compact, cursor away, only the looping avatar idle (breathe/scan/sweat/zz): 30 fps.
+    // The skipped rAF is a no-op; dt keeps accumulating (capped below) so motion speed is unchanged.
+    if (State.mode === "compact" && !this.wasInIsland && !this.dirty && !this.lastOverlayBusy &&
+        !this.width.animating && !this.height.animating && !this.radius.animating && this.offsetX.settled &&
+        this.botCx.settled && this.botCy.settled && this.botSize.settled && !this.tintSettling &&
+        !this.engine.animating && nowMs - this.lastFrame < 30) {
+      requestAnimationFrame(this.frame);
+      return;
+    }
     const dt = Math.min(0.05, (nowMs - this.lastFrame) / 1000);
     this.lastFrame = nowMs;
 
@@ -751,6 +761,7 @@ export class Island implements IslandHost {
       o.el.style.display = on ? "" : "none";
       if (on && o.frame(nowMs)) overlayBusy = true; // every overlay draws, no short-circuit
     }
+    this.lastOverlayBusy = overlayBusy;
     this.updateCountdown(nowMs);
 
     // Nothing is drawn while the island is hidden, so nothing may keep the loop

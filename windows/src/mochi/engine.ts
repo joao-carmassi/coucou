@@ -452,6 +452,11 @@ export class BotEngine {
     this.morph = 0;
   }
 
+  /** One-shot motion (emote tweens, particles): needs full frame rate; looping idle does not. */
+  get animating(): boolean {
+    return this.tweens.size > 0 || this.particles.length > 0;
+  }
+
   /** True while anything is still moving — lets the island stop its RAF loop. */
   get busy(): boolean {
     return (
