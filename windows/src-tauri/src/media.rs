@@ -150,6 +150,11 @@ pub fn remove(path: &str) {
 /// The commands act only on what the list holds, never on a path the page makes up.
 fn listed(path: &str) -> Result<(), String> {
     if load().items.iter().any(|e| same(&e.path, path)) {
+        if !Path::new(path).is_file() {
+            // Deleted behind our back: drop the stale entry; the page reloads on "missing".
+            list();
+            return Err("missing".into());
+        }
         Ok(())
     } else {
         Err("Este arquivo não está na lista.".into())
@@ -350,6 +355,11 @@ mod sys {
                         let app = app.clone();
                         std::thread::spawn(move || settle_and_add(&app, path, kind));
                     }
+                }
+                // 2 = removed, 4 = renamed away from this name: the list drops what is gone.
+                if action == 2 || action == 4 {
+                    super::list();
+                    let _ = app.emit("media-changed", ());
                 }
                 if next == 0 {
                     break;

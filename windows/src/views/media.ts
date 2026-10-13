@@ -69,7 +69,10 @@ export function buildMedia(actions: ViewActions): ViewHost {
   grid.addEventListener("scroll", closeMenu, { passive: true });
 
   function fail(err: unknown) {
-    error = String(err).replace(/^Error:\s*/, "");
+    const msg = String(err).replace(/^Error:\s*/, "");
+    // "missing": the file was deleted outside Coucou; Rust already dropped it, so refresh.
+    if (msg === "missing") return void load();
+    error = msg;
     draw();
   }
 
