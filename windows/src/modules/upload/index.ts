@@ -39,17 +39,23 @@ function start(api: IslandApi): Disposer {
   const isOn = () => api.island.mode() === "expanded" && UploadSeq.isActive && UPLOAD_VIEWS.has(api.island.view());
   const byId = (id: string) => document.getElementById(id);
 
+  let wasOn = false, fadeUntil = 0;
   const overlay: Overlay = {
     el: canvas.el,
     // Called once per frame by the island: also where the ordinary views step aside and the island's own Mochi hides.
     active() {
       const on = isOn();
+      const t = performance.now();
+      if (on) fadeUntil = 0; else if (wasOn) fadeUntil = t + 220;
+      wasOn = on;
+      canvas.el.classList.toggle("on", on);
       byId("island")?.classList.toggle("upload-on", on);
       byId("views")?.classList.toggle("hidden-by-upload", on);
       byId("content")?.classList.toggle("upload-active", on);
-      return on;
+      return on || t < fadeUntil; // the layer stays 220 ms so the fade-out shows
     },
     frame(nowMs) {
+      if (!isOn()) return performance.now() < fadeUntil; // fading out: keep the last frame, no redraw
       const f = UploadSeq.frame();
       Up.progress = f.progress;
       stepSequence();
@@ -126,7 +132,8 @@ function start(api: IslandApi): Disposer {
     }
     UploadSeq.performDrop(Up.duration);
     api.island.redraw();
-    Bridge.ingestClaudeFile(path)
+    Up.ingest = Bridge.ingestClaudeFile(path);
+    Up.ingest
       .then((file) => { Up.droppedFile = { name: file.name, path: file.path }; Up.ingested = true; api.island.redraw(); })
       .catch((err) => { UploadSeq.deactivate(); api.avatar.morph(0); api.island.error(err); });
   }

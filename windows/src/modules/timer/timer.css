@@ -4,7 +4,7 @@
 @keyframes timer-swap { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .timer-row { align-items: center; }
 /* size comes from .island-field (ui.css): it used to win by cascade order, keep that look */
-.timer-min { text-align: center; font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+.timer-min { text-align: center; -moz-appearance: textfield; }
 .timer-min::-webkit-inner-spin-button, .timer-min::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .timer-label { font: 400 11.5px var(--font); color: var(--dim); }
 .timer-readout { font: 600 30px/36px var(--font); font-variant-numeric: tabular-nums; letter-spacing: -0.5px; color: var(--ink); }

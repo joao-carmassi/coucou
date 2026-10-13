@@ -28,7 +28,11 @@ function dashedFrame(): SVGSVGElement {
 
 /** Hands the dropped file to a new Claude Code session (ingested already unless the copy is still running). */
 export function ask(api: IslandApi) {
-  if (Up.droppedFile) void api.call("launchFile", Up.droppedFile.path, !Up.ingested);
+  if (!Up.droppedFile) return;
+  // Wait for the background copy (if any), then launch the copy; ingest only if it never landed.
+  void (Up.ingest ?? Promise.resolve())
+    .catch(() => {})
+    .then(() => api.call("launchFile", Up.droppedFile!.path, !Up.ingested));
 }
 
 export function buildUpload(): ViewHost {

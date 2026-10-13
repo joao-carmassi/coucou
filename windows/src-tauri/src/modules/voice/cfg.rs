@@ -1,5 +1,5 @@
 // The voice module's keys live in `Settings.extra`; this is the only place that knows their names.
-// `modulesEnabled.voice` is the single on/off switch (`voiceEnabled` is only read by the migration).
+// `modulesEnabled.voice` is the single on/off switch (`voiceEnabled` is a legacy mirror written by save_settings, read by the migration).
 
 use serde_json::Value;
 

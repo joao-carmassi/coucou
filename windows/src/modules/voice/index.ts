@@ -10,7 +10,7 @@ const reviewing = () => Voice.phase === "review";
 const STATUS: Partial<Record<string, string>> = { listening: "ouvindo…", transcribing: "transcrevendo…", review: "voz: revisar" };
 
 function start(api: IslandApi): Disposer {
-  Voice.reset();
+  // No reset here: the view is built before start() and already writes Voice.level; stop resets.
   const line = () => {
     const text = STATUS[Voice.phase];
     api.status.set(text ? { priority: 40, text } : null);

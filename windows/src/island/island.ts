@@ -580,7 +580,8 @@ export class Island implements IslandHost {
     State.mouse = { x, y };
     const rect = this.islandRect();
     State.mouseInIsland = { x: x - rect.x, y: y - rect.y };
-    for (const o of this.overlays) o.cursor?.(State.mouseInIsland.x, State.mouseInIsland.y, down);
+    let held = false;
+    for (const o of this.overlays) held = o.cursor?.(State.mouseInIsland.x, State.mouseInIsland.y, down) === true || held;
 
     const released = this.lastDown && !down;
     const pressed = down && !this.lastDown;
@@ -597,6 +598,7 @@ export class Island implements IslandHost {
       this.cancelBotHover();
       Hooks.all("mochiDrop"); // pulled out of the island: a module may carry him on (media: drop on a window)
     }
+    if (held) { this.ensureRunning(); return; } // a module drag owns the pointer: no hover or auto-close bookkeeping
 
     // A click elsewhere on screen folds the island (#31). Judged on the release, so a file
     // dragged in from Explorer and dropped on us isn't one; a pinned island (isPinned) keeps it.

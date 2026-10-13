@@ -38,7 +38,8 @@ export interface Overlay {
   active(): boolean;
   /** Draws; true while it needs another frame. */
   frame(nowMs: number): boolean;
-  cursor?(x: number, y: number, down?: boolean): void;
+  /** True while it holds the pointer (a drag in progress): the island skips hover/auto-close bookkeeping. */
+  cursor?(x: number, y: number, down?: boolean): boolean | void;
   place?(islandW: number): void;
   leaving?(nextView: string): void;
 }

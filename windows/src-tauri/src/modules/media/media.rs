@@ -282,13 +282,15 @@ mod sys {
     /// return. Retried briefly because a watcher may not have entered the call yet when `stop` is set.
     pub fn stop_watchers() {
         for _ in 0..25 {
-            let handles = WATCHED.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            // Cancelled under the lock: a watcher removes its handle here before CloseHandle, so none is reused.
+            let handles = WATCHED.lock().unwrap_or_else(|e| e.into_inner());
             if handles.is_empty() {
                 return;
             }
-            for h in handles {
-                unsafe { let _ = CancelIoEx(HANDLE(h as *mut _), None); }
+            for h in handles.iter() {
+                unsafe { let _ = CancelIoEx(HANDLE(*h as *mut _), None); }
             }
+            drop(handles);
             std::thread::sleep(Duration::from_millis(10));
         }
     }

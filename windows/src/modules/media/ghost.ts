@@ -66,7 +66,11 @@ export function armMochiDrop(api: IslandApi, ctl: MediaCtl): Disposer {
 
   const offOverlay = api.island.overlay({
     el: h("i", { style: "display:none" }),
-    active: () => canvas != null,
+    active: () => {
+      const on = canvas != null;
+      document.getElementById("island")?.classList.toggle("ghost-on", on); // the island's own Mochi steps aside
+      return on;
+    },
     frame(now) {
       const ctx = canvas?.getContext("2d");
       if (!canvas || !ctx) return false;
@@ -80,9 +84,10 @@ export function armMochiDrop(api: IslandApi, ctl: MediaCtl): Disposer {
       return true; // keeps the frame loop alive for the whole drag
     },
     cursor(_x, _y, down) {
-      if (!canvas) return;
+      if (!canvas) return false;
       if (down) move();
       else release();
+      return canvas != null; // true = holding the pointer: the island must not auto-collapse mid-drag
     },
   });
 

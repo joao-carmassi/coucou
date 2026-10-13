@@ -72,6 +72,10 @@ fn save_settings(app: AppHandle, shared: State<Shared>, mut settings: Settings) 
         }
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
+        // Legacy mirror: rolling back to the old exe keeps the voice choice.
+        if let Some(on) = settings.modules_enabled.get("voice").copied() {
+            settings.extra.insert("voiceEnabled".into(), serde_json::json!(on));
+        }
         *current = settings.clone();
         (screen_changed, autostart_changed)
     };
@@ -150,10 +154,9 @@ fn quit_app(app: AppHandle) {
 
 /// Tray → Pause. Core polls nothing itself; the integrations module parks its scheduler.
 #[tauri::command]
-fn set_paused(host: State<ModuleHost>, paused: bool) {
-    if host.is_enabled("integrations") {
-        modules::integrations::set_paused(paused);
-    }
+fn set_paused(paused: bool) {
+    // The flag is a static: set it even with the module off so enabling it later starts right.
+    modules::integrations::set_paused(paused);
 }
 
 /// Lets the island write to the same log as the Rust side.

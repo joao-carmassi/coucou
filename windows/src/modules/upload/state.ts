@@ -9,4 +9,6 @@ export const Up = {
   duration: 2.4,
   /** The inbox copy has landed: droppedFile.path is the copy. */
   ingested: false,
+  /** The background inbox copy in flight, so the choose step waits for it instead of copying twice. */
+  ingest: null as Promise<{ name: string; path: string }> | null,
 };

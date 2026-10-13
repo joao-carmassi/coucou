@@ -132,3 +132,6 @@
   background: var(--gh-hover);
 }
 
+
+#island.ghost-on #bot-canvas,
+#island.ghost-on #bot-glow { opacity: 0 !important; }
