@@ -12,6 +12,7 @@ import type { ViewActions, ViewHost } from "./views";
 /** Thumbnails already drawn, by path and size: the grid redraws on every change. */
 const thumbs = new Map<string, string>();
 const THUMB_PX = 160;
+const THUMB_JOBS = 3;
 
 function kindLabel(kind: string): string {
   return kind === "screenshot" ? "Captura de tela" : kind === "video" ? "Gravação" : "Arquivo";
@@ -51,6 +52,12 @@ export function buildMedia(actions: ViewActions): ViewHost {
     if (!(e.target as HTMLElement).closest(".media-menu, .media-more")) closeMenu();
   });
 
+  document.addEventListener("keydown", (e) => e.key === "Escape" && menu.style.display !== "none" && closeMenu());
+  // A right click anywhere outside an item (or its menu) just closes the menu.
+  main.addEventListener("contextmenu", (e) => {
+    if (!(e.target as HTMLElement).closest(".media-cell")) closeMenu();
+  });
+
   function fail(err: unknown) {
     error = String(err).replace(/^Error:\s*/, "");
     draw();
@@ -70,7 +77,8 @@ export function buildMedia(actions: ViewActions): ViewHost {
     draw();
   }
 
-  function openMenu(item: MediaItem, anchor: HTMLElement) {
+  /** At a point in viewport coordinates (the dots button's corner, or the cursor). */
+  function openMenu(item: MediaItem, x: number, y: number) {
     actions.blip();
     const run = (fn: () => Promise<void> | void) => () => {
       closeMenu();
@@ -89,13 +97,46 @@ export function buildMedia(actions: ViewActions): ViewHost {
       draw();
     });
     const box = main.getBoundingClientRect();
-    const a = anchor.getBoundingClientRect();
     menu.style.display = "";
-    // Under the button, flipped up and pinned inside the panel when there is no room.
-    const top = Math.max(2, Math.min(a.bottom - box.top + 2, box.height - menu.offsetHeight - 4));
-    const left = Math.max(2, Math.min(a.right - box.left - menu.offsetWidth, box.width - menu.offsetWidth - 4));
+    // Pinned inside the panel when there is no room.
+    const top = Math.max(2, Math.min(y - box.top, box.height - menu.offsetHeight - 4));
+    const left = Math.max(2, Math.min(x - box.left, box.width - menu.offsetWidth - 4));
     menu.style.top = `${top}px`;
     menu.style.left = `${left}px`;
+  }
+
+  // At most THUMB_JOBS requests in flight; one retry, then a neutral placeholder.
+  const queue: (() => Promise<void>)[] = [];
+  let inFlight = 0;
+  function pump() {
+    while (inFlight < THUMB_JOBS && queue.length) {
+      inFlight++;
+      void queue.shift()!().finally(() => {
+        inFlight--;
+        pump();
+      });
+    }
+  }
+
+  async function loadThumb(img: HTMLImageElement, key: string, path: string) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const buf = await Bridge.mediaThumb(path, THUMB_PX);
+        if (thumbs.size >= 300) {
+          const old = thumbs.keys().next().value!;
+          URL.revokeObjectURL(thumbs.get(old)!);
+          thumbs.delete(old);
+        }
+        const url = URL.createObjectURL(new Blob([buf], { type: "image/png" }));
+        thumbs.set(key, url);
+        img.src = url;
+        img.classList.add("ready");
+        return;
+      } catch {
+        if (attempt === 0) await new Promise((r) => setTimeout(r, 600));
+      }
+    }
+    img.parentElement?.classList.add("nothumb");
   }
 
   const lazy = new IntersectionObserver((entries) => {
@@ -103,28 +144,20 @@ export function buildMedia(actions: ViewActions): ViewHost {
       if (!e.isIntersecting) continue;
       lazy.unobserve(e.target);
       const img = e.target as HTMLImageElement;
-      const path = img.dataset.path!;
-      const key = `${path}|${img.dataset.size}`;
-      const set = (url: string) => {
-        img.src = url;
-        img.classList.add("ready");
-      };
+      const key = `${img.dataset.path}|${img.dataset.size}`;
       const hit = thumbs.get(key);
-      if (hit) return set(hit);
-      Bridge.mediaThumb(path, THUMB_PX)
-        .then((buf) => {
-          if (thumbs.size > 300) { thumbs.forEach((u) => URL.revokeObjectURL(u)); thumbs.clear(); }
-          const url = URL.createObjectURL(new Blob([buf], { type: "image/png" }));
-          thumbs.set(key, url);
-          set(url);
-        })
-        .catch(() => {});
+      if (hit) {
+        img.src = hit;
+        img.classList.add("ready");
+      } else queue.push(() => loadThumb(img, key, img.dataset.path!));
     }
+    pump();
   }, { root: grid, rootMargin: "80px" });
 
   function draw() {
     closeMenu();
     lazy.disconnect();
+    queue.length = 0;
     clear(grid);
     sub.textContent = items.length ? `${items.length} ${items.length === 1 ? "item" : "itens"}` : "";
     if (error) grid.append(h("div", { class: "media-empty", text: error }));
@@ -140,15 +173,22 @@ export function buildMedia(actions: ViewActions): ViewHost {
         { class: "gh-icon media-more", title: "Ações" },
         svg(ICONS.ellipsis, 12),
       );
-      more.addEventListener("click", () => openMenu(item, more));
+      more.addEventListener("click", () => {
+        const a = more.getBoundingClientRect();
+        openMenu(item, a.right - 140, a.bottom + 2);
+      });
       const cell = h(
         "div",
         { class: "media-cell", title: `${item.name}\n${kindLabel(item.kind)} · ${when(item.ts)}` },
-        h("div", { class: "media-frame" }, img, more),
+        h("div", { class: "media-frame" }, img, svg(ICONS.photo, 22, { stroke: 1.6 }), more),
         h("span", { class: "media-name", text: item.name }),
         h("span", { class: "media-when", text: `${kindLabel(item.kind)} · ${when(item.ts)}` }),
       );
       // A double click is the plain "Abrir"; the menu has the rest.
+      cell.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        openMenu(item, e.clientX, e.clientY);
+      });
       cell.addEventListener("dblclick", () => void Bridge.mediaOpen(item.path).catch(fail));
       cells.append(cell);
       lazy.observe(img);

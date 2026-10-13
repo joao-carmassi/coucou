@@ -263,8 +263,9 @@ function airy(lines: HTMLElement, onResize: () => void): { fit(): void; readonly
 export function buildHeader(actions: ViewActions): ViewHost {
   const tabHome = h("button", { class: "tab", title: "Visão geral", onclick: () => go("overview") }, svg(ICONS.house, 13));
   const tabChat = h("button", { class: "tab", title: askTitle(), onclick: () => go("prompt") }, svg(ICONS.bubble, 13));
-  const tabDrop = h("button", { class: "tab", title: "Soltar", onclick: () => go("upload") }, svg(ICONS.plus, 13));
+  // No drop tab: a file is dropped on the island itself (island.ts), the upload view is only that sequence.
 
+  const tabTimer = h("button", { class: "tab", title: "Timer", onclick: () => go("timer") }, svg(ICONS.timer, 13));
   const tabMedia = h("button", { class: "tab", title: "Mídia", onclick: () => go("media") }, svg(ICONS.photo, 13, { stroke: 1.8 }));
 
   const gearBtn = h("button", { title: "Configurações", onclick: () => go("settings") }, svg(ICONS.gear, 14));
@@ -278,7 +279,7 @@ export function buildHeader(actions: ViewActions): ViewHost {
   const el = h(
     "div",
     { id: "header" },
-    h("div", { class: "tabs" }, tabHome, tabChat, tabDrop, tabMedia),
+    h("div", { class: "tabs" }, tabHome, tabChat, tabTimer, tabMedia),
     h("div", { class: "header-actions" }, gearBtn, soundBtn),
   );
 
@@ -290,7 +291,7 @@ export function buildHeader(actions: ViewActions): ViewHost {
       tabHome.classList.toggle("on", v === "overview" || v === "empty" || v === "github" || v === "session");
       tabChat.classList.toggle("on", v === "prompt");
       tabChat.title = askTitle();
-      tabDrop.classList.toggle("on", v === "upload");
+      tabTimer.classList.toggle("on", v === "timer");
       tabMedia.classList.toggle("on", v === "media");
       gearBtn.classList.toggle("on", v === "settings");
       clear(gearBtn);
@@ -334,11 +335,9 @@ function buildOverview(actions: ViewActions, onResize: () => void): ViewHost {
   const pills = h("div", { class: "pills" });
   const right = card(null, pills);
 
-  const timerBar = buildTimerBar();
   const el = h("div", { class: "view overview" },
     h("div", { class: "left" }, left),
     h("div", { class: "right" }, right),
-    timerBar,
   );
 
   let pillIds = "";
@@ -495,29 +494,52 @@ function buildOverview(actions: ViewActions, onResize: () => void): ViewHost {
   };
 }
 
-/** Presets and a stopwatch; while one runs: pause/resume and cancel. Rebuilt only when the timer's status changes. */
-function buildTimerBar(): HTMLElement {
-  const bar = h("div", { class: "timer-bar" });
+/** The Timer tab: presets and a stopwatch; while one runs, the readout, a bar and pause/cancel. */
+function buildTimerView(): ViewHost {
+  const body = h("div", { class: "timer-body" });
+  const el = h("div", { class: "view timer-view" }, body);
+  const readout = h("div", { class: "timer-readout" });
+  const fill = h("i");
+  const bar = h("div", { class: "timer-progress" }, fill);
   let key = "";
-  const chip = (label: string, onClick: () => void) => h("button", { class: "chip timer-chip", text: label, onclick: onClick });
   const draw = () => {
     const next = Timer.status;
-    if (next === key) return;
-    key = next;
-    clear(bar);
+    clear(body);
+    body.append(h("div", { class: "timer-title", text: "Timer" }));
     if (next === "idle") {
-      for (const m of [5, 10, 25]) bar.append(chip(`${m} min`, () => Timer.startCountdown(m)));
-      bar.append(chip("Cronômetro", () => Timer.startStopwatch()));
+      const mins = h("input", { class: "timer-min", type: "number", min: 1, max: 600, placeholder: "min" });
+      const go = () => {
+        const m = Math.floor(Number(mins.value));
+        if (m >= 1 && m <= 600) Timer.startCountdown(m);
+      };
+      mins.addEventListener("keydown", (e) => e.key === "Enter" && go());
+      const chip = (label: string, onClick: () => void) => h("button", { class: "chip timer-chip", text: label, onclick: onClick });
+      body.append(
+        h("div", { class: "timer-presets" },
+          ...[5, 10, 25].map((m) => chip(`${m} min`, () => Timer.startCountdown(m))),
+          mins, chip("Iniciar", go), chip("Cronômetro", () => Timer.startStopwatch())),
+      );
     } else {
-      bar.append(
-        chip(next === "running" ? "Pausar" : "Retomar", () => (next === "running" ? Timer.pause() : Timer.resume())),
-        chip("Cancelar", () => Timer.cancel()),
+      body.append(
+        readout, bar,
+        h("div", { class: "timer-actions" },
+          h("button", { class: "btn secondary", text: next === "running" ? "Pausar" : "Retomar",
+            onclick: () => (next === "running" ? Timer.pause() : Timer.resume()) }),
+          h("button", { class: "link-btn", text: "Cancelar", onclick: () => Timer.cancel() })),
       );
     }
   };
-  draw();
-  State.subscribe(draw);
-  return bar;
+  return {
+    el,
+    sync() {
+      // Nothing is touched while the tab is hidden: the clock's own tick does the notifying.
+      if (State.view !== "timer") return;
+      if (Timer.status !== key) { key = Timer.status; draw(); }
+      if (key === "idle") return;
+      readout.textContent = Timer.text();
+      fill.style.width = `${Math.max(1.5, Timer.fraction() * 100)}%`;
+    },
+  };
 }
 
 function buildPill(task: AgentTask, actions: ViewActions): HTMLElement {
@@ -1218,6 +1240,7 @@ export function buildViews(
   map.set("github", buildGithub(actions));
   map.set("session", buildSession(actions));
   map.set("media", buildMedia(actions));
+  map.set("timer", buildTimerView());
   map.set("voice", buildVoice());
   // Not in the Windows v1: sending a file by email, window attach + web result.
   map.set("mail", buildPlaceholder("Enviar por e-mail não está nesta versão.", ""));

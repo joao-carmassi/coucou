@@ -14,6 +14,8 @@ class TimerClock {
   /** Called once when a countdown reaches 0 (the island shows its notice). */
   onDone: (() => void) | null = null;
 
+  /** Countdown length in ms (the progress bar's whole). */
+  total = 0;
   private endAt = 0; // countdown, running
   private startAt = 0; // stopwatch, running
   private base = 0; // ms: remaining (countdown) or elapsed (stopwatch) while paused
@@ -26,7 +28,7 @@ class TimerClock {
 
   startCountdown(minutes: number) {
     this.begin("countdown");
-    this.base = Math.max(1, minutes) * 60_000;
+    this.base = this.total = Math.max(1, minutes) * 60_000;
     this.endAt = Date.now() + this.base;
     this.sync();
   }
@@ -63,6 +65,12 @@ class TimerClock {
     if (this.status === "idle") return 0;
     if (this.kind === "countdown") return this.status === "running" ? Math.max(0, this.endAt - Date.now()) : this.base;
     return this.status === "running" ? this.base + Date.now() - this.startAt : this.base;
+  }
+
+  /** 0..1: countdown time left; stopwatch minute turning. */
+  fraction(): number {
+    const ms = this.value();
+    return this.kind === "countdown" ? Math.min(1, ms / (this.total || 1)) : (ms % 60_000) / 60_000;
   }
 
   /** Fixed-width `mm:ss` / `h:mm:ss`; "" when no timer. */

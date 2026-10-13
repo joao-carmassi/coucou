@@ -503,14 +503,61 @@ body {
   flex: 0 0 auto;
 }
 
-/* Timer start/stop chips, top right of the overview, left of the arrow. */
-.timer-bar {
+/* The Timer tab. */
+.timer-body {
   position: absolute;
-  top: 6px;
-  right: 34px;
-  z-index: 2;
+  inset: 0;
+  padding: 0 30px 0 140px;
   display: flex;
-  gap: 4px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.timer-title {
+  font: 400 11px var(--font);
+  color: var(--dim-2);
+}
+.timer-readout {
+  font: 500 38px var(--font);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  line-height: 1.1;
+}
+.timer-progress {
+  width: 100%;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--gh-track);
+  overflow: hidden;
+}
+.timer-progress > i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--amber);
+}
+.timer-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.timer-presets {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+}
+.timer-min {
+  width: 52px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--gh-edge);
+  background: transparent;
+  color: var(--ink);
+  font: 400 11px var(--font);
+  text-align: center;
 }
 .timer-chip {
   padding: 2px 8px;
@@ -4438,6 +4485,18 @@ button.gh-block:hover {
   object-fit: cover;
   opacity: 0;
   transition: opacity 0.15s ease-out;
+}
+
+/* Placeholder behind the thumbnail: shown until it loads, and for good when it cannot. */
+.media-frame > svg {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  color: var(--dim-3);
+  opacity: 0;
+}
+.media-frame.nothumb > svg {
+  opacity: 0.7;
 }
 
 .media-thumb.ready {

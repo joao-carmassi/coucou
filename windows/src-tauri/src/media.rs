@@ -363,9 +363,12 @@ mod sys {
         sta(|| unsafe {
             let item: IShellItemImageFactory =
                 SHCreateItemFromParsingName(&HSTRING::from(path), None).map_err(|e| e.message())?;
-            // Default flags: the file's own preview, or its icon when it has none.
+            // The file's own preview (a bigger one is fine: the page scales it); when the
+            // shell has none yet (video not indexed, file still being written) its type icon.
+            let size = SIZE { cx: px as i32, cy: px as i32 };
             let bitmap = item
-                .GetImage(SIZE { cx: px as i32, cy: px as i32 }, SIIGBF(0))
+                .GetImage(size, SIIGBF(0x1)) // SIIGBF_BIGGERSIZEOK
+                .or_else(|_| item.GetImage(size, SIIGBF(0x4))) // SIIGBF_ICONONLY
                 .map_err(|e| e.message())?;
             let mut info = BITMAP::default();
             GetObjectW(bitmap.into(), size_of::<BITMAP>() as i32, Some(&mut info as *mut _ as *mut _));
