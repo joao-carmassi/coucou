@@ -346,9 +346,8 @@ Installing is optional — `target/release/coucou.exe` runs on its own. There is
 window in the taskbar and no console: the island at the top of the screen and the
 Mochi in the notification area are the whole app, and Quit lives in its menu.
 
-The 28 sounds are the macOS app's own files; they are never duplicated in this
-folder. The path is declared once, in `SOUNDS_DIR` at the top of
-`vite.config.ts` — when they move to `shared/sounds/`, change that one line.
+The 28 sounds live in `windows/sounds/` (moved from the removed macOS app). The path
+is declared once, in `SOUNDS_DIR` at the top of `vite.config.ts`.
 
 The app icon and the tray icon are drawn in code, like Mochi itself:
 
@@ -390,37 +389,3 @@ problems. It stays on your machine.
 - GitHub goes further than the Mac's card: the [panel](#github), the news of a
   broken build or a merged pull request, and comments are Windows-only for now.
 
-## Linux
-
-The same app builds for Linux: everything that differs lives in
-`src-tauri/src/platform/`, and the relay's transport in `hook/src/unix.rs`.
-
-```bash
-sudo apt install build-essential pkg-config \
-  libwebkit2gtk-4.1-dev libgtk-layer-shell-dev libayatana-appindicator3-dev \
-  librsvg2-dev libssl-dev libdbus-1-dev patchelf \
-  gstreamer1.0-plugins-base gstreamer1.0-plugins-good
-npm install
-npm run tauri dev      # live-reloading development build
-npm run pack           # AppImage, .deb and .rpm in windows/release/
-```
-
-What changes on Linux:
-
-- **The island** is a gtk-layer-shell overlay anchored to the top edge, over any
-  top panel, on compositors that support it: COSMIC, KDE Plasma, Hyprland, Sway
-  and other wlroots compositors. GNOME has no layer-shell, so there the island
-  is a regular window. `COUCOU_LAYER_SHELL=0` forces that mode anywhere.
-- **Click-through** is the window's input region, kept equal to the island
-  shape, so the compositor sends every other click to what is underneath.
-- **Mochi's eyes** follow the pointer only while it is over the island: Wayland
-  gives no app the cursor position anywhere else.
-- **Claude Code hooks** go through `~/.local/share/coucou/bin/coucou-hook` and a
-  Unix socket at `$XDG_RUNTIME_DIR/coucou.sock`. Both ends check that the other
-  runs as the same user.
-- **Keys** live in the Secret Service (GNOME Keyring, KWallet).
-- **Files**: preferences in `~/.config/coucou/`, the log at
-  `~/.local/share/coucou/coucou.log`.
-- What the Windows build leaves out, this one does too: sending a file by
-  email, and jumping to a specific terminal
-  window — "Open terminal" opens the folder in VS Code.

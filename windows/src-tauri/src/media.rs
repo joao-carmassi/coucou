@@ -13,9 +13,7 @@ use crate::settings;
 
 const MAX_ITEMS: usize = 300;
 /// A file already in a watched folder when the app starts is listed only if recent.
-#[cfg(windows)]
 const SCAN_MS: u64 = 30 * 24 * 60 * 60 * 1000;
-#[cfg(windows)]
 const MEDIA_EXT: &[&str] = &["png", "jpg", "jpeg", "bmp", "gif", "webp", "mp4", "mkv", "mov", "webm", "avi"];
 
 static LOCK: Mutex<()> = Mutex::new(());
@@ -69,7 +67,6 @@ fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
-#[cfg(windows)]
 fn mtime_ms(path: &Path) -> u64 {
     std::fs::metadata(path)
         .and_then(|m| m.modified())
@@ -78,7 +75,6 @@ fn mtime_ms(path: &Path) -> u64 {
         .map_or_else(now_ms, |d| d.as_millis() as u64)
 }
 
-#[cfg(windows)]
 fn is_media(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
@@ -183,7 +179,6 @@ pub fn reveal(path: &str) -> Result<(), String> {
 
 pub use sys::start;
 
-#[cfg(windows)]
 mod sys {
     use std::os::windows::fs::OpenOptionsExt;
     use std::os::windows::process::CommandExt;
@@ -465,26 +460,5 @@ mod sys {
             .spawn()
             .map(|_| ())
             .map_err(|e| e.to_string())
-    }
-}
-
-#[cfg(not(windows))]
-mod sys {
-    use tauri::AppHandle;
-
-    const ONLY_WINDOWS: &str = "A mídia só está disponível no Windows.";
-
-    pub fn start(_app: AppHandle) {}
-    pub fn thumb(_path: &str, _px: u32) -> Result<Vec<u8>, String> {
-        Err(ONLY_WINDOWS.into())
-    }
-    pub fn open(_path: &str) -> Result<(), String> {
-        Err(ONLY_WINDOWS.into())
-    }
-    pub fn open_with(_path: &str) -> Result<(), String> {
-        Err(ONLY_WINDOWS.into())
-    }
-    pub fn reveal(_path: &str) -> Result<(), String> {
-        Err(ONLY_WINDOWS.into())
     }
 }

@@ -145,31 +145,12 @@ fn read_settings_lossy(path: &Path) -> Value {
 }
 
 /// One Coucou hook, in exec form (see the note at the top): no shell involved.
-#[cfg(windows)]
 fn hook_entry(event: &str) -> Value {
     json!({
         "type": "command",
         "command": settings::hook_exe_path().to_string_lossy(),
         "args": [event],
     })
-}
-
-/// Claude Code runs the command through `sh`, which still reads `$`, `` ` ``
-/// and `\` inside double quotes. Single quotes keep the path a path, whatever
-/// the home directory is called.
-#[cfg(unix)]
-fn hook_entry(event: &str) -> Value {
-    json!({
-        "type": "command",
-        "command": format!("{} {event}", sh_quote(&settings::hook_exe_path().to_string_lossy())),
-    })
-}
-
-/// `s` as one single-quoted shell word: `'` becomes `'\''`, nothing else is
-/// special inside single quotes.
-#[cfg(unix)]
-fn sh_quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', r"'\''"))
 }
 
 fn entry_is_ours(entry: &Value) -> bool {
@@ -371,8 +352,6 @@ pub fn write_for(target: &Target, install: bool, fingerprint: &str) -> Result<St
 
     // A dotfiles setup often makes settings.json a symlink: write to the file it
     // points at, so the link survives the rename below.
-    #[cfg(unix)]
-    let path = &std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
 
     // Write beside the target and rename over it: a crash or a full disk leaves
     // the original settings.json intact rather than half a file.
@@ -390,26 +369,12 @@ pub fn write_for(target: &Target, install: bool, fingerprint: &str) -> Result<St
 
 /// Writes `bytes` to `temp`, which is about to replace `original`.
 ///
-/// On Linux a fresh file would get the umask's 0644, and settings.json can hold
-/// API keys in its `env` block: the new file is created readable by us only,
-/// then given the original's permissions, so the rename never widens them.
 fn write_like(temp: &Path, original: &Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
     let mut file = options.open(temp)?;
     file.write_all(bytes)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(original)
-            .map(|m| m.permissions().mode() & 0o777)
-            .unwrap_or(0o600);
-        file.set_permissions(std::fs::Permissions::from_mode(mode))?;
-    }
-    #[cfg(not(unix))]
     let _ = original;
     Ok(())
 }
@@ -460,7 +425,6 @@ pub fn ensure_hook_exe(app: &AppHandle) {
     install_relay(&src, &dest);
 }
 
-#[cfg(windows)]
 fn install_relay(src: &Path, dest: &Path) {
     let same = match (std::fs::metadata(src), std::fs::metadata(dest)) {
         (Ok(a), Ok(b)) => a.len() == b.len() && a.modified().ok() == b.modified().ok(),
@@ -475,26 +439,6 @@ fn install_relay(src: &Path, dest: &Path) {
         if !dest.exists() {
             crate::log::line(format!("could not install {}: {err}", platform::HOOK_EXE));
         }
-    }
-}
-
-/// Linux does not keep the modification time on copy, so the contents decide.
-/// The new relay is written beside the old one and renamed over it: a hook
-/// starting at that moment runs either the old relay or the new one, never half
-/// of one, and a relay that is running right now does not block the update.
-#[cfg(unix)]
-fn install_relay(src: &Path, dest: &Path) {
-    use std::os::unix::fs::PermissionsExt;
-    if matches!((std::fs::read(src), std::fs::read(dest)), (Ok(a), Ok(b)) if a == b) {
-        return;
-    }
-    let temp = dest.with_extension(format!("new-{}", std::process::id()));
-    let result = std::fs::copy(src, &temp)
-        .and_then(|_| std::fs::set_permissions(&temp, std::fs::Permissions::from_mode(0o755)))
-        .and_then(|_| std::fs::rename(&temp, dest));
-    if let Err(err) = result {
-        let _ = std::fs::remove_file(&temp);
-        crate::log::line(format!("could not install {}: {err}", platform::HOOK_EXE));
     }
 }
 
@@ -643,7 +587,6 @@ mod tests {
         assert_eq!(cleaned, existing);
     }
 
-    #[cfg(windows)]
     #[test]
     fn hooks_are_written_in_exec_form_with_no_shell() {
         let after = merged(&json!({}), &hook_entry);
@@ -659,7 +602,6 @@ mod tests {
         }
     }
 
-    #[cfg(windows)]
     #[test]
     fn an_old_shell_form_install_is_replaced_not_duplicated() {
         // What Coucou 0.1.1 wrote: fine in Git Bash, a syntax error in PowerShell.
@@ -698,46 +640,6 @@ mod tests {
         assert_eq!(fingerprint(b"{}"), fingerprint(b"{}"));
         assert_ne!(fingerprint(b"{}"), fingerprint(b"{ }"));
         assert_ne!(fingerprint(b""), fingerprint(b"{}"));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn the_hook_path_is_one_shell_word_whatever_it_contains() {
-        assert_eq!(sh_quote("/home/a b/x"), "'/home/a b/x'");
-        // $, backticks, backslashes and double quotes stay literal in single quotes.
-        assert_eq!(sh_quote(r#"/h/$(id)`x`\"y"#), r#"'/h/$(id)`x`\"y'"#);
-        // A single quote closes, escapes and reopens.
-        assert_eq!(sh_quote("/h/it's"), r"'/h/it'\''s'");
-    }
-
-    /// settings.json can carry API keys in its `env` block: rewriting it must
-    /// never make it readable by more people than before.
-    #[cfg(unix)]
-    #[test]
-    fn rewriting_settings_never_widens_its_permissions() {
-        use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!("coucou-perm-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let original = dir.join("settings.json");
-        let temp = dir.join("settings.json.new");
-        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
-
-        for wanted in [0o600, 0o640, 0o644] {
-            std::fs::write(&original, b"{}").unwrap();
-            std::fs::set_permissions(&original, std::fs::Permissions::from_mode(wanted)).unwrap();
-            let _ = std::fs::remove_file(&temp);
-            write_like(&temp, &original, b"{\"a\":1}").unwrap();
-            assert_eq!(mode(&temp), wanted, "the rewrite must keep {wanted:o}");
-        }
-
-        // No original: ours only.
-        std::fs::remove_file(&original).unwrap();
-        let _ = std::fs::remove_file(&temp);
-        write_like(&temp, &original, b"{}").unwrap();
-        assert_eq!(mode(&temp), 0o600);
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Everything filesystem-shaped lives in one test on purpose: it points

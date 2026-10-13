@@ -1,8 +1,7 @@
 //! coucou-hook — the relay Claude Code runs on every hook event.
 //!
 //! Reads the hook JSON on stdin, adds a little terminal context, and hands it to
-//! Coucou over the named pipe `\\.\pipe\coucou-<sid>` (Windows) or the Unix
-//! socket `$XDG_RUNTIME_DIR/coucou.sock` (Linux).
+//! Coucou over the named pipe `\\.\pipe\coucou-<sid>`.
 //!
 //! Hard rule (docs/CLAUDE.md): **never block Claude Code.**
 //! * If the pipe does not exist — Coucou is closed — we exit 0 immediately with
@@ -68,15 +67,8 @@ const MAX_LAST_MESSAGE: usize = 6_000;
 /// less than this anyway.
 const MAX_FIELD_LEN: usize = 2_000;
 
-#[cfg(windows)]
 mod win;
-#[cfg(windows)]
 use win::connect;
-
-#[cfg(target_os = "linux")]
-mod unix;
-#[cfg(target_os = "linux")]
-use unix::connect;
 
 fn main() {
     // Coucou's own Claude Code runs (Mochi's chat) must never reach the island.

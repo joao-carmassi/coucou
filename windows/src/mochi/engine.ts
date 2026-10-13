@@ -1,4 +1,4 @@
-// Mochi — direct port of NotchBuddy/Sources/App/BotEngine.swift to Canvas 2D.
+// Mochi — direct port of the macOS BotEngine.swift to Canvas 2D.
 // Same constants, same tweens, same easings, same particles. The only intentional
 // difference is the `happy`/`wink` eye arc, which follows the prototype
 // (design/prototype/notch-buddy.html, the visual source of truth) — the Swift

@@ -1,18 +1,16 @@
 <div align="center">
 
-<img src="NotchBuddy/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="96" alt="Coucou icon">
+<img src="windows/src-tauri/icons/128x128.png" width="96" alt="Coucou icon">
 
 # Coucou
 
-**A tiny friend that lives in your Mac's notch — or at the top of your screen on Windows and Linux — and keeps an eye on your AI coding agent sessions.**
+**A tiny friend that lives at the top of your screen on Windows and keeps an eye on your AI coding agent sessions.**
+
+> This branch (`refactor/modules`) is **Windows-only**: the macOS app and Linux support were removed. The app lives in `windows/`.
 
 Approve permissions, watch your agents work, drop a file, chat with Claude — all without leaving what you're doing.
 
-![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?logo=windows&logoColor=white)
-![Linux](https://img.shields.io/badge/Linux-AppImage%20%7C%20deb%20%7C%20rpm-FCC624?logo=linux&logoColor=black)
-![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
-![SwiftUI](https://img.shields.io/badge/SwiftUI-native-0A84FF)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=black)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 ![GitHub stars](https://img.shields.io/github/stars/Louis-CFM/coucou?style=social)
@@ -58,12 +56,6 @@ Meet **Mochi**: a soft little squircle with big eyes that pops out of your notch
 
 ## Install
 
-### Download for macOS
-
-1. Grab the latest `Coucou.zip` from [Releases](https://github.com/Louis-CFM/coucou/releases).
-2. Unzip and move **Coucou.app** to `/Applications`.
-3. Launch. This build isn't notarized by Apple yet, so the first time macOS says it can't verify the developer: open **System Settings → Privacy & Security**, scroll down and click **Open Anyway** (only once).
-
 ### Windows
 
 The Windows installer is **temporarily unavailable**. Microsoft Defender wrongly
@@ -75,31 +67,7 @@ There is no notch on a PC, so the island slides out of the top edge of the scree
 instead of hiding inside one. See [`windows/README.md`](windows/README.md) for the
 rest of the differences.
 
-### Linux
-
-The first Linux build is out as a beta: download it from [Coucou for Linux 0.1.1 (beta)](https://github.com/Louis-CFM/coucou/releases/tag/linux-v0.1.1), x86_64 only for now. Later versions will be in [Releases](https://github.com/Louis-CFM/coucou/releases) under `linux-v*` tags.
-
-- **AppImage** (any distribution): `chmod +x Coucou-Linux-*.AppImage`, then run it.
-- **Debian / Ubuntu**: `sudo apt install ./Coucou-Linux-*.deb`
-- **Fedora / openSUSE**: `sudo dnf install ./Coucou-Linux-*.rpm`
-
-Check a download with `sha256sum -c SHA256SUMS --ignore-missing`. Gemini CLI, Antigravity and the Google AI and OpenAI chat are macOS only for now.
-
-The island sits on the top edge on compositors with layer-shell — COSMIC, KDE
-Plasma, Hyprland, Sway and other wlroots compositors. GNOME has no layer-shell,
-so there it opens as a regular window. See [`windows/README.md`](windows/README.md#linux).
-
 ### Build from source
-
-**macOS** — requirements: macOS 15+, Xcode 16+, [XcodeGen](https://github.com/yonaskolb/XcodeGen).
-
-```bash
-brew install xcodegen
-git clone https://github.com/Louis-CFM/coucou.git
-cd coucou/NotchBuddy
-xcodegen
-open NotchBuddy.xcodeproj   # then ⌘R
-```
 
 **Windows** — requirements: [Rust](https://rustup.rs), Node 20+, MSVC build tools.
 

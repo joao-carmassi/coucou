@@ -4,9 +4,8 @@ import { resolve, join, extname } from "node:path";
 
 // ───────────────────────────────────────────────────────────────────────────────
 // THE one and only place the shared sound folder is declared.
-// The 28 WAVs live in the macOS app and are NOT duplicated in the repo; when they
-// move to `shared/sounds/`, change this single line.
-export const SOUNDS_DIR = resolve(__dirname, "../NotchBuddy/Resources/sounds");
+// The 28 WAVs live in windows/sounds/ (moved from the removed macOS app).
+export const SOUNDS_DIR = resolve(__dirname, "sounds");
 // ───────────────────────────────────────────────────────────────────────────────
 
 /**

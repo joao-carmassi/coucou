@@ -147,7 +147,6 @@ fn parse_entry(text: &str) -> Option<Entry> {
 }
 
 /// Whether `pid` is a live process, and the one that registered (same start time).
-#[cfg(windows)]
 fn is_running(pid: u32, proc_start: Option<u64>) -> bool {
     use windows::Win32::Foundation::{CloseHandle, FILETIME};
     use windows::Win32::System::Threading::{GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
@@ -165,11 +164,6 @@ fn is_running(pid: u32, proc_start: Option<u64>) -> bool {
         let _ = CloseHandle(h);
         ok
     }
-}
-
-#[cfg(not(windows))]
-fn is_running(_: u32, _: Option<u64>) -> bool {
-    false
 }
 
 /// The sessions running right now, across every profile.

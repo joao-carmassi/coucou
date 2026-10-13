@@ -1,7 +1,6 @@
 // Coucou for Windows — app wiring and the commands the island calls.
 
 mod claude;
-#[cfg(windows)]
 mod drop_target;
 mod files;
 mod github;
@@ -913,7 +912,6 @@ fn settings_page_url(app: &AppHandle) -> WebviewUrl {
 /// Tauri's hide() does not tell WebView2 the page is hidden. While hidden, mark
 /// the webview invisible and ask for a low memory target; restore both before
 /// show(). Errors are ignored (older runtimes lack ICoreWebView2_19).
-#[cfg(windows)]
 fn set_settings_webview_low(win: &tauri::WebviewWindow, low: bool) {
     use webview2_com::Microsoft::Web::WebView2::Win32::{
         ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
@@ -933,9 +931,6 @@ fn set_settings_webview_low(win: &tauri::WebviewWindow, low: bool) {
         }
     });
 }
-
-#[cfg(not(windows))]
-fn set_settings_webview_low(_win: &tauri::WebviewWindow, _low: bool) {}
 
 /// The settings window is created hidden at launch and only ever shown and
 /// hidden afterwards. A WebView2 window created later — on the main thread or

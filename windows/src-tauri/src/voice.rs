@@ -91,23 +91,6 @@ fn emit_state(app: &AppHandle, state: &str, message: &str) {
     let _ = app.emit("voice-state", serde_json::json!({ "state": state, "message": message }));
 }
 
-#[cfg(not(windows))]
-mod imp {
-    use super::*;
-    pub fn start(_: &AppHandle) -> Result<(), String> {
-        Err("Entrada de voz só existe no Windows.".into())
-    }
-    pub fn stop() {}
-    pub fn status() -> VoiceStatus {
-        VoiceStatus::default()
-    }
-    pub async fn download(_: AppHandle) -> Result<(), String> {
-        Err("Entrada de voz só existe no Windows.".into())
-    }
-    pub fn apply(_: &AppHandle, _: &Settings) {}
-}
-
-#[cfg(windows)]
 mod imp {
     use super::*;
     use sha2::{Digest, Sha256};
