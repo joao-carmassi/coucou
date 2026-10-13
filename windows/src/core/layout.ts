@@ -23,6 +23,7 @@ export type IslandViewName =
   | "settings"
   | "greeting"
   | "github"
+  | "media"
   | "session";
 
 export type BotStateName =
@@ -122,6 +123,7 @@ export const VIEW_LAYOUTS: Record<IslandViewName, ViewLayout> = {
   // upper part of his own column (its middle is x 67), the screen in a panel
   // on the right. As tall as the window allows (PANEL_H), like that view.
   github: { height: PANEL_H, botX: 67, botY: 108, botDiameter: 71, agentMode: "none" },
+  media: { height: PANEL_H, botX: 67, botY: 108, botDiameter: 71, agentMode: "none" },
   // What a Claude Code session did, in the same panel: the files it changed,
   // each one's diff, and a line to tell Claude something.
   session: { height: PANEL_H, botX: 67, botY: 108, botDiameter: 71, agentMode: "none" },

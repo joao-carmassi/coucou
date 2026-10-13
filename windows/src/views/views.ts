@@ -13,6 +13,7 @@ import { buildChoose, buildUpload, buildUploading } from "./upload";
 import { renderIntegrationCard, type GithubOpening, type IntegrationCardHooks } from "./integrations";
 import { buildGithub, enterGithubPanel, newsFacts } from "./github";
 import { buildSession, sessionName, sessionsChip } from "./session";
+import { buildMedia } from "./media";
 import { diffLine, fileKind, plusMinus, readPatch } from "./code";
 import { markdown } from "./markdown";
 import { hasPreview, stepIcon, stepName, stepPreview } from "./step";
@@ -74,6 +75,8 @@ export interface ViewActions {
   openSessions(): void;
   /** Puts another Claude Code session in front: the island shows that one. */
   pickSession(id: string): void;
+  /** Copies a file into the inbox and starts on it, as a dropped file would. */
+  launchFile(path: string): Promise<void>;
 }
 
 /** Lines of a step's preview the overview has room for. */
@@ -261,6 +264,8 @@ export function buildHeader(actions: ViewActions): ViewHost {
   const tabChat = h("button", { class: "tab", title: askTitle(), onclick: () => go("prompt") }, svg(ICONS.bubble, 13));
   const tabDrop = h("button", { class: "tab", title: "Soltar", onclick: () => go("upload") }, svg(ICONS.plus, 13));
 
+  const tabMedia = h("button", { class: "tab", title: "Mídia", onclick: () => go("media") }, svg(ICONS.photo, 13, { stroke: 1.8 }));
+
   const gearBtn = h("button", { title: "Configurações", onclick: () => go("settings") }, svg(ICONS.gear, 14));
   const soundBtn = h("button", { title: "Silenciar", onclick: () => actions.toggleSound() }, svg(ICONS.speakerOn, 14));
 
@@ -272,7 +277,7 @@ export function buildHeader(actions: ViewActions): ViewHost {
   const el = h(
     "div",
     { id: "header" },
-    h("div", { class: "tabs" }, tabHome, tabChat, tabDrop),
+    h("div", { class: "tabs" }, tabHome, tabChat, tabDrop, tabMedia),
     h("div", { class: "header-actions" }, gearBtn, soundBtn),
   );
 
@@ -285,6 +290,7 @@ export function buildHeader(actions: ViewActions): ViewHost {
       tabChat.classList.toggle("on", v === "prompt");
       tabChat.title = askTitle();
       tabDrop.classList.toggle("on", v === "upload");
+      tabMedia.classList.toggle("on", v === "media");
       gearBtn.classList.toggle("on", v === "settings");
       clear(gearBtn);
       gearBtn.append(svg(v === "settings" ? ICONS.gearFill : ICONS.gear, 14));
@@ -1210,6 +1216,7 @@ export function buildViews(
   map.set("choose", buildChoose(actions));
   map.set("github", buildGithub(actions));
   map.set("session", buildSession(actions));
+  map.set("media", buildMedia(actions));
   // Not in the Windows v1: sending a file by email, window attach + web result.
   map.set("mail", buildPlaceholder("Enviar por e-mail não está nesta versão.", ""));
   map.set("searching", buildPlaceholder("Claude está buscando…", ""));

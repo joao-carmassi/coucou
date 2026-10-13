@@ -60,6 +60,7 @@ pub fn ingest(source: &str) -> Result<DroppedFile, String> {
         let _ = file.set_modified(SystemTime::now());
     }
     sweep(&dir);
+    crate::media::note_drop(src);
 
     Ok(DroppedFile {
         name,
@@ -87,6 +88,7 @@ pub fn save_capture(app: &str, w: u32, h: u32, rgb: &[u8]) -> Result<DroppedFile
         .and_then(|mut writer| writer.write_image_data(&rgb))
         .map_err(|e| format!("não consegui salvar a captura: {e}"))?;
     sweep(&dir);
+    crate::media::note_drop(&dest);
 
     Ok(DroppedFile {
         name,

@@ -172,7 +172,27 @@ export const Bridge = {
   /** The sheet behind a line of activity. `target` goes back exactly as Rust sent it. */
   githubDetail: (target: GithubTarget, force: boolean) =>
     callOrThrow<GithubDetail>("github_detail", { target, force }),
+
+  // ── Mídia ─────────────────────────────────────────────────────────────────
+  mediaList: () => callOrThrow<MediaItem[]>("media_list"),
+  /** The file's preview as PNG bytes. */
+  mediaThumb: (path: string, px: number) => callOrThrow<ArrayBuffer>("media_thumb", { path, px }),
+  mediaOpen: (path: string) => callOrThrow<void>("media_open", { path }),
+  mediaOpenWith: (path: string) => callOrThrow<void>("media_open_with", { path }),
+  mediaReveal: (path: string) => callOrThrow<void>("media_reveal", { path }),
+  /** Off the list only; the file stays on disk. */
+  mediaRemove: (path: string) => callOrThrow<void>("media_remove", { path }),
 };
+
+export interface MediaItem {
+  path: string;
+  name: string;
+  /** "screenshot", "video" or "file". */
+  kind: string;
+  /** Unix ms. */
+  ts: number;
+  size: number;
+}
 
 /** What a line of activity leads to — the Target enum in github_detail.rs. */
 export type GithubTarget =
