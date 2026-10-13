@@ -4471,6 +4471,22 @@ button.gh-block:hover {
   background: var(--gh-hover);
 }
 
+/* The capture Mochi just took: a brief accent glow. */
+.media-cell.fresh {
+  animation: media-fresh 3.2s ease-out;
+}
+
+@keyframes media-fresh {
+  0%, 60% {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    box-shadow: 0 0 0 1.5px var(--accent);
+  }
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 1.5px transparent;
+  }
+}
+
 .media-frame {
   position: relative;
   aspect-ratio: 16 / 10;

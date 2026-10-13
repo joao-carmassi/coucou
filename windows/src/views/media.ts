@@ -27,6 +27,16 @@ function when(ts: number): string {
     : `${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} ${time}`;
 }
 
+/** File name of a capture to flash once on the next draw (set before the view opens). */
+let fresh: string | null = null;
+let reloadNow: (() => void) | null = null;
+
+/** Mochi captured a window: show the list with that item highlighted. */
+export function highlightMedia(name: string) {
+  fresh = name;
+  reloadNow?.(); // a no-op reload when the panel is not on screen; sync() loads on entry
+}
+
 export function buildMedia(actions: ViewActions): ViewHost {
   let items: MediaItem[] = [];
   let dirty = true;
@@ -190,11 +200,21 @@ export function buildMedia(actions: ViewActions): ViewHost {
         openMenu(item, e.clientX, e.clientY);
       });
       cell.addEventListener("dblclick", () => void Bridge.mediaOpen(item.path).catch(fail));
+      if (item.name === fresh) {
+        cell.classList.add("fresh");
+        fresh = null;
+        grid.scrollTop = 0;
+      }
       cells.append(cell);
       lazy.observe(img);
     }
     grid.append(cells);
   }
+
+  reloadNow = () => {
+    dirty = true;
+    if (State.view === "media") void load();
+  };
 
   // Rust says when the list changed; the panel only listens while it is the view.
   void onEvent("media-changed", () => {

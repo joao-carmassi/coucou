@@ -19,6 +19,7 @@ import { UploadCanvas } from "../upload/canvas";
 import { USC, UploadSeq } from "../upload/sequence";
 import { buildHeader, buildViews, type ViewActions, type ViewHost } from "../views/views";
 import { githubData } from "../views/integrations";
+import { highlightMedia } from "../views/media";
 import { enterSessionPanel } from "../views/session";
 import { followNews } from "./integrations";
 import { h } from "../views/dom";
@@ -135,7 +136,8 @@ export class Island {
   private uploadDone = false;
 
   /** Where the island was when a file drag first reached it, to go back on a cancel. */
-  private dragOrigin: { state: FsmState; view: IslandViewName } | null = null;
+  private mediaPinTimer = 0;
+  private dragOrigin:{ state: FsmState; view: IslandViewName } | null = null;
   private abandonTimer: number | null = null;
   private noteTimer: number | null = null;
 
@@ -809,17 +811,19 @@ export class Island {
       if (overIsland) return; // dropped back home: silent cancel
       void Bridge.attachWindow()
         .then((file) => {
-          State.droppedFile = { name: file.name, path: file.path };
-          State.promptContext = { kind: "file", name: file.name, path: file.path };
+          // Not sent to Claude: it is already in the inbox and the Mídia list; the user picks the action there.
           this.engine.triggerEmote("wink");
-          if (State.settings.askMode === "mochi") {
-            State.chatHistory = [];
-            // Like a dropped file: a new session, in the inbox where the print lives.
-            State.activeSession = null;
-            void Bridge.chatReset();
-            Sound.play("attach");
-            this.setView("prompt");
-          } else this.launchWith(file.path);
+          Sound.play("attach");
+          highlightMedia(file.name);
+          this.fsm.pinned = true;
+          this.fsm.forceHome();
+          this.expand("media");
+          // Pinned for a moment only, then the usual auto-close applies again.
+          window.clearTimeout(this.mediaPinTimer);
+          this.mediaPinTimer = window.setTimeout(() => {
+            this.fsm.pinned = State.isPinned;
+            if (this.fsm.state === "home") this.fsm.forceHome();
+          }, 8000);
         })
         .catch((err) => this.showError(err));
     } else if (this.botPress) {
