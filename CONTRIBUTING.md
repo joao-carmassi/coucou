@@ -4,17 +4,10 @@ Thanks for wanting to help Mochi grow up! 🫶
 
 ## Getting started
 
-```bash
-brew install xcodegen
-cd NotchBuddy && xcodegen && open NotchBuddy.xcodeproj
-```
-
-Never edit `NotchBuddy.xcodeproj` by hand: change `project.yml` and run `xcodegen`.
-
-Check resting island dimensions on screens with and without a notch:
-
-```bash
-bash scripts/test-screen-geometry.sh
+```powershell
+cd windows
+npm install
+npm run tauri dev
 ```
 
 ## Good first contributions

@@ -1,3 +1,5 @@
+Historical: describes the macOS/Linux app; this branch is Windows-only
+
 # Coucou — third-party agent integration
 
 Any tool that can write to a Unix domain socket (macOS, Linux) or a named pipe (Windows) can send events to Coucou and have its own pill next to Claude Code.

@@ -1,3 +1,5 @@
+Historical: describes the macOS/Linux app; this branch is Windows-only
+
 # Notch Buddy — intégrations
 
 Règle d'or : **vérifier la doc officielle au moment d'implémenter**. Les formats ci-dessous sont le plan, pas une garantie. Sources à relire :
