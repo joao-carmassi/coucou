@@ -88,64 +88,6 @@ body {
   pointer-events: none;
 }
 
-/* The drop sequence. Sits under the header and takes over the island body; it
-   cross-fades in and out, so the last frame stays up while the views return. */
-#upload-layer {
-  position: absolute;
-  top: 0;
-  width: 640px;
-  height: 176px;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.22s ease-in-out;
-}
-
-#upload-layer.on {
-  opacity: 1;
-}
-
-#upload-canvas {
-  position: absolute;
-  inset: 0;
-}
-
-#upload-overlay {
-  position: absolute;
-  inset: 0;
-  display: none;
-}
-
-/* Invisible hit areas over the buttons the canvas paints. */
-.upload-hit {
-  position: absolute;
-  padding: 0;
-  border: 0;
-  border-radius: 13px;
-  background: none;
-  pointer-events: auto;
-  cursor: pointer;
-}
-
-/* The ordinary views step aside while the sequence owns the body. */
-#views.hidden-by-upload {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.22s ease-in-out;
-}
-
-/* …and so do their clicks. The content sits above the sequence, and an
-   invisible-but-active view (or the content box itself) used to swallow the
-   clicks meant for the buttons the canvas paints — Cancel did nothing. Only the
-   header stays clickable on top. (`!important`: syncDom sets it inline.) */
-#content.upload-active,
-#views.hidden-by-upload .view.on {
-  pointer-events: none !important;
-}
-
-#content.upload-active #header {
-  pointer-events: auto;
-}
-
 #bot-glow {
   position: absolute;
   pointer-events: none;
@@ -178,7 +120,7 @@ body {
   transition: opacity 0.25s ease-in-out;
 }
 
-/* Compact: one line on what Claude is doing, where the grid sits when Claude is alone. */
+/* Compact: one status line, where the mini grid sits when nothing else is up. */
 #activity-line {
   position: absolute;
   height: 16px;
@@ -375,67 +317,10 @@ body {
 
 /* ── Buttons ────────────────────────────────────────────────────────────── */
 
-.btn {
-  font: 500 12.5px var(--font);
-  padding: 7px 13px;
-  border: 0;
-  border-radius: 999px;
-  cursor: default;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  transition: transform 0.08s ease-out, background 0.12s ease-out;
-}
-
-.btn:active {
-  transform: scale(0.94);
-}
-
-.btn.primary {
-  background: var(--ink);
-  color: #0b0c0e;
-}
-
-.btn.secondary {
-  background: rgba(255, 255, 255, 0.09);
-  color: var(--ink-2);
-}
-
-.btn.secondary:hover {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.btn .kbd {
-  font-size: 10.5px;
-  padding: 0 4px;
-  border-radius: 4px;
-  opacity: 0.55;
-}
-
-.btn.primary .kbd {
-  border: 1px solid rgba(0, 0, 0, 0.4);
-}
-
-.btn.secondary .kbd {
-  border: 1px solid rgba(255, 255, 255, 0.4);
-}
-
 .link-btn {
   border: 0;
   background: transparent;
   font: 500 11px var(--font);
-  cursor: default;
-}
-
-.icon-btn {
-  width: 16px;
-  height: 16px;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--dim-4);
-  display: grid;
-  place-items: center;
   cursor: default;
 }
 
