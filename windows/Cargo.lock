@@ -556,12 +556,14 @@ dependencies = [
 name = "coucou"
 version = "0.1.1"
 dependencies = [
+ "png 0.17.16",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-autostart",
  "tauri-plugin-single-instance",
+ "tokio",
  "webview2-com",
  "windows 0.61.3",
  "windows-core 0.61.2",
