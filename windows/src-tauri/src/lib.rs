@@ -18,6 +18,7 @@ mod secrets;
 mod sessions;
 mod settings;
 mod tray;
+mod voice;
 mod wsl;
 
 use std::os::windows::process::CommandExt;
@@ -85,6 +86,8 @@ fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
         settings.wsl_hooks = current.wsl_hooks.clone();
         settings.wsl_prompted = current.wsl_prompted;
         settings.mochi_session = current.mochi_session.clone();
+        settings.voice_hotkey = voice::clean_hotkey(&settings.voice_hotkey, "Ctrl+Alt+V");
+        settings.alert_hotkey = voice::clean_hotkey(&settings.alert_hotkey, "Ctrl+Alt+A");
         if !matches!(settings.ask_mode.as_str(), "sessions" | "mochi") {
             settings.ask_mode = "sessions".into();
         }
@@ -108,6 +111,7 @@ fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
         island::apply_geometry(&app, &settings.screen, collapsed);
     }
     // Keep the other window in step (island ⇄ settings window).
+    voice::apply(&app, &settings);
     let _ = app.emit("settings-changed", settings);
 }
 
@@ -712,6 +716,7 @@ async fn session_launch(
     cwd: Option<String>,
     resume: Option<String>,
     attach: Option<String>,
+    prompt: Option<String>,
 ) -> Result<(), String> {
     blocking(move || {
         let p = sessions::profiles()
@@ -729,7 +734,10 @@ async fn session_launch(
             args.push("--resume".into());
             args.push(id.clone());
         }
-        let mut prompt = None;
+        // A typed or dictated first message: travels in the environment (claude_console), never on a command line.
+        let mut prompt = prompt
+            .map(|t| t.trim().trim_start_matches('-').trim_start().chars().take(2000).collect::<String>())
+            .filter(|t| !t.is_empty());
         if let Some(file) = &attach {
             let inbox = files::inbox_dir().canonicalize().map_err(|e| e.to_string())?;
             let path = std::path::Path::new(file)
@@ -1024,6 +1032,10 @@ pub fn run() {
             sessions_all,
             sessions_live,
             session_launch,
+            voice::voice_start,
+            voice::voice_stop,
+            voice::voice_model_status,
+            voice::voice_download_model,
             session_erase,
             quit_app,
             hooks_status,
@@ -1081,6 +1093,7 @@ pub fn run() {
             pipe::start(handle.clone());
             integrations::start(handle.clone());
             offer_wsl_setup(handle.clone());
+            voice::apply(&handle, &loaded);
             Ok(())
         })
         .run(tauri::generate_context!())

@@ -297,6 +297,11 @@ export interface Settings {
   idleOpen: string;
   /** What the Ask tab is: "sessions" (sessions manager) or "mochi" (the old chat). */
   askMode: "sessions" | "mochi";
+  /** Voice input (English), off until switched on. */
+  voiceEnabled: boolean;
+  voiceHotkey: string;
+  /** Global hotkey that takes the island to the pending alert; "" = none. */
+  alertHotkey: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -317,6 +322,9 @@ export const DEFAULT_SETTINGS: Settings = {
   claudeConfigDir: "",
   idleOpen: "",
   askMode: "sessions",
+  voiceEnabled: false,
+  voiceHotkey: "Ctrl+Alt+V",
+  alertHotkey: "Ctrl+Alt+A",
 };
 
 type Listener = () => void;

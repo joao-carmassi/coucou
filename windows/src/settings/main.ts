@@ -927,6 +927,63 @@ function generalSection(): HTMLElement {
   );
 }
 
+/** Voice input (English): off by default; the speech model is downloaded only on the button. */
+function voiceSection(): HTMLElement {
+  const status = h("span", { class: "hint" });
+  const err = h("div", { class: "notice warn", style: "display:none" });
+  const dl = h("button", { class: "btn secondary", text: "Baixar modelo (~20 MB)" }) as HTMLButtonElement;
+  const refresh = async () => {
+    const st = await Bridge.voiceModelStatus();
+    status.textContent = st?.ready ? "Modelo instalado." : "Modelo não instalado.";
+    dl.disabled = !!st?.ready;
+    err.style.display = st?.hotkeyError ? "" : "none";
+    err.textContent = st?.hotkeyError ?? "";
+  };
+  const saved = () => void save().then(() => setTimeout(() => void refresh(), 300));
+  dl.addEventListener("click", async () => {
+    dl.disabled = true;
+    status.textContent = "Baixando…";
+    try {
+      await Bridge.voiceDownloadModel();
+    } catch (e) {
+      status.textContent = String(e).replace(/^Error:\s*/, "");
+      dl.disabled = false;
+      return;
+    }
+    void refresh();
+  });
+  void onEvent<{ file: string; received: number; total: number }>("voice-download", (p) => {
+    status.textContent = `Baixando ${p.file}… ${p.total ? Math.round((100 * p.received) / p.total) + "%" : ""}`;
+  });
+  void onEvent<string>("voice-hotkey-error", () => void refresh());
+  const hotkey = (get: () => string, set: (v: string) => void) => {
+    const input = h("input", { type: "text", value: get(), spellcheck: "false" }) as HTMLInputElement;
+    input.addEventListener("change", () => { set(input.value.trim()); saved(); });
+    return input;
+  };
+  void refresh();
+  return h("section", { id: "voice" },
+    h("h2", {}, h("span", { text: "Voz" })),
+    h("div", { class: "row" },
+      h("label", { text: "Entrada de voz (inglês)" }),
+      toggle(settings.voiceEnabled, (v) => { settings.voiceEnabled = v; saved(); }),
+      h("span", { class: "hint", text: "Desligada por padrão. Reconhecimento no próprio computador; o microfone só abre quando você aperta o atalho." }),
+    ),
+    h("div", { class: "row" },
+      h("label", { text: "Atalho de voz" }),
+      hotkey(() => settings.voiceHotkey, (v) => (settings.voiceHotkey = v)),
+      h("span", { class: "hint", text: "Ex.: Ctrl+Alt+V. Aperte de novo para parar." }),
+    ),
+    h("div", { class: "row" },
+      h("label", { text: "Atalho \"ir ao alerta\"" }),
+      hotkey(() => settings.alertHotkey, (v) => (settings.alertHotkey = v)),
+      h("span", { class: "hint", text: "Ex.: Ctrl+Alt+A. Vazio = sem atalho." }),
+    ),
+    h("div", { class: "row" }, h("label", { text: "Modelo de voz" }), dl, status),
+    err,
+  );
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -957,6 +1014,7 @@ async function main() {
     wsl.section,
     apiSection(hasKey),
     integrationsSection(present),
+    voiceSection(),
     generalSection(),
     h("div", {
       class: "hint",

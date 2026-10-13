@@ -23,7 +23,8 @@ export type IslandViewName =
   | "settings"
   | "greeting"
   | "github"
-  | "session";
+  | "session"
+  | "voice";
 
 export type BotStateName =
   | "idle"
@@ -125,6 +126,7 @@ export const VIEW_LAYOUTS: Record<IslandViewName, ViewLayout> = {
   // What a Claude Code session did, in the same panel: the files it changed,
   // each one's diff, and a line to tell Claude something.
   session: { height: PANEL_H, botX: 67, botY: 108, botDiameter: 71, agentMode: "none" },
+  voice: { height: 160, botX: 60, botY: null, botDiameter: 50, agentMode: "column" },
 };
 
 // The upload views above are only the fallback geometry. Once a file is actually

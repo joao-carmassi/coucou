@@ -52,6 +52,22 @@ pub struct Settings {
     /// What the Ask tab is: "sessions" (the Sessions manager) or "mochi" (Mochi's chat).
     #[serde(default = "default_ask_mode")]
     pub ask_mode: String,
+    /// Voice input (voice.rs). Off until the user switches it on.
+    #[serde(default)]
+    pub voice_enabled: bool,
+    #[serde(default = "default_voice_hotkey")]
+    pub voice_hotkey: String,
+    /// Global hotkey that emits `go-to-alert`; empty = none.
+    #[serde(default = "default_alert_hotkey")]
+    pub alert_hotkey: String,
+}
+
+fn default_voice_hotkey() -> String {
+    "Ctrl+Alt+V".into()
+}
+
+fn default_alert_hotkey() -> String {
+    "Ctrl+Alt+A".into()
 }
 
 fn default_ask_mode() -> String {
@@ -96,6 +112,9 @@ impl Default for Settings {
             mochi_session: None,
             compact_hide_interval: default_compact_hide(),
             ask_mode: default_ask_mode(),
+            voice_enabled: false,
+            voice_hotkey: default_voice_hotkey(),
+            alert_hotkey: default_alert_hotkey(),
         }
     }
 }

@@ -95,7 +95,7 @@ export const Bridge = {
   sessionsAll: () => call<ManagedSession[]>("sessions_all"),
   sessionsLive: () => call<LiveSession[]>("sessions_live"),
   sessionLaunch: (r: LaunchRequest) =>
-    callOrThrow<void>("session_launch", { profile: r.profile, cwd: r.cwd, resume: r.resume, attach: r.attach }),
+    callOrThrow<void>("session_launch", { profile: r.profile, cwd: r.cwd, resume: r.resume, attach: r.attach, prompt: r.prompt ?? null }),
   sessionErase: (profile: string, id: string) => callOrThrow<void>("session_erase", { profile, id }),
 
   // ── Claude Code under WSL ─────────────────────────────────────────────────
@@ -156,6 +156,13 @@ export const Bridge = {
   refreshIntegration: (id: string) => call<void>("refresh_integration", { id }),
   /** Opens the configured n8n instance in the browser. */
   openN8n: () => call<void>("open_n8n"),
+
+  // ── Voice (voice.rs) ──────────────────────────────────────────────────────
+  voiceStart: () => callOrThrow<void>("voice_start"),
+  voiceStop: () => call<void>("voice_stop"),
+  voiceModelStatus: () => call<{ ready: boolean; listening: boolean; hotkeyError: string }>("voice_model_status"),
+  /** Settings button only: downloads and checks the speech model. */
+  voiceDownloadModel: () => callOrThrow<void>("voice_download_model"),
 
   /** Tray → Pause. Stops the integration pollers, not just the island. */
   setPaused: (paused: boolean) => call<void>("set_paused", { paused }),
@@ -620,7 +627,7 @@ export interface ManagedSession {
 
 export interface LiveSession { profile: string; id: string; pid: number; activity: string | null }
 
-export interface LaunchRequest { profile: string; cwd: string | null; resume: string | null; attach: string | null }
+export interface LaunchRequest { profile: string; cwd: string | null; resume: string | null; attach: string | null; prompt?: string | null }
 
 export interface HistoryItem {
   role: "user" | "assistant";
