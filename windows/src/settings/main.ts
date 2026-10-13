@@ -2,13 +2,21 @@
 // screen, autostart. Module sections plug in later.
 
 import "./settings.css";
+import "../modules/claude/settings.css";
 import { Bridge, onEvent } from "../core/bridge";
 import { resolveEnabled } from "../core/moduleApi";
 import { MODULE_INFO } from "../modules/catalog";
-import { DEFAULT_SETTINGS, type Settings } from "../core/state";
+import { MODULES } from "../modules/index";
+import { DEFAULT_SETTINGS, State, type Settings } from "../core/state";
 import { h, clear } from "../views/dom";
 
 let settings: Settings = { ...DEFAULT_SETTINGS };
+// Module sections (ModuleDef.settings) read and write the same object through State.settings.
+State.settings = settings;
+const put = (s: Settings) => {
+  settings = s;
+  State.settings = s;
+};
 let version = "";
 
 const root = document.getElementById("settings-root")!;
@@ -116,6 +124,26 @@ function generalSection(): HTMLElement {
 // ── Modules section ───────────────────────────────────────────────────────────
 
 const modulesBox = h("div", {});
+/** The sections of the modules that are on, in catalog order: they sit between the switches and the footer. */
+const sectionsBox = h("div", { style: "display:contents" });
+const sections = new Map<string, HTMLElement>();
+
+/** A module's section exists only while the module is on. */
+function renderSections(effective: Record<string, boolean>) {
+  for (const def of MODULES) {
+    if (!def.settings) continue;
+    const on = effective[def.id] === true;
+    const has = sections.get(def.id);
+    if (!on && has) {
+      has.remove();
+      sections.delete(def.id);
+    } else if (on && !has) {
+      sections.set(def.id, def.settings());
+    }
+  }
+  const order = MODULES.map((m) => m.id);
+  sectionsBox.replaceChildren(...[...sections].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0])).map(([, el]) => el));
+}
 
 /** `effective` comes from Rust (modules-changed); until then it is computed from the stored switches. */
 function renderModules(effective: Record<string, boolean> = resolveEnabled(MODULE_INFO, settings.modulesEnabled)) {
@@ -137,6 +165,7 @@ function renderModules(effective: Record<string, boolean> = resolveEnabled(MODUL
     );
   });
   modulesBox.replaceChildren(h("section", { id: "modules" }, h("h2", {}, h("span", { text: "Módulos" })), ...rows));
+  renderSections(effective);
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -144,7 +173,7 @@ function renderModules(effective: Record<string, boolean> = resolveEnabled(MODUL
 async function main() {
   const boot = await Bridge.boot();
   if (boot) {
-    settings = { ...settings, ...boot.settings };
+    put({ ...settings, ...boot.settings });
     version = boot.version;
   }
 
@@ -153,6 +182,7 @@ async function main() {
     h("h1", {}, h("span", { text: "Coucou" }), h("span", { class: "version", text: version })),
     generalSection(),
     modulesBox,
+    sectionsBox,
     h("div", {
       class: "hint",
       text: "Sem telemetria. As requisições de rede só vão para os serviços que você mesmo configurar.",
@@ -162,13 +192,13 @@ async function main() {
   renderModules(boot?.modules);
   void onEvent<Record<string, boolean>>("modules-changed", (m) => renderModules(m));
 
-  void onEvent<Settings>("settings-changed", (s) => {
-    settings = { ...settings, ...s };
-  });
+  void onEvent<Settings>("settings-changed", (s) => put({ ...settings, ...s }));
 
   // Scroll to the section the window was opened for, if any.
   const shown = (target: string) => {
     if (target) document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // The cue module sections wait for (WSL is slow, so it only looks while someone is looking).
+    window.dispatchEvent(new Event("coucou:settings-shown"));
   };
   void onEvent<null>("settings-shown", async () => shown((await Bridge.takeSettingsSection()) ?? ""));
   const pending = (await Bridge.takeSettingsSection()) ?? "";

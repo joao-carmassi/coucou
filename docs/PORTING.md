@@ -7,7 +7,7 @@ runs on the module API (docs/MODULES-CONTRACT.md) and its folder exists under
 
 | Module | Status | Old code to port (at m3-ok) |
 |---|---|---|
-| claude | not ported | rust: modules/claude/{pipe,hooks,sessions,local_claude,wsl,focus,files}.rs + lib.rs claude commands; ts: modules/claude/**, views.ts approval/question/error/finished/overview, island.ts approval flows |
+| claude | ts ported (branch m5-claude-ts, windows/src/modules/claude/); rust port in another worktree | rust: modules/claude/{pipe,hooks,sessions,local_claude,wsl,focus,files}.rs + lib.rs claude commands; ts: done (see the module folder; command names/shapes as at m3-ok) |
 | timer | not ported | ts: modules/timer/{timer,view}.ts + timer.css |
 | media | not ported | rust: modules/media/{media,capture}.rs; ts: modules/media/view.ts + media.css |
 | upload | not ported | ts: modules/upload/{canvas,sequence,view}.ts + upload.css; island.ts drag/drop flow |
