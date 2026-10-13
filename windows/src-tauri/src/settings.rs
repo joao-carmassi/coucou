@@ -67,7 +67,7 @@ fn default_voice_hotkey() -> String {
 }
 
 fn default_alert_hotkey() -> String {
-    "Ctrl+Alt+A".into()
+    String::new()
 }
 
 fn default_ask_mode() -> String {

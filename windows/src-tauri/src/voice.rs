@@ -160,8 +160,15 @@ mod imp {
     fn dir() -> PathBuf {
         crate::settings::local_dir().join("voice")
     }
+    /// The hash check reads ~24 MB: remember a pass (download() resets it).
+    static VERIFIED: AtomicBool = AtomicBool::new(false);
     fn ready(dir: &Path) -> bool {
-        FILES.iter().all(|f| std::fs::read(dir.join(f.name)).is_ok_and(|b| hex(Sha256::digest(&b)) == f.sha256))
+        if VERIFIED.load(Ordering::SeqCst) {
+            return true;
+        }
+        let ok = FILES.iter().all(|f| std::fs::read(dir.join(f.name)).is_ok_and(|b| hex(Sha256::digest(&b)) == f.sha256));
+        VERIFIED.store(ok, Ordering::SeqCst);
+        ok
     }
 
     // ── Hotkey thread ────────────────────────────────────────────────────────────
@@ -172,6 +179,7 @@ mod imp {
     static HOTKEY_ERROR: Mutex<String> = Mutex::new(String::new());
     /// What the running hotkey thread was started for.
     static RUNNING: Mutex<Option<(bool, String, String)>> = Mutex::new(None);
+    static HANDLE: Mutex<Option<std::thread::JoinHandle<()>>> = Mutex::new(None);
 
     pub fn apply(app: &AppHandle, s: &Settings) {
         let want = (s.voice_enabled, s.voice_hotkey.clone(), s.alert_hotkey.clone());
@@ -189,22 +197,30 @@ mod imp {
             return;
         }
         let app = app.clone();
-        std::thread::spawn(move || hotkey_loop(app, voice, alert));
+        *HANDLE.lock().unwrap() = Some(std::thread::spawn(move || hotkey_loop(app, voice, alert)));
     }
 
+    /// Stops the old hotkey thread and waits for it, so its UnregisterHotKey cannot run after the new RegisterHotKey.
     fn quit_thread() {
-        let id = THREAD.swap(0, Ordering::SeqCst);
-        if id != 0 {
-            unsafe {
-                let _ = PostThreadMessageW(id, WM_QUIT, WPARAM(0), LPARAM(0));
+        let Some(h) = HANDLE.lock().unwrap().take() else { return };
+        while !h.is_finished() {
+            let id = THREAD.load(Ordering::SeqCst); // 0 until the thread has made its queue: retry
+            if id != 0 {
+                unsafe {
+                    let _ = PostThreadMessageW(id, WM_QUIT, WPARAM(0), LPARAM(0));
+                }
             }
+            std::thread::sleep(Duration::from_millis(5));
         }
+        let _ = h.join();
+        THREAD.store(0, Ordering::SeqCst);
     }
 
     fn hotkey_loop(app: AppHandle, voice: Option<String>, alert: Option<String>) {
         unsafe {
             let mut msg = MSG::default();
             let _ = PeekMessageW(&mut msg, None, WM_USER, WM_USER, PM_NOREMOVE); // creates the queue
+            THREAD.store(GetCurrentThreadId(), Ordering::SeqCst); // before RegisterHotKey, so apply() can always stop us
             let mut errors = Vec::new();
             let mut reg = |id: i32, label: &str, k: &Option<String>| {
                 let Some(k) = k else { return };
@@ -220,7 +236,6 @@ mod imp {
             let error = errors.join(" · ");
             *HOTKEY_ERROR.lock().unwrap() = error.clone();
             let _ = app.emit("voice-hotkey-error", error);
-            THREAD.store(GetCurrentThreadId(), Ordering::SeqCst);
             while GetMessageW(&mut msg, None, 0, 0).0 > 0 {
                 if msg.message == WM_HOTKEY {
                     match msg.wParam.0 {
@@ -465,6 +480,7 @@ mod imp {
     // ── Download (Settings button only) ──────────────────────────────────────────
 
     pub async fn download(app: AppHandle) -> Result<(), String> {
+        VERIFIED.store(false, Ordering::SeqCst); // files are about to change
         let d = dir();
         std::fs::create_dir_all(&d).map_err(|e| e.to_string())?;
         // Redirects (Hugging Face → its CDN) are followed only over https.

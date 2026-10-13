@@ -324,7 +324,7 @@ export const DEFAULT_SETTINGS: Settings = {
   askMode: "sessions",
   voiceEnabled: false,
   voiceHotkey: "Ctrl+Alt+V",
-  alertHotkey: "Ctrl+Alt+A",
+  alertHotkey: "",
 };
 
 type Listener = () => void;

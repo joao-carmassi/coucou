@@ -14,6 +14,13 @@ let text = "";
 let note = "";
 let busy = false;
 let levelEl: HTMLElement | null = null;
+let isl: Island | null = null;
+
+/** The transcript card is up and waiting for Enviar/Cancelar. */
+export const voiceReviewing = () => phase === "review";
+
+/** Review is over: let go of the pin and fall back to whatever the island should show. */
+const leaveReview = () => isl?.afterRequest(true);
 
 export function buildVoice(): ViewHost {
   const title = h("div", { class: "title" });
@@ -48,7 +55,7 @@ export function buildVoice(): ViewHost {
           sub.textContent = "Abre uma nova sessão do Claude Code com este texto.";
           actions.append(
             button("Enviar", "primary", () => void send()),
-            button("Cancelar", "secondary", () => { phase = "none"; State.view = "overview"; State.notify(); }),
+            button("Cancelar", "secondary", () => { phase = "none"; leaveReview(); }),
           );
           break;
         case "sending":
@@ -73,7 +80,7 @@ async function send() {
     const profile = (profiles.find((p) => p.isDefault) ?? profiles[0])?.key ?? "";
     await Bridge.sessionLaunch({ profile, cwd: null, resume: null, attach: null, prompt: text });
     phase = "none";
-    State.view = "overview";
+    leaveReview();
   } catch (err) {
     phase = "error";
     note = String(err).replace(/^Error:\s*/, "");
@@ -102,16 +109,18 @@ async function toMochi(island: Island, query: string) {
 }
 
 export function registerVoiceHandlers(island: Island) {
+  isl = island;
   void onEvent<{ state: string; message: string }>("voice-state", ({ state, message }) => {
     if (state === "listening") phase = "listening";
     else if (state === "transcribing") phase = "transcribing";
     else if (state === "error") { phase = "error"; note = message; }
     else {
       // idle: nothing was heard closes the card; a transcript waiting for a click stays.
-      if (phase === "listening" || phase === "transcribing") { phase = "none"; island.collapse(); }
+      if (phase === "listening" || phase === "transcribing") { phase = "none"; if (State.view === "voice") island.collapse(); }
       return;
     }
-    island.alert("voice");
+    // A request card in front keeps the island: the phase is set, the card is not taken over.
+    if (State.view !== "approval" && State.view !== "question") island.alert("voice");
   });
   void onEvent<number>("voice-level", (v) => {
     if (levelEl && phase === "listening") levelEl.style.width = `${Math.round(v * 100)}%`;
@@ -119,6 +128,6 @@ export function registerVoiceHandlers(island: Island) {
   void onEvent<{ text: string }>("voice-text", ({ text: t }) => {
     text = t;
     if (State.settings.askMode === "mochi") void toMochi(island, t);
-    else { phase = "review"; island.alert("voice"); }
+    else { phase = "review"; State.isPinned = true; island.alert("voice"); }
   });
 }

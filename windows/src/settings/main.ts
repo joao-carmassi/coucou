@@ -957,7 +957,7 @@ function voiceSection(): HTMLElement {
   });
   void onEvent<string>("voice-hotkey-error", () => void refresh());
   const hotkey = (get: () => string, set: (v: string) => void) => {
-    const input = h("input", { type: "text", value: get(), spellcheck: "false" }) as HTMLInputElement;
+    const input = h("input", { type: "text", value: get(), spellcheck: "false", placeholder: "ex.: Ctrl+Alt+A" }) as HTMLInputElement;
     input.addEventListener("change", () => { set(input.value.trim()); saved(); });
     return input;
   };
@@ -977,7 +977,7 @@ function voiceSection(): HTMLElement {
     h("div", { class: "row" },
       h("label", { text: "Atalho \"ir ao alerta\"" }),
       hotkey(() => settings.alertHotkey, (v) => (settings.alertHotkey = v)),
-      h("span", { class: "hint", text: "Ex.: Ctrl+Alt+A. Vazio = sem atalho." }),
+      h("span", { class: "hint", text: "Desligado por padrão; vazio = sem atalho." }),
     ),
     h("div", { class: "row" }, h("label", { text: "Modelo de voz" }), dl, status),
     err,

@@ -23,6 +23,7 @@ import { enterSessionPanel } from "../views/session";
 import { followNews } from "./integrations";
 import { h } from "../views/dom";
 import { usesSessions } from "../views/sessionMenu";
+import { voiceReviewing } from "../views/voice";
 import { IslandStateMachine, type FsmState } from "./fsm";
 import { activityLine } from "./activity";
 import { Timer } from "./timer";
@@ -360,9 +361,10 @@ export class Island {
           // A request still waiting (its card folded away by ↗) comes back with the island, as setFocus does.
           const card = State.focusId !== CLAUDE_ID ? null
             : State.pendingQuestion ? "question" : State.pendingApproval ? "approval" : null;
-          this.expand(card ?? State.defaultView());
-          // collapse() clears the pin: a card showing a request holds the island open again.
-          if (card) State.isPinned = this.fsm.pinned = true;
+          const review = voiceReviewing();
+          this.expand(card ?? (review ? "voice" : State.defaultView()));
+          // collapse() clears the pin: a card showing a request (or the transcript) holds the island open again.
+          if (card || review) State.isPinned = this.fsm.pinned = true;
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
         }
@@ -539,12 +541,14 @@ export class Island {
 
   /** Hotkey: straight to the card waiting for an answer (or home). */
   goToAlert() {
+    if (State.focusId !== CLAUDE_ID) State.setFocus(CLAUDE_ID);
+    if (this.hasPending()) this.afterRequest(true);
     this.fsm.forceHome();
   }
 
   /** The mouse reaches a hidden island: with a request pending it opens on the card, else just peeks. */
   private mouseEnter() {
-    if (this.fsm.state === "hidden" && this.hasPending()) {
+    if (this.fsm.state === "hidden" && this.hasPending() && State.focusId === CLAUDE_ID) {
       this.fsm.pinned = true;
       this.fsm.forceHome();
     } else this.fsm.mouseEntered();

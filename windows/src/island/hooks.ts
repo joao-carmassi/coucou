@@ -230,7 +230,7 @@ function forget(island: Island, session: ClaudeSession) {
 }
 
 /** True while the island shows a request's card. */
-const onCard = () => State.view === "approval" || State.view === "question";
+const onCard = () => State.mode === "expanded" && (State.view === "approval" || State.view === "question");
 
 /** The views that are about the session in front: it is not changed under them. */
 const ABOUT_FRONT: ReadonlySet<IslandViewName> = new Set(["session", "finished", "error", "approval", "question"]);

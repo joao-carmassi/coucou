@@ -113,7 +113,7 @@ export function buildMedia(actions: ViewActions): ViewHost {
       if (hit) return set(hit);
       Bridge.mediaThumb(path, THUMB_PX)
         .then((buf) => {
-          if (thumbs.size > 300) thumbs.clear();
+          if (thumbs.size > 300) { thumbs.forEach((u) => URL.revokeObjectURL(u)); thumbs.clear(); }
           const url = URL.createObjectURL(new Blob([buf], { type: "image/png" }));
           thumbs.set(key, url);
           set(url);

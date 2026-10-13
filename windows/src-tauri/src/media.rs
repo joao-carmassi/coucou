@@ -187,7 +187,7 @@ mod sys {
 
     use tauri::{AppHandle, Emitter};
     use windows::core::{w, HSTRING, PCWSTR};
-    use windows::Win32::Foundation::{HANDLE, SIZE};
+    use windows::Win32::Foundation::{CloseHandle, HANDLE, SIZE};
     use windows::Win32::Graphics::Gdi::{
         DeleteObject, GetDC, GetDIBits, GetObjectW, ReleaseDC, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS,
     };
@@ -258,7 +258,10 @@ mod sys {
     /// the size to stop moving and the writer to let go.
     fn settled(path: &Path) -> bool {
         let mut last = u64::MAX;
-        while path.exists() {
+        for _ in 0..750 { // ~10 min, then give up: no thread waits forever on a file that never settles
+            if !path.exists() {
+                break;
+            }
             std::thread::sleep(Duration::from_millis(800));
             let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
             if size > 0 && size == last && free(path) {
@@ -324,6 +327,7 @@ mod sys {
                 )
             };
             if r.is_err() {
+                unsafe { let _ = CloseHandle(HANDLE(h.0)); }
                 return;
             }
             if got == 0 {

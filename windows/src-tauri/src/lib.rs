@@ -88,7 +88,7 @@ fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
         settings.wsl_prompted = current.wsl_prompted;
         settings.mochi_session = current.mochi_session.clone();
         settings.voice_hotkey = voice::clean_hotkey(&settings.voice_hotkey, "Ctrl+Alt+V");
-        settings.alert_hotkey = voice::clean_hotkey(&settings.alert_hotkey, "Ctrl+Alt+A");
+        settings.alert_hotkey = voice::clean_hotkey(&settings.alert_hotkey, "");
         if !matches!(settings.ask_mode.as_str(), "sessions" | "mochi") {
             settings.ask_mode = "sessions".into();
         }
