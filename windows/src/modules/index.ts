@@ -1,5 +1,6 @@
-// M5 adds one entry per ported module.
+// M5 adds one entry per ported module. Order = start order (a requirement comes first).
 import type { ModuleDef } from "../core/moduleApi";
+import { claude } from "./claude";
 import { timerModule } from "./timer";
 
-export const MODULES: ModuleDef[] = [timerModule];
+export const MODULES: ModuleDef[] = [claude, timerModule];

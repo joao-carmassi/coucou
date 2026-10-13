@@ -1,5 +1,6 @@
 // App state — the parts the island needs. Core only: modules plug in later.
 
+import { Hooks } from "./hooks";
 import type { BotEmoteName, BotStateName, IslandMode, IslandViewName } from "./layout";
 import type { EyeShape } from "../mochi/engine";
 
@@ -92,8 +93,9 @@ class AppState {
     return this.tasks.filter((t) => t.id !== this.focusTask?.id);
   }
 
+  /** The home view: what the strongest module asks for (Hooks.home), else the empty card. */
   defaultView(): IslandViewName {
-    return "empty";
+    return Hooks.home()?.view ?? "empty";
   }
 }
 

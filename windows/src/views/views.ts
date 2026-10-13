@@ -35,7 +35,7 @@ export interface Header extends ViewHost {
 
 /** Tabs come from the modules (setTabs); Home is always there. `tabOf` maps a view to the tab it belongs to. */
 export function buildHeader(actions: ViewActions, tabOf: (view: string) => string | undefined): Header {
-  const tabHome = h("button", { class: "tab", title: "Início", onclick: () => go("empty") }, svg(ICONS.house, 13));
+  const tabHome = h("button", { class: "tab", title: "Início", onclick: () => go(State.defaultView()) }, svg(ICONS.house, 13));
   const gearBtn = h("button", { title: "Configurações", onclick: () => go("settings") }, svg(ICONS.gear, 14));
   const soundBtn = h("button", { title: "Silenciar", onclick: () => actions.toggleSound() }, svg(ICONS.speakerOn, 14));
   const tabsEl = h("div", { class: "tabs" }, tabHome);
