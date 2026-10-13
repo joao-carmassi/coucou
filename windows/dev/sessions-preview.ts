@@ -1,10 +1,10 @@
 // Dev harness: the sessions view on sample data with Bridge stubbed out.
 // Not part of the app bundle.
 
-import "../src/style.css";
+import "../src/style";
 import { Bridge, type ManagedSession } from "../src/core/bridge";
 import { State } from "../src/core/state";
-import { buildSessionsView } from "../src/views/sessions";
+import { buildSessionsView } from "../src/modules/claude/views/sessions";
 
 const ago = (min: number) => Date.now() - min * 60_000;
 const mk = (id: string, cwd: string, title: string, min: number, profile: string, status: "running" | "offline"): ManagedSession =>

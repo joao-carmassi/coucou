@@ -2,7 +2,7 @@
 // the card and the panel can be looked at without a token or the Rust side.
 // Not part of the app bundle. `npm run dev`, then /dev/github-preview.html.
 
-import "../src/style.css";
+import "../src/style";
 import {
   Bridge, type GithubActivity, type GithubBuild, type GithubCommentsDetail, type GithubData, type GithubDay,
   type GithubDetail, type GithubFile, type GithubJob, type GithubProject, type GithubPullDetail, type GithubRemark,

@@ -4,9 +4,9 @@
 // Sending a file by email is not in the Windows v1, so `choose` offers the one
 // action the spec asks for: ask a question about it.
 
-import { h, clear } from "./dom";
-import { State } from "../core/state";
-import type { ViewActions, ViewHost } from "./views";
+import { h, clear } from "../../views/dom";
+import { State } from "../../core/state";
+import type { ViewActions, ViewHost } from "../../views/views";
 
 /** Dashed rounded rect drawn as SVG so the dashes can march like on macOS. */
 function dashedFrame(): SVGSVGElement {

@@ -2,11 +2,11 @@
 // The transcript always waits for a click (Enviar).
 // "Enviar" because it launches a new session. Nothing here types into an existing session.
 
-import { h, clear } from "./dom";
-import { Bridge, onEvent } from "../core/bridge";
-import { State } from "../core/state";
-import type { Island } from "../island/island";
-import type { ViewHost } from "./views";
+import { h, clear } from "../../views/dom";
+import { Bridge, onEvent } from "../../core/bridge";
+import { State } from "../../core/state";
+import type { Island } from "../../island/island";
+import type { ViewHost } from "../../views/views";
 
 type Phase = "none" | "listening" | "transcribing" | "review" | "sending" | "error";
 let phase: Phase = "none";

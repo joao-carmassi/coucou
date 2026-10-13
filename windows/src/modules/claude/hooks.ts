@@ -9,14 +9,14 @@
 // what it said to end its turn (the session panel) — and the questions it asks
 // with its question tool, answered on the island.
 
-import { Bridge, onEvent } from "../core/bridge";
-import { Sound } from "../core/sound";
+import { Bridge, onEvent } from "../../core/bridge";
+import { Sound } from "../../core/sound";
 import {
   CLAUDE_ID, PLAN_TOOL, QUESTION_TOOL, SESSION_UNNAMED, State, TURN_DONE, newSession, newStep,
   type ChangedFile, type ClaudeClient, type ClaudeSession, type Question, type StepKind, type StepResult,
-} from "../core/state";
-import type { IslandViewName } from "../core/layout";
-import type { Island } from "./island";
+} from "../../core/state";
+import type { IslandViewName } from "../../core/layout";
+import type { Island } from "../../island/island";
 
 /**
  * By session: clears its request if no decision was made before the hook gave

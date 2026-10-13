@@ -4,11 +4,12 @@
 // island's own pieces — the card, the rows, the dots, Mochi's state colours —
 // rather than from GitHub's look.
 
-import { h, svg, clear, dot } from "./dom";
-import { diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath } from "./code";
-import { ICONS } from "./icons";
-import { COLOR, wear } from "./palette";
-import { ACTIVITY_STYLE, GITHUB_LEVELS, compact, githubData, repoName, timeAgo, type GithubOpening } from "./integrations";
+import { h, svg, clear, dot } from "../../../views/dom";
+import { diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath } from "../../claude/views/code";
+import { ICONS } from "../../../views/icons";
+import { COLOR, wear } from "../../../views/palette";
+import { ACTIVITY_STYLE, GITHUB_LEVELS, compact, githubData, repoName, type GithubOpening } from "./integrations";
+import { timeAgo } from "../../../core/format";
 import {
   Bridge,
   type GithubActivity, type GithubBuild, type GithubCommentsDetail, type GithubCommitsDetail, type GithubContributions,
@@ -16,13 +17,13 @@ import {
   type GithubIssueDetail, type GithubJob, type GithubLabel, type GithubProject, type GithubPull, type GithubPullDetail,
   type GithubReleaseDetail, type GithubRemark, type GithubRepo, type GithubRunDetail, type GithubTarget,
   type GithubThread, type GithubTimed, type IntegrationNews,
-} from "../core/bridge";
-import type { BotEmoteName, BotStateName } from "../core/layout";
-import { hexToRGB, type BotEngine } from "../mochi/engine";
-import { createFreeBot, pruneMiniBots } from "../mochi/minibots";
-import { Sound } from "../core/sound";
-import { State } from "../core/state";
-import type { ViewActions, ViewHost } from "./views";
+} from "../../../core/bridge";
+import type { BotEmoteName, BotStateName } from "../../../core/layout";
+import { hexToRGB, type BotEngine } from "../../../mochi/engine";
+import { createFreeBot, pruneMiniBots } from "../../../mochi/minibots";
+import { Sound } from "../../../core/sound";
+import { State } from "../../../core/state";
+import type { ViewActions, ViewHost } from "../../../views/views";
 
 const ID = "integration_github";
 /** Where a screen leads when it has no page of its own to give. */

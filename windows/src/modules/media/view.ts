@@ -3,11 +3,11 @@
 // or Rust says the list changed; every action is a click, and "Remover da lista"
 // never touches the file.
 
-import { h, svg, clear } from "./dom";
-import { ICONS } from "./icons";
-import { Bridge, onEvent, type MediaItem } from "../core/bridge";
-import { State } from "../core/state";
-import type { ViewActions, ViewHost } from "./views";
+import { h, svg, clear } from "../../views/dom";
+import { ICONS } from "../../views/icons";
+import { Bridge, onEvent, type MediaItem } from "../../core/bridge";
+import { State } from "../../core/state";
+import type { ViewActions, ViewHost } from "../../views/views";
 
 /** Thumbnails already drawn, by path and size: the grid redraws on every change. */
 const thumbs = new Map<string, string>();

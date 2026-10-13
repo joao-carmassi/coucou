@@ -1,8 +1,8 @@
 // Dev harness: plays the whole drop sequence in a plain browser so the
 // choreography can be watched without an OLE drag. Not part of the app bundle.
 
-import { UploadCanvas } from "../src/upload/canvas";
-import { UploadSeq } from "../src/upload/sequence";
+import { UploadCanvas } from "../src/modules/upload/canvas";
+import { UploadSeq } from "../src/modules/upload/sequence";
 import { State } from "../src/core/state";
 
 State.droppedFile = { name: "rapport-q3.pdf", path: "C:/tmp/rapport-q3.pdf" };

@@ -16,16 +16,16 @@
 // replay of it, a second behind. The session itself stays where it runs — the
 // Claude app, VS Code, a terminal.
 
-import { h, svg, clear, dot, replay } from "./dom";
+import { h, svg, clear, dot, replay } from "../../../views/dom";
 import { diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath, type FileKind } from "./code";
-import { ICONS } from "./icons";
-import { COLOR } from "./palette";
-import { timeAgo } from "./integrations";
+import { ICONS } from "../../../views/icons";
+import { COLOR } from "../../../views/palette";
+import { timeAgo } from "../../../core/format";
 import { markdown } from "./markdown";
-import { CLAUDE_ID, State, type ChangedFile, type ClaudeSession, type SessionStep } from "../core/state";
+import { CLAUDE_ID, State, type ChangedFile, type ClaudeSession, type SessionStep } from "../../../core/state";
 import { stepIcon, stepName, stepPreview, type ToType } from "./step";
-import { botGlowColor } from "../core/layout";
-import type { ViewActions, ViewHost } from "./views";
+import { botGlowColor } from "../../../core/layout";
+import type { ViewActions, ViewHost } from "../../../views/views";
 
 /** What a session is called until it has a project or a title to go by. */
 const UNNAMED = "Claude Code";

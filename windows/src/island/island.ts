@@ -15,18 +15,18 @@ import { CLAUDE_ID, QUESTION_TOOL, State, type SessionStep } from "../core/state
 import { BotEngine, hexToRGB, type RGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
 import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
-import { UploadCanvas } from "../upload/canvas";
-import { USC, UploadSeq } from "../upload/sequence";
+import { UploadCanvas } from "../modules/upload/canvas";
+import { USC, UploadSeq } from "../modules/upload/sequence";
 import { buildHeader, buildViews, type ViewActions, type ViewHost } from "../views/views";
-import { githubData } from "../views/integrations";
-import { highlightMedia } from "../views/media";
-import { enterSessionPanel } from "../views/session";
-import { followNews } from "./integrations";
+import { githubData } from "../modules/integrations/views/integrations";
+import { highlightMedia } from "../modules/media/view";
+import { enterSessionPanel } from "../modules/claude/views/session";
+import { followNews } from "../modules/integrations/integrations";
 import { h } from "../views/dom";
-import { voiceReviewing } from "../views/voice";
+import { voiceReviewing } from "../modules/voice/view";
 import { IslandStateMachine, type FsmState } from "./fsm";
-import { activityLine } from "./activity";
-import { Timer } from "./timer";
+import { activityLine } from "../modules/claude/activity";
+import { Timer } from "../modules/timer/timer";
 
 const BOT_OVERHANG = 40;
 /** The dragged Mochi's canvas: the body is 0.6 of the width, like the island's own. */

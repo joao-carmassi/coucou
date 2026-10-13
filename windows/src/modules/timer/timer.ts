@@ -2,8 +2,8 @@
 // Date.now(), never counted by ticks, so a late or paused tick cannot drift it.
 // The 1 s interval exists only while a timer runs AND the island is not hidden.
 
-import { Sound } from "../core/sound";
-import { State } from "../core/state";
+import { Sound } from "../../core/sound";
+import { State } from "../../core/state";
 
 type Kind = "countdown" | "stopwatch";
 type Status = "idle" | "ready" | "running" | "paused";

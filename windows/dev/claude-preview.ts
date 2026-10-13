@@ -3,9 +3,9 @@
 // own handler. Not part of the app bundle. `npm run dev`, then
 // /dev/claude-preview.html.
 
-import "../src/style.css";
+import "../src/style";
 import { CLAUDE_ID, State } from "../src/core/state";
-import { handleHook, type HookPayload } from "../src/island/hooks";
+import { handleHook, type HookPayload } from "../src/modules/claude/hooks";
 import { Island } from "../src/island/island";
 
 const params = new URLSearchParams(location.search);

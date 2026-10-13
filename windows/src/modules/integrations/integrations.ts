@@ -2,11 +2,11 @@
 // pollers: a genuinely new item flips the pill to finished/error, badges it when
 // the pill isn't focused, plays a sound, and clears itself after 60 s.
 
-import { onEvent, Bridge, type GithubData, type IntegrationUpdate } from "../core/bridge";
-import { Sound } from "../core/sound";
-import { State } from "../core/state";
-import { enterGithubPanel, sawRunEnd } from "../views/github";
-import type { Island } from "./island";
+import { onEvent, Bridge, type GithubData, type IntegrationUpdate } from "../../core/bridge";
+import { Sound } from "../../core/sound";
+import { State } from "../../core/state";
+import { enterGithubPanel, sawRunEnd } from "./views/github";
+import type { Island } from "../../island/island";
 
 /** Which Credential Manager key backs each pill. */
 const KEY_FOR: Record<string, string> = {

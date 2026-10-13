@@ -6,8 +6,8 @@
 // knows nothing of what came on the line before (a string or a comment left
 // open), which a diff's fragments wouldn't tell it anyway.
 
-import { h } from "./dom";
-import { COLOR, isLight } from "./palette";
+import { h } from "../../../views/dom";
+import { COLOR, isLight } from "../../../views/palette";
 
 type Comment = "slash" | "hash" | "dash";
 

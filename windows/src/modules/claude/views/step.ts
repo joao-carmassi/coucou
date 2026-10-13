@@ -7,10 +7,10 @@
 // tool's result and no more; none of it is fetched, and none of it is kept
 // once the session is gone.
 
-import { h, svg } from "./dom";
+import { h, svg } from "../../../views/dom";
 import { diffLine, fileKind, readPatch } from "./code";
-import { ICONS } from "./icons";
-import type { SessionStep } from "../core/state";
+import { ICONS } from "../../../views/icons";
+import type { SessionStep } from "../../../core/state";
 
 /** Tools by a name short enough for a column, where their own is not. */
 const STEP_NAMES: Record<string, string> = {

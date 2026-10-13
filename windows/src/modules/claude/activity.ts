@@ -1,4 +1,4 @@
-import type { ClaudeSession } from "../core/state";
+import type { ClaudeSession } from "../../core/state";
 
 const plural = (n: number) => `${n} agent${n > 1 ? "s" : ""}`;
 const base = (p: string) => p.split(/[\\/]/).pop() || p;

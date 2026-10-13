@@ -1,13 +1,13 @@
 // Entry point: boot the bridge, wire the island, start the greeting.
 
-import "./style.css";
+import "./style";
 import { Bridge, IS_TAURI, onEvent } from "./core/bridge";
 import { Sound } from "./core/sound";
 import { State, type Settings } from "./core/state";
 import { Island } from "./island/island";
-import { registerHookHandlers } from "./island/hooks";
-import { registerVoiceHandlers } from "./views/voice";
-import { registerIntegrationHandlers, refreshConfigured } from "./island/integrations";
+import { registerHookHandlers } from "./modules/claude/hooks";
+import { registerVoiceHandlers } from "./modules/voice/view";
+import { registerIntegrationHandlers, refreshConfigured } from "./modules/integrations/integrations";
 
 async function main() {
   const root = document.getElementById("root");
