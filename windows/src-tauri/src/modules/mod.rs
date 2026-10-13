@@ -1,6 +1,7 @@
 // Feature modules. The host (core/host.rs) starts and stops them from settings.
 
 pub mod claude;
+pub mod integrations;
 pub mod media;
 pub mod voice;
 
@@ -16,7 +17,7 @@ pub const CATALOG: &[ModuleInfo] = &[
 ];
 
 pub fn registry() -> Vec<Box<dyn Module>> {
-    vec![Box::new(claude::Claude), Box::new(media::Media), Box::new(voice::Voice)] // M5 adds one entry per ported module
+    vec![Box::new(claude::Claude), Box::new(media::Media), Box::new(voice::Voice), Box::new(integrations::Integrations)] // M5 adds one entry per ported module
 }
 
 #[cfg(test)]

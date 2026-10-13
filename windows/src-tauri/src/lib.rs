@@ -148,9 +148,13 @@ fn quit_app(app: AppHandle) {
     app.exit(0);
 }
 
-/// Tray → Pause. Nothing in core polls anything yet; modules will hook in here.
+/// Tray → Pause. Core polls nothing itself; the integrations module parks its scheduler.
 #[tauri::command]
-fn set_paused(_paused: bool) {}
+fn set_paused(host: State<ModuleHost>, paused: bool) {
+    if host.is_enabled("integrations") {
+        modules::integrations::set_paused(paused);
+    }
+}
 
 /// Lets the island write to the same log as the Rust side.
 #[tauri::command]
@@ -273,7 +277,14 @@ fn open_settings_window(app: AppHandle) {
 pub fn run() {
     platform::prepare_environment();
     let (mut loaded, ok) = settings::load();
-    if settings::migrate_modules(&mut loaded) && ok {
+    let had_integrations = loaded.modules_enabled.contains_key("integrations");
+    let migrated = settings::migrate_modules(&mut loaded);
+    let upgraded = modules::integrations::keyring_upgrade(
+        &mut loaded,
+        had_integrations,
+        modules::integrations::secrets::any_configured,
+    );
+    if (migrated || upgraded) && ok {
         let _ = settings::save(&loaded);
     }
     let gate = Arc::new(PollGate::new());
@@ -336,6 +347,15 @@ modules::voice::voice::voice_download_model,
             modules::media::commands::media_open_with,
             modules::media::commands::media_reveal,
             modules::media::commands::media_remove,
+            modules::integrations::commands::secret_present,
+            modules::integrations::commands::secret_set,
+            modules::integrations::commands::secret_clear,
+            modules::integrations::commands::github_test,
+            modules::integrations::commands::github_project,
+            modules::integrations::commands::github_day,
+            modules::integrations::commands::github_detail,
+            modules::integrations::commands::open_n8n,
+            modules::integrations::commands::refresh_integration,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
