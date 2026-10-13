@@ -1,5 +1,5 @@
 // Voice input on the island: the "microfone aberto" card, the transcript, and where it goes.
-// Mochi mode sends right away (the hotkey was the user's act); Claude mode needs a click on
+// The transcript always waits for a click (Enviar).
 // "Enviar" because it launches a new session. Nothing here types into an existing session.
 
 import { h, clear } from "./dom";
@@ -90,24 +90,6 @@ async function send() {
   }
 }
 
-async function toMochi(island: Island, query: string) {
-  phase = "none";
-  State.chatHistory.push({ id: Date.now(), role: "user", content: query });
-  State.stateOverride = "thinking";
-  island.alert("prompt");
-  try {
-    const reply = await Bridge.chatSend(query, null);
-    State.chatHistory.push({ id: Date.now() + 1, role: "assistant", content: reply.text });
-  } catch (err) {
-    phase = "error";
-    note = String(err).replace(/^Error:\s*/, "");
-    island.alert("voice");
-  } finally {
-    State.stateOverride = null;
-    State.notify();
-  }
-}
-
 export function registerVoiceHandlers(island: Island) {
   isl = island;
   void onEvent<{ state: string; message: string }>("voice-state", ({ state, message }) => {
@@ -127,7 +109,6 @@ export function registerVoiceHandlers(island: Island) {
   });
   void onEvent<{ text: string }>("voice-text", ({ text: t }) => {
     text = t;
-    if (State.settings.askMode === "mochi") void toMochi(island, t);
-    else { phase = "review"; State.isPinned = true; island.alert("voice"); }
+    phase = "review"; State.isPinned = true; island.alert("voice");
   });
 }

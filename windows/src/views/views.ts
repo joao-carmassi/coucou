@@ -8,7 +8,6 @@ import { CLAUDE_ID, State, TURN_DONE, turnSteps, type AgentTask, type ClaudeSess
 import { CARD_AIR_MIN, VIEW_LAYOUTS, fittedHeight, washRGBA, type BotEmoteName, type BotStateName, type IslandViewName, type Wash } from "../core/layout";
 import { createMiniBot, pruneMiniBots } from "../mochi/minibots";
 import { buildSessionsView } from "./sessions";
-import { buildPrompt } from "./chat";
 import { buildChoose, buildUpload, buildUploading } from "./upload";
 import { renderIntegrationCard, type GithubOpening, type IntegrationCardHooks } from "./integrations";
 import { buildGithub, enterGithubPanel, newsFacts } from "./github";
@@ -262,7 +261,7 @@ function airy(lines: HTMLElement, onResize: () => void): { fit(): void; readonly
 
 export function buildHeader(actions: ViewActions): ViewHost {
   const tabHome = h("button", { class: "tab", title: "Visão geral", onclick: () => go("overview") }, svg(ICONS.house, 13));
-  const tabChat = h("button", { class: "tab", title: askTitle(), onclick: () => go("prompt") }, svg(ICONS.bubble, 13));
+  const tabChat = h("button", { class: "tab", title: "Sessões", onclick: () => go("sessions") }, svg(ICONS.bubble, 13));
   // No drop tab: a file is dropped on the island itself (island.ts), the upload view is only that sequence.
 
   const tabTimer = h("button", { class: "tab", title: "Timer", onclick: () => go("timer") }, svg(ICONS.timer, 13));
@@ -289,8 +288,7 @@ export function buildHeader(actions: ViewActions): ViewHost {
       const v = State.view;
       // The GitHub panel is reached from the overview and goes back to it.
       tabHome.classList.toggle("on", v === "overview" || v === "empty" || v === "github" || v === "session");
-      tabChat.classList.toggle("on", v === "prompt");
-      tabChat.title = askTitle();
+      tabChat.classList.toggle("on", v === "sessions");
       tabTimer.classList.toggle("on", v === "timer");
       tabMedia.classList.toggle("on", v === "media");
       gearBtn.classList.toggle("on", v === "settings");
@@ -602,7 +600,7 @@ function lighten(hex: string, amount: number): string {
 // ── Empty ─────────────────────────────────────────────────────────────────────
 
 function buildEmpty(actions: ViewActions): ViewHost {
-  const ask = btn("Nova sessão", "primary", () => (mochiMode() ? actions.setView("prompt") : void newSession()));
+  const ask = btn("Nova sessão", "primary", () => void newSession());
   // As the Sessões list's own "Nova sessão": the default profile, a fresh
   // terminal. When it can't, the list is the way to see why and try again.
   async function newSession() {
@@ -612,7 +610,7 @@ function buildEmpty(actions: ViewActions): ViewHost {
       const profile = (profiles.find((p) => p.isDefault) ?? profiles[0])?.key ?? "";
       await Bridge.sessionLaunch({ profile, cwd: null, resume: null, attach: null });
     } catch {
-      actions.setView("prompt");
+      actions.setView("sessions");
     }
   }
   const body = h(
@@ -627,7 +625,7 @@ function buildEmpty(actions: ViewActions): ViewHost {
     h("div", { class: "grow" }),
     ask,
   );
-  return { el: h("div", { class: "view" }, card(null, body)), sync() { ask.textContent = mochiMode() ? "Perguntar ao Claude" : "Nova sessão"; } };
+  return { el: h("div", { class: "view" }, card(null, body)), sync() {} };
 }
 
 // ── Approval ──────────────────────────────────────────────────────────────────
@@ -1208,30 +1206,6 @@ function buildPlaceholder(title: string, sub: string): ViewHost {
   return { el: h("div", { class: "view" }, card(null, body)), sync() {} };
 }
 
-/** The setting that picks what the Ask tab is: Mochi's old chat or the sessions manager. */
-const mochiMode = () => State.settings.askMode === "mochi";
-const askTitle = () => (mochiMode() ? "Perguntar" : "Sessões");
-
-/** Both implementations stay built; the setting decides which one shows, live. */
-function buildAsk(onResize: () => void): ViewHost {
-  const sessions = buildSessionsView(onResize);
-  const mochi = buildPrompt(onResize);
-  const el = h("div", { class: "view" }, sessions.el, mochi.el);
-  const active = () => (mochiMode() ? mochi : sessions);
-  return {
-    el,
-    sync() {
-      const a = active();
-      sessions.el.classList.toggle("on", a === sessions);
-      mochi.el.classList.toggle("on", a === mochi);
-      a.sync();
-    },
-    focus() { active().focus?.(); },
-    tick(t) { active().tick?.(t); },
-    get height() { return active().height; },
-  };
-}
-
 // ── Registry ──────────────────────────────────────────────────────────────────
 
 export function buildViews(
@@ -1248,7 +1222,7 @@ export function buildViews(
   map.set("confused", buildConfused());
   map.set("note", buildNote());
   map.set("settings", buildSettings(actions));
-  map.set("prompt", buildAsk(onChatHeightChange));
+  map.set("sessions", buildSessionsView(onChatHeightChange));
   map.set("upload", buildUpload());
   map.set("uploading", buildUploading());
   map.set("choose", buildChoose(actions));

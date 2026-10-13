@@ -123,26 +123,10 @@ export const Bridge = {
   approvalAnswer: (requestId: string, answers: Record<string, string>) =>
     call<void>("approval_answer", { requestId, answers }),
 
-  // ── Chat, files, secrets ──────────────────────────────────────────────────
-  /** One chat turn. The API key and any file bytes never leave Rust. */
-  chatSend: (query: string, context: ChatContext | null) =>
-    callOrThrow<{ text: string; session?: string }>("chat_send", { query, context }),
-
-  // ── Mochi's sessions (old chat mode, local Claude Code only) ──────────────
-  sessionsList: () => callOrThrow<SessionInfo[]>("sessions_list"),
-  sessionHistory: (id: string) => callOrThrow<HistoryItem[]>("session_history", { id }),
-  sessionActive: () => call<ActiveSession>("session_active"),
-  sessionSelect: (id: string, cwd: string) => callOrThrow<void>("session_select", { id, cwd }),
-  /** Erases the transcript — only after the island's second click. */
-  sessionDelete: (id: string) => callOrThrow<void>("session_delete", { id }),
+  // ── Files, secrets ───────────────────────────────────────────────────────
   /** The session, carried on by an interactive Claude Code in a new terminal. */
   resumeInTerminal: (id: string, cwd: string | null) =>
     callOrThrow<void>("resume_in_terminal", { id, cwd }),
-  /** Folder picker, then a new session there. `null` when cancelled. */
-  sessionNewInFolder: () => callOrThrow<string | null>("session_new_in_folder"),
-
-  // ── Chat ──────────────────────────────────────────────────────────────────
-  chatReset: () => call<void>("chat_reset"),
   /** Copies a dropped file into the inbox. */
   ingestFile: (path: string) => callOrThrow<DroppedFile>("ingest_file", { path }),
   /** Screenshots the window under the cursor into the inbox (Mochi dragged onto it). */
@@ -596,10 +580,6 @@ export interface IntegrationUpdate {
   event: IntegrationNews | null;
 }
 
-export type ChatContext =
-  | { kind: "file"; name: string; path: string }
-  | { kind: "window"; appName: string; title: string; url?: string };
-
 export interface DroppedFile {
   name: string;
   path: string;
@@ -628,16 +608,6 @@ export interface WslStatus {
   error: string | null;
 }
 
-/** A Claude Code session, as listed in Mochi's session menu. */
-export interface SessionInfo {
-  id: string;
-  /** Working folder, as that Claude Code sees it (a Linux path under WSL). */
-  cwd: string;
-  title: string;
-  /** Last change, ms since the epoch. */
-  updated: number;
-}
-
 export interface ClaudeProfile { key: string; label: string; configDir: string; isDefault: boolean }
 
 export interface ManagedSession {
@@ -648,18 +618,6 @@ export interface ManagedSession {
 export interface LiveSession { profile: string; id: string; pid: number; activity: string | null }
 
 export interface LaunchRequest { profile: string; cwd: string | null; resume: string | null; attach: string | null; prompt?: string | null }
-
-export interface HistoryItem {
-  role: "user" | "assistant";
-  text: string;
-}
-
-/** The session Mochi's chat is in. No id yet: a new session (inbox when no cwd). */
-export interface ActiveSession {
-  backend: string;
-  id: string | null;
-  cwd: string | null;
-}
 
 export interface HookPreview {
   diff: string;

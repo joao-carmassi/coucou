@@ -280,7 +280,7 @@ export class UploadCanvas {
     ctx.fillStyle = "#F5F6F8";
     rr(ctx, 114, 113, 168, 26, 13);
     ctx.fill();
-    text(ctx, State.settings.askMode === "mochi" ? "Perguntar sobre ele" : "Abrir no Claude Code", 198, 126, `500 12.5px ${FONT}`, "#0B0C0E", "center");
+    text(ctx, "Abrir no Claude Code", 198, 126, `500 12.5px ${FONT}`, "#0B0C0E", "center");
 
     ctx.fillStyle = "rgba(255,255,255,0.09)";
     rr(ctx, 290, 113, 120, 26, 13);

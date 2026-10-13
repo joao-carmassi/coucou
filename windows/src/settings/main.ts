@@ -44,45 +44,6 @@ function renderDiff(text: string): HTMLElement {
   return box;
 }
 
-// ── Mochi's engine ────────────────────────────────────────────────────────────
-// Mochi's chat can run on the user's own Claude Code (Windows or a WSL distro)
-// instead of the API key. One "Use for Mochi" switch per Claude Code; at most
-// one is on, and with none on the API key is used.
-
-const engineListeners: (() => void)[] = [];
-const engineSwitches: { backend: string; el: HTMLElement }[] = [];
-
-function engineLabel(backend: string): string {
-  if (backend === "windows") return "Claude Code no Windows";
-  if (backend.startsWith("wsl:")) return `Claude Code no WSL · ${backend.slice(4)}`;
-  return "a API do Claude";
-}
-
-function syncEngine() {
-  for (let i = engineSwitches.length - 1; i >= 0; i--) {
-    const s = engineSwitches[i];
-    if (!s.el.isConnected) engineSwitches.splice(i, 1); // a redrawn block
-    else s.el.classList.toggle("on", settings.chatBackend === s.backend);
-  }
-  for (const fn of engineListeners) fn();
-}
-
-/** Why a found Claude Code can't answer yet, and the one command that fixes it. */
-function signInNotice(backend: string, cli: string): HTMLElement {
-  const wsl = backend.startsWith("wsl:");
-  const app = !wsl && /\\Claude\\claude-code\\/i.test(cli);
-  const why = wsl
-    ? `Esse Claude Code não está conectado. Faça login uma vez em ${backend.slice(4)} e reabra as configurações:`
-    : app
-      ? "Essa é a cópia do Claude Code que vem com o app do Claude. O app só faz o login quando ele mesmo a executa, então, para o Mochi, ela precisa de um login próprio, uma vez. Rode isto em um terminal e reabra as configurações:"
-      : "Esse Claude Code não está conectado. Faça login uma vez em um terminal e reabra as configurações:";
-  const command = wsl ? "claude auth login" : `& "${cli}" auth login`;
-  return h("div", { class: "notice warn" },
-    h("div", { text: why }),
-    h("code", { class: "cmd", text: command }),
-  );
-}
-
 /** A second Claude account: where Claude Code on Windows keeps its sign-in and sessions. */
 function accountRow(): HTMLElement {
   const field = h("input", {
@@ -99,7 +60,7 @@ function accountRow(): HTMLElement {
   return h("div", { class: "row" },
     h("label", { text: "Pasta da conta" }),
     field,
-    h("span", { class: "hint", text: "Opcional. Outra pasta de configuração do Claude Code, para o chat e as sessões do Mochi. Vazio = a padrão." }),
+    h("span", { class: "hint", text: "Opcional. Outra pasta de configuração do Claude Code, para as sessões. Vazio = a padrão." }),
   );
 }
 
@@ -123,63 +84,6 @@ function idleOpenRow(cli: string | null): HTMLElement {
     select,
     h("span", { class: "hint", text: "Sem nenhuma sessão ativa. O Terminal inicia o Claude Code na sua pasta pessoal, na conta acima." }),
   );
-}
-
-/** What the Ask/Sessions tab is: the sessions manager or Mochi's old chat. */
-function askModeRow(): HTMLElement {
-  const select = h("select", {}) as HTMLSelectElement;
-  select.append(
-    h("option", { value: "sessions", text: "Gerenciar sessões" }),
-    h("option", { value: "mochi", text: "Mochi (chat antigo)" }),
-  );
-  select.value = settings.askMode === "mochi" ? "mochi" : "sessions";
-  select.addEventListener("change", () => {
-    settings.askMode = select.value === "mochi" ? "mochi" : "sessions";
-    void save();
-  });
-  return h("div", { class: "row" },
-    h("label", { text: "Modo do botão Perguntar/Sessões" }),
-    select,
-    h("span", { class: "hint", text: "Gerenciar sessões: lista as sessões do Claude Code de todas as contas e abre cada uma no terminal. Mochi: o chat antigo, com a conversa dentro da ilha." }),
-  );
-}
-
-function mochiRow(backend: string, cli: string | null, missing: string): HTMLElement {
-  const sw = h("button", { class: settings.chatBackend === backend ? "switch on" : "switch" });
-  engineSwitches.push({ backend, el: sw });
-  if (!cli) {
-    sw.disabled = true;
-    sw.title = missing;
-  }
-  sw.addEventListener("click", () => {
-    settings.chatBackend = settings.chatBackend === backend ? "api" : backend;
-    void save();
-    syncEngine();
-  });
-  const row = h("div", { class: "row" },
-    h("label", { text: "Usar no Mochi" }),
-    sw,
-    h("span", {
-      class: "hint",
-      text: cli
-        ? "O chat do Mochi responde por esse Claude Code — sua assinatura, sem API key."
-        : missing,
-    }),
-  );
-  const box = h("div", { style: "display:flex;flex-direction:column;gap:8px" }, row);
-  // Installed is not enough: a Claude Code nobody signed in to can't answer.
-  if (cli) {
-    void Bridge.claudeLoggedIn(backend).then((loggedIn) => {
-      if (loggedIn !== false) return;
-      box.append(signInNotice(backend, cli));
-      // Leave a switch that is already on alone, so it can still be turned off.
-      if (settings.chatBackend !== backend) {
-        sw.disabled = true;
-        sw.title = "Faça login nesse Claude Code primeiro";
-      }
-    });
-  }
-  return box;
 }
 
 // ── Diff → confirm → write ────────────────────────────────────────────────────
@@ -288,10 +192,8 @@ function claudeSection(status: HookStatus): HTMLElement {
         h("span", { class: "path", text: status.hookPath }),
         statusDot(status.hookReady),
       ),
-      mochiRow("windows", status.claudeCli, "O Claude Code não está instalado no Windows."),
       accountRow(),
       idleOpenRow(status.claudeCli),
-      askModeRow(),
     );
 
     if (!status.hookReady) {
@@ -425,7 +327,6 @@ function wslSection(hookReady: boolean): { section: HTMLElement; refresh: () => 
         h("span", { class: "path", text: st.relayPath }),
         statusDot(st.relayReady),
       ),
-      mochiRow(`wsl:${st.distro}`, st.claudeCli, "O Claude Code não está instalado nessa distribuição."),
     );
     if (st.installed && !st.relayReady) {
       block.append(h("div", {
@@ -469,101 +370,6 @@ function wslSection(hookReady: boolean): { section: HTMLElement; refresh: () => 
   }
 
   return { section, refresh };
-}
-
-// ── Claude API section ────────────────────────────────────────────────────────
-
-const MODELS: [string, string][] = [
-  ["claude-opus-5", "Claude Opus 5"],
-  ["claude-sonnet-5", "Claude Sonnet 5"],
-  ["claude-haiku-4-5", "Claude Haiku 4.5"],
-];
-
-function apiSection(hasKey: boolean): HTMLElement {
-  const dot = statusDot(hasKey);
-  const state = h("span", { class: "hint", text: hasKey ? "Chave salva no Gerenciador de Credenciais do Windows." : "Ainda sem chave — o chat precisa de uma." });
-
-  const field = h("input", {
-    type: "password",
-    placeholder: hasKey ? "••••••••••••  (salva)" : "sk-ant-...",
-    style: "flex:1 1 auto;min-width:0",
-    autocomplete: "off",
-    spellcheck: "false",
-  }) as HTMLInputElement;
-
-  const saveBtn = h("button", { class: "primary", text: "Salvar chave" });
-  const clearBtn = h("button", { class: "danger", text: "Remover" });
-  const feedback = h("div", {});
-
-  async function refresh() {
-    const present = (await Bridge.secretPresent("anthropic-api-key")) ?? false;
-    dot.style.background = statusColor(present);
-    state.textContent = present
-      ? "Chave salva no Gerenciador de Credenciais do Windows."
-      : "Ainda sem chave — o chat precisa de uma.";
-    field.placeholder = present ? "••••••••••••  (salva)" : "sk-ant-...";
-    clearBtn.style.display = present ? "" : "none";
-  }
-
-  saveBtn.addEventListener("click", async () => {
-    const value = field.value.trim();
-    if (!value) return;
-    clear(feedback);
-    try {
-      await Bridge.secretSet("anthropic-api-key", value);
-      field.value = "";
-      feedback.append(h("div", { class: "notice ok", text: "Salva. Nunca vai para o disco." }));
-      await refresh();
-    } catch (err) {
-      feedback.append(h("div", { class: "notice err", text: `Não foi possível salvar: ${String(err)}` }));
-    }
-  });
-
-  clearBtn.addEventListener("click", async () => {
-    clear(feedback);
-    try {
-      await Bridge.secretClear("anthropic-api-key");
-      feedback.append(h("div", { class: "notice ok", text: "Chave removida." }));
-      await refresh();
-    } catch (err) {
-      feedback.append(h("div", { class: "notice err", text: `Não foi possível remover: ${String(err)}` }));
-    }
-  });
-
-  const model = h("select", {}) as HTMLSelectElement;
-  for (const [id, label] of MODELS) model.append(h("option", { value: id, text: label }));
-  if (!MODELS.some(([id]) => id === settings.model)) {
-    model.append(h("option", { value: settings.model, text: settings.model }));
-  }
-  model.value = settings.model;
-  model.addEventListener("change", () => {
-    settings.model = model.value;
-    void save();
-  });
-
-  clearBtn.style.display = hasKey ? "" : "none";
-
-  const engine = h("div", { class: "notice" });
-  const drawEngine = () => {
-    const api = settings.chatBackend === "api";
-    engine.className = api ? "hint" : "notice ok";
-    engine.textContent = api
-      ? "O Mochi responde com essa chave. Para usar sua assinatura do Claude, ative \"Usar no Mochi\" em um Claude Code acima."
-      : `O Mochi responde por ${engineLabel(settings.chatBackend)}, na sua assinatura — a chave abaixo não é usada. O modelo é o do próprio Claude Code.`;
-  };
-  engineListeners.push(drawEngine);
-  drawEngine();
-
-  return h(
-    "section",
-    {},
-    h("h2", {}, dot, h("span", { text: "Claude" })),
-    engine,
-    state,
-    h("div", { class: "row" }, h("label", { text: "API key" }), field, saveBtn, clearBtn),
-    h("div", { class: "row" }, h("label", { text: "Modelo" }), model),
-    feedback,
-  );
 }
 
 // ── GitHub setup ──────────────────────────────────────────────────────────────
@@ -996,8 +802,6 @@ async function main() {
     installed: false, settingsPath: "", hookPath: "", hookReady: false, claudeCli: null,
   };
 
-  const hasKey = (await Bridge.secretPresent("anthropic-api-key")) ?? false;
-
   const keys = [
     "stripe-api-key", "github-token", "vercel-token",
     "n8n-url", "n8n-api-key", "resend-api-key", "notion-api-key", "calcom-api-key",
@@ -1012,7 +816,6 @@ async function main() {
     h("h1", {}, h("span", { text: "Coucou" }), h("span", { class: "version", text: version })),
     claudeSection(status),
     wsl.section,
-    apiSection(hasKey),
     integrationsSection(present),
     voiceSection(),
     generalSection(),

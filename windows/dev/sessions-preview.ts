@@ -23,7 +23,7 @@ Object.assign(Bridge, {
   sessionsLive: async () => [],
 });
 State.mode = "expanded";
-State.view = "prompt";
+State.view = "sessions";
 
 const view = buildSessionsView(() => {});
 view.el.classList.add("on");

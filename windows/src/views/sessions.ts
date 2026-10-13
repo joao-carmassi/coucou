@@ -44,7 +44,7 @@ export function buildSessionsView(onResize: () => void): ViewHost {
   });
 
   const label = (key: string) => profiles.find((p) => p.key === key)?.label ?? key;
-  const isOn = () => State.mode === "expanded" && State.view === "prompt";
+  const isOn = () => State.mode === "expanded" && State.view === "sessions";
 
   async function run(fn: () => Promise<unknown>) {
     try {

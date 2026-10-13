@@ -92,7 +92,7 @@ export function buildChoose(actions: ViewActions): ViewHost {
     h("button", {
       class: "btn primary",
       text: "Fazer uma pergunta",
-      onclick: () => actions.setView("prompt"),
+      onclick: () => actions.setView("sessions"),
     }),
     h("button", {
       class: "btn secondary",
