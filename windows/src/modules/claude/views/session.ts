@@ -18,7 +18,7 @@
 
 import { h, svg, clear, dot, replay } from "../../../views/dom";
 import { diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath, type FileKind } from "../../../views/code";
-import { ICONS } from "../../../views/icons";
+import { ICONS } from "../icons";
 import { COLOR } from "../../../views/palette";
 import { timeAgo } from "../../../views/format";
 import { markdown } from "./markdown";
@@ -113,21 +113,21 @@ export function sessionsChip(store: ClaudeStore, onOpen: () => void): { el: HTML
 function sessionRow(store: ClaudeStore, session: ClaudeSession, onPick: (id: string) => void): HTMLElement {
   const { color, words } = standing(session);
   const front = session.id === store.frontId;
-  const state = h("span", { class: "gh-file-status", text: front ? `em cena · ${words}` : words });
+  const state = h("span", { class: "pane-file-status", text: front ? `em cena · ${words}` : words });
   if (calls(session)) state.style.color = color;
   return h(
     "button",
-    { class: front ? "gh-row sess-row on" : "gh-row sess-row", title: sessionName(session), onclick: () => onPick(session.id) },
-    h("i", { class: "gh-row-icon" }, dot(color, 7)),
-    h("span", { class: "gh-row-title", text: sessionName(session) }),
-    h("span", { class: "gh-row-where", text: session.title ? session.project : (session.lines.at(-1) ?? "") }),
-    h("span", { class: "gh-right" }, state, h("span", { class: "int-ago", text: timeAgo(session.heardAt) })),
+    { class: front ? "pane-row sess-row on" : "pane-row sess-row", title: sessionName(session), onclick: () => onPick(session.id) },
+    h("i", { class: "pane-row-icon" }, dot(color, 7)),
+    h("span", { class: "pane-row-title", text: sessionName(session) }),
+    h("span", { class: "pane-row-where", text: session.title ? session.project : (session.lines.at(-1) ?? "") }),
+    h("span", { class: "pane-right" }, state, h("span", { class: "pane-ago", text: timeAgo(session.heardAt) })),
   );
 }
 
 /** What happened to the file, as the GitHub panel says it: "edited" in grey, "new" in green. */
 function statusWord(file: ChangedFile): HTMLElement {
-  const word = h("span", { class: "gh-file-status", text: file.created ? "novo" : "editado" });
+  const word = h("span", { class: "pane-file-status", text: file.created ? "novo" : "editado" });
   if (file.created) word.style.color = COLOR.green;
   return word;
 }
@@ -136,22 +136,22 @@ function fileRow(file: ChangedFile): HTMLElement {
   const { dir, base } = splitPath(file.path);
   return h(
     "button",
-    { class: "gh-row gh-file", title: file.path, onclick: () => go({ kind: "file", path: file.path }) },
-    h("i", { class: "gh-row-icon" }, extBadge(file.path)),
-    h("span", { class: "gh-row-title", text: base }),
-    h("span", { class: "gh-row-where", text: dir }),
-    h("span", { class: "gh-right" }, statusWord(file), plusMinus(file.additions, file.deletions), h("span", { class: "int-ago", text: timeAgo(file.at) })),
+    { class: "pane-row pane-file", title: file.path, onclick: () => go({ kind: "file", path: file.path }) },
+    h("i", { class: "pane-row-icon" }, extBadge(file.path)),
+    h("span", { class: "pane-row-title", text: base }),
+    h("span", { class: "pane-row-where", text: dir }),
+    h("span", { class: "pane-right" }, statusWord(file), plusMinus(file.additions, file.deletions), h("span", { class: "pane-ago", text: timeAgo(file.at) })),
   );
 }
 
 /** A quiet line across a diff: lines skipped, or the start of another edit. */
 function diffBreak(text: string): HTMLElement {
-  return h("div", { class: "gh-diff-line hunk" }, h("span", { class: "n", text: "⋯" }), h("span", { class: "s" }), h("span", { class: "t", text }));
+  return h("div", { class: "diff-line hunk" }, h("span", { class: "n", text: "⋯" }), h("span", { class: "s" }), h("span", { class: "t", text }));
 }
 
 /** Every edit to the file, oldest first, a quiet break between two of them. */
 function diffView(file: ChangedFile, kind: FileKind): HTMLElement {
-  const diff = h("div", { class: "gh-diff" });
+  const diff = h("div", { class: "code-diff" });
   const several = file.edits.length > 1;
   file.edits.forEach((edit, i) => {
     let first = true;
@@ -167,7 +167,7 @@ function diffView(file: ChangedFile, kind: FileKind): HTMLElement {
     }
     if (edit.truncated) diff.append(diffBreak("O resto desta edição está no Claude Code"));
   });
-  return h("div", { class: "gh-code" }, diff);
+  return h("div", { class: "pane-code" }, diff);
 }
 
 // ── The journal ───────────────────────────────────────────────────────────────
@@ -276,15 +276,15 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
   const store = c.store;
   notify = () => store.changed();
   const who = h("b", { text: UNNAMED });
-  const sub = h("span", { class: "gh-sub" });
-  const badge = h("span", { class: "gh-head-badge" });
-  const aside = h("span", { class: "gh-head-aside" });
+  const sub = h("span", { class: "pane-sub" });
+  const badge = h("span", { class: "pane-head-badge" });
+  const aside = h("span", { class: "pane-head-aside" });
   // One step back: from a file to the changes, from the changes to the journal.
-  const backBtn = h("button", { class: "gh-icon sess-back", title: "Voltar" }, svg(ICONS.chevronLeft, 10, { stroke: 2.4 }));
+  const backBtn = h("button", { class: "pane-icon sess-back", title: "Voltar" }, svg(ICONS.chevronLeft, 10, { stroke: 2.4 }));
   const filesBtn = h("button", { class: "sess-files", title: "Todos os arquivos que esta sessão alterou" });
   const openBtn = h(
     "button",
-    { class: "gh-icon", title: "Abrir a sessão", onclick: () => c.openClient() },
+    { class: "pane-icon", title: "Abrir a sessão", onclick: () => c.openClient() },
     svg(ICONS.arrowUpRight, 10),
   );
   // With several sessions followed: the way to the list of them.
@@ -292,18 +292,18 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
     actions.blip();
     go({ kind: "sessions" });
   });
-  const tab = h("div", { class: "gh-tab" }, badge, who);
-  const head = h("div", { class: "gh-head" }, backBtn, tab, aside, h("div", { class: "grow" }), sub, sessionsBtn.el, filesBtn, openBtn);
+  const tab = h("div", { class: "pane-tab" }, badge, who);
+  const head = h("div", { class: "pane-head" }, backBtn, tab, aside, h("div", { class: "grow" }), sub, sessionsBtn.el, filesBtn, openBtn);
   // The journal, and behind it the changes: one of the two is on screen.
-  const journal = h("div", { class: "gh-list sess-journal" });
-  const list = h("div", { class: "gh-list" });
+  const journal = h("div", { class: "pane-list sess-journal" });
+  const list = h("div", { class: "pane-list" });
 
-  const main = h("div", { class: "gh-main" }, head, journal, list);
+  const main = h("div", { class: "pane-main" }, head, journal, list);
   const name = h("b", { text: UNNAMED });
   const nameSub = h("span", { text: UNNAMED });
   const steps = h("div", { class: "sess-steps" });
-  const side = h("div", { class: "gh-side" }, h("div", { class: "gh-side-who" }, name, nameSub), steps);
-  const el = h("div", { class: "view gh-view session-view" }, h("div", { class: "card gh-card" }, side, h("div", { class: "gh-col" }, main)));
+  const side = h("div", { class: "pane-side" }, h("div", { class: "pane-side-who" }, name, nameSub), steps);
+  const el = h("div", { class: "view pane-view session-view" }, h("div", { class: "card pane-card" }, side, h("div", { class: "pane-col" }, main)));
 
   backBtn.addEventListener("click", () => {
     actions.blip();
@@ -401,7 +401,7 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
   const entries = new WeakMap<SessionStep, { el: HTMLElement; key: string }>();
   /** The edits typed already: an edit is typed once. */
   const typedSteps = new WeakSet<SessionStep>();
-  const empty = h("div", { class: "int-empty" });
+  const empty = h("div", { class: "pane-empty" });
   /** What the journal was last opened on: another session, or the panel entered again, starts at its end. */
   let opened = "";
   let shownSession = "";
@@ -443,7 +443,7 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
 
     // Another session's journal comes in from the side, as a sheet of the GitHub panel does.
     if (entering && session.id !== shownSession) {
-      if (shownSession) replay(journal, "gh-from-right");
+      if (shownSession) replay(journal, "pane-from-right");
       shownSession = session.id;
     }
     if (toType) type(toType.lines, toType.kind);
@@ -556,10 +556,10 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
       const scroll = now === drawn ? list.scrollTop : 0;
       drawn = now;
       clear(list);
-      list.classList.toggle("gh-edge", picked != null);
+      list.classList.toggle("pane-edge", picked != null);
       if (screen.kind === "sessions") for (const s of store.sessions) list.append(sessionRow(store, s, pick));
       else if (picked) list.append(diffView(picked, fileKind(picked.path)));
-      else if (files.length === 0) list.append(h("div", { class: "int-empty", text: "Nada escrito nesta sessão ainda." }));
+      else if (files.length === 0) list.append(h("div", { class: "pane-empty", text: "Nada escrito nesta sessão ainda." }));
       else for (const f of files) list.append(fileRow(f));
       list.scrollTop = scroll;
     },

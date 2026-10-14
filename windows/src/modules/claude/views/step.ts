@@ -9,7 +9,7 @@
 
 import { h, svg } from "../../../views/dom";
 import { diffLine, fileKind, readPatch } from "../../../views/code";
-import { ICONS } from "../../../views/icons";
+import { ICONS } from "../icons";
 import type { SessionStep } from "../types";
 
 /** Tools by a name short enough for a column, where their own is not. */
@@ -112,5 +112,5 @@ export function stepPreview(step: SessionStep, limit?: number, typed?: ToType[])
   }
 
   if (rows.length === 0) return null;
-  return h("div", { class: step.state === "failed" ? "gh-diff step-preview failed" : "gh-diff step-preview" }, ...rows);
+  return h("div", { class: step.state === "failed" ? "code-diff step-preview failed" : "code-diff step-preview" }, ...rows);
 }

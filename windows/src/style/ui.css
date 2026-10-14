@@ -1,25 +1,15 @@
 /* Shared UI pieces (buttons, fields, variables) used by the core and by more than one module. */
 :root {
-  --gh-text: #c5c8cd;      /* a line's words: between the ink and the dims */
-  --gh-edge: rgba(255, 255, 255, 0.05);   /* the panel's border */
-  --gh-hover: rgba(255, 255, 255, 0.05);  /* a line under the mouse */
-  --gh-track: rgba(255, 255, 255, 0.06);  /* the empty length of a bar */
-  --gh-plate: rgba(255, 255, 255, 0.07);  /* a round button, the step on show, a tag */
-  --gh-tile: color-mix(in srgb, var(--card), #fff 3.5%);     /* a block of a sheet */
-  --gh-tile-hover: color-mix(in srgb, var(--card), #fff 7%);
+  --surface-text: #c5c8cd;      /* a line's words: between the ink and the dims */
+  --surface-edge: rgba(255, 255, 255, 0.05);   /* the panel's border */
+  --surface-hover: rgba(255, 255, 255, 0.05);  /* a line under the mouse */
+  --surface-track: rgba(255, 255, 255, 0.06);  /* the empty length of a bar */
+  --surface-plate: rgba(255, 255, 255, 0.07);  /* a round button, the step on show, a tag */
+  --surface-tile: color-mix(in srgb, var(--card), #fff 3.5%);     /* a block of a sheet */
+  --surface-tile-hover: color-mix(in srgb, var(--card), #fff 7%);
 
   --on-light: #0b0c0e;       /* a mark or a word on a light or a coloured ground */
-
-  --code: #d6d9df;
-  --code-keyword: #c792ea;
-  --code-string: #c3e88d;
-  --code-call: #82aaff;      /* a call, a property */
-  --code-constant: #f78c6c;  /* a number, a constant */
-  --code-type: #ffcb6b;
-  --code-comment: #5c6370;
-  --code-added: #6ee7b7;     /* the number and the sign of a line added */
-  --code-gone: #b86f78;      /* the words of a line removed */
-}
+}
 @property --accent {
   syntax: "<color>";
   inherits: true;
@@ -65,29 +55,18 @@
 .btn.secondary .kbd {
   border: 1px solid rgba(255, 255, 255, 0.4);
 }
-.icon-btn {
-  width: 16px;
-  height: 16px;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--dim-4);
-  display: grid;
-  place-items: center;
-  cursor: default;
-}
 .actions {
   display: flex;
   gap: 8px;
 }
 
-.q-link {
+.text-link {
   flex: 0 0 auto;
   color: var(--dim-3);
   white-space: nowrap;
 }
 
-.q-link:hover {
+.text-link:hover {
   color: var(--ink-2);
 }
 

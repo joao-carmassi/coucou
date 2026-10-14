@@ -8,7 +8,7 @@
 .timer-min::-webkit-inner-spin-button, .timer-min::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .timer-label { font: 400 11.5px var(--font); color: var(--dim); }
 .timer-readout { font: 600 30px/36px var(--font); font-variant-numeric: tabular-nums; letter-spacing: -0.5px; color: var(--ink); }
-.timer-progress { height: 4px; border-radius: 999px; background: var(--gh-track); overflow: hidden; margin-top: 4px; }
+.timer-progress { height: 4px; border-radius: 999px; background: var(--surface-track); overflow: hidden; margin-top: 4px; }
 .timer-progress > i { display: block; height: 100%; border-radius: inherit; background: var(--amber); transition: width 1s linear; }
 .paused .timer-readout { color: var(--dim); }
 .paused .timer-progress > i { opacity: 0.45; }

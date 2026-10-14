@@ -9,7 +9,10 @@
 //   2. Module id / label / group (derived from src/modules/* folders and their manifest.json) as a whole word in code
 //      (comment hits carry the rule suffix "(comment)" and fail too).
 //   3. Concept denylist (approval, session, overview, ...) in code or comments.
-//   4. Rust: `modules::` outside CATALOG/registry/handler lines; events emitted by core must be generic;
+//   4. CSS: a selector of a core sheet (src/style, src/settings) must not use a module's class prefix (gh-, sess-, int-, ...).
+//      Prefixes come from the selectors of src/modules/*/*.css that no core sheet defines and that only ONE module uses
+//      (a prefix two modules share is the shared kit's: pane-, diff-). Allowlist a hit with a reason.
+//   5. Rust: `modules::` outside CATALOG/registry/handler lines; events emitted by core must be generic;
 //      `#[cfg(test)]` blocks are skipped.
 //
 // ALLOWLIST: [file suffix, substring of the offending line, reason]. Keep each entry justified.
@@ -44,6 +47,7 @@ const rel = (p) => relative(root, p).split(sep).join("/");
 const allowed = (file, line) => ALLOWLIST.find(([f, s]) => file.endsWith(f) && line.includes(s));
 
 // Names: folder ids + ids/labels/groups from the manifests.
+const moduleDirs = readdirSync(join(root, "src/modules")).filter((n) => statSync(join(root, "src/modules", n)).isDirectory());
 const names = new Set(readdirSync(join(root, "src/modules")).filter((n) => statSync(join(root, "src/modules", n)).isDirectory()));
 for (const n of [...names]) {
   const f = join(root, "src/modules", n, "manifest.json");
@@ -109,6 +113,32 @@ function scan(f, lang) {
     hit(nameRe, "module name");
     hit(conceptRe, "concept");
   });
+}
+
+/** Class names (with a dash) in the selectors of a stylesheet: [{ cls, n }], n = line. */
+function selectorClasses(f) {
+  const text = readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, " "));
+  const out = [];
+  for (const m of text.matchAll(/([^{};]*)\{/g)) {
+    if (/^\s*@(keyframes|font-face|property)/.test(m[1])) continue;
+    const base = text.slice(0, m.index).split("\n").length;
+    m[1].split("\n").forEach((ln, i) => { for (const c of ln.matchAll(/\.([a-zA-Z]\w*-[\w-]*)/g)) out.push({ cls: c[1], n: base + i }); });
+  }
+  return out;
+}
+const coreCss = files(join(root, "src/style"), [".css"]).concat(files(join(root, "src/settings"), [".css"]));
+const coreClasses = new Set(coreCss.flatMap((f) => selectorClasses(f).map((x) => x.cls)));
+const prefixOwners = new Map();
+for (const m of moduleDirs)
+  for (const f of files(join(root, "src/modules", m), [".css"]))
+    for (const { cls } of selectorClasses(f)) if (!coreClasses.has(cls)) {
+      const p = cls.split("-")[0];
+      (prefixOwners.get(p) ?? prefixOwners.set(p, new Set()).get(p)).add(m);
+    }
+const modulePrefix = new Set([...prefixOwners].filter(([, o]) => o.size === 1).map(([p]) => p));
+for (const f of coreCss) {
+  const lines = readFileSync(f, "utf8").split("\n");
+  for (const { cls, n } of selectorClasses(f)) if (modulePrefix.has(cls.split("-")[0])) add(rel(f), n, `css prefix "${cls.split("-")[0]}-"`, lines[n - 1], false);
 }
 
 for (const d of ["core", "island", "views", "mochi", "settings"]) for (const f of files(join(root, "src", d), [".ts"])) scan(f, "ts");

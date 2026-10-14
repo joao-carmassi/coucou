@@ -1,4 +1,4 @@
-// A file as the GitHub panel shows it: its extension's badge, and its lines
+// A file as a diff or a listing shows it: its extension's badge, and its lines
 // coloured the way an editor would — keywords, strings, numbers, calls, types.
 //
 // No highlighting library: the island reads a few dozen lines of a diff, one
@@ -14,7 +14,7 @@ type Comment = "slash" | "hash" | "dash";
 export interface FileKind {
   /** Two or three letters for the badge. */
   label: string;
-  /** GitHub's colour for the language. */
+  /** The usual colour for the language. */
   color: string;
   comment?: Comment;
   /** A programming language: keywords, calls and types are coloured too. */
@@ -99,7 +99,7 @@ export function fileKind(path: string): FileKind {
 export function extBadge(path: string): HTMLElement {
   const kind = fileKind(path);
   // On a light colour the letters go dark.
-  const el = h("span", { class: isLight(kind.color) ? "gh-ext dark" : "gh-ext", text: kind.label });
+  const el = h("span", { class: isLight(kind.color) ? "file-ext dark" : "file-ext", text: kind.label });
   el.style.setProperty("--c", kind.color);
   return el;
 }
@@ -190,8 +190,8 @@ export function highlight(line: string, kind: FileKind): Node[] {
 
 // ── A diff ────────────────────────────────────────────────────────────────────
 //
-// The pieces a diff is drawn with, wherever it comes from: GitHub's, or what
-// Claude Code just did to a file.
+// The pieces a diff is drawn with, wherever it comes from: a pull request's, or what
+// an agent just did to a file.
 
 const HUNK = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@ ?(.*)$/;
 
@@ -200,7 +200,7 @@ export type PatchLine =
   | { hunk: string }
   | { sign: "+" | "-" | ""; text: string; old: number | null; new: number | null };
 
-/** Reads the unified diff GitHub sends, numbering its lines as it goes. */
+/** Reads the unified diff git prints, numbering its lines as it goes. */
 export function* readPatch(patch: string): Generator<PatchLine> {
   let oldLine = 0;
   let newLine = 0;
@@ -230,7 +230,7 @@ export function diffLine(number: number | null, sign: string, text: string, kind
   const change = sign === "+" ? "add" : sign === "-" ? "del" : "ctx";
   return h(
     "div",
-    { class: `gh-diff-line ${change}` },
+    { class: `diff-line ${change}` },
     h("span", { class: "n", text: number == null ? "" : String(number) }),
     h("span", { class: "s", text: change === "ctx" ? "" : sign }),
     // A line that is gone is only struck through — its words, not the
@@ -244,14 +244,14 @@ export function diffLine(number: number | null, sign: string, text: string, kind
 export function plusMinus(additions: number, deletions: number): HTMLElement {
   return h(
     "span",
-    { class: "gh-pm" },
-    h("span", { class: "gh-add", text: `+${additions}` }),
+    { class: "diff-pm" },
+    h("span", { class: "diff-add", text: `+${additions}` }),
     " ",
-    h("span", { class: "gh-del", text: `−${deletions}` }),
+    h("span", { class: "diff-del", text: `−${deletions}` }),
   );
 }
 
-/** "windows/src/views/" and "github.ts". */
+/** "src/views/" and "code.ts". */
 export function splitPath(path: string): { dir: string; base: string } {
   const i = path.lastIndexOf("/");
   return i < 0 ? { dir: "", base: path } : { dir: path.slice(0, i + 1), base: path.slice(i + 1) };

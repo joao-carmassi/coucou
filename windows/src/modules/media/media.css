@@ -15,7 +15,7 @@
 }
 
 .media-cell:hover {
-  background: var(--gh-hover);
+  background: var(--surface-hover);
 }
 
 /* The capture Mochi just took: a brief accent glow. */
@@ -39,7 +39,7 @@
   aspect-ratio: 16 / 10;
   border-radius: 6px;
   overflow: hidden;
-  background: var(--gh-track);
+  background: var(--surface-track);
 }
 
 .media-thumb {
@@ -113,7 +113,7 @@
   padding: 4px;
   border-radius: 10px;
   background: var(--card);
-  border: 1px solid var(--gh-edge);
+  border: 1px solid var(--surface-edge);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
 }
 
@@ -129,7 +129,7 @@
 }
 
 .media-menu-row:hover {
-  background: var(--gh-hover);
+  background: var(--surface-hover);
 }
 
 
