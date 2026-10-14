@@ -1,12 +1,12 @@
 // Home: the board owns it when it is on; with it off there is no Início at all (first tab, else empty).
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../src/modules/index", async () => {
+const loadModules = async () => {
   const { board } = await import("../../src/modules/board");
   const { claude } = await import("../../src/modules/claude");
   return { MODULES: [board, claude] };
-});
-vi.mock("../../src/modules/catalog", async () => {
+};
+const loadCatalog = async () => {
   const { buildCatalog } = await import("../../src/modules/resolve");
   return {
     MODULE_INFO: buildCatalog([
@@ -14,7 +14,7 @@ vi.mock("../../src/modules/catalog", async () => {
       { id: "claude", label: "Claude", default: true, order: 1 },
     ], true),
   };
-});
+};
 
 import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
@@ -23,11 +23,11 @@ import { State } from "../../src/core/state";
 let island: Island;
 const tick = (ms: number) => vi.advanceTimersByTime(ms);
 
-beforeAll(() => {
+beforeAll(async () => {
   vi.useFakeTimers();
   document.body.innerHTML = '<div id="root"></div>';
   island = new Island(document.getElementById("root")!);
-  Registry.init(island);
+  Registry.init(island, (await loadModules()).MODULES, (await loadCatalog()).MODULE_INFO);
   island.launch();
 });
 afterAll(() => vi.useRealTimers());

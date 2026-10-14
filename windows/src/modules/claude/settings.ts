@@ -5,6 +5,7 @@
 //
 // Fields are saved as patches (ModuleSettings.save): only the key changed travels.
 
+import type { SettingsUi } from "../../core/moduleApi";
 import type { ModuleSettings } from "../../core/moduleSettings";
 import "./settings.css";
 import { type HookPreview, type HookStatus, type WslStatus, ClaudeBridge } from "./bridge";
@@ -107,7 +108,7 @@ interface FlowOps {
   extra?: string;
 }
 
-async function previewFlow(body: HTMLElement, install: boolean, ops: FlowOps) {
+async function previewFlow(body: HTMLElement, install: boolean, ops: FlowOps, ui: SettingsUi) {
   let preview: HookPreview;
   try {
     preview = await ops.preview();
@@ -150,7 +151,7 @@ async function previewFlow(body: HTMLElement, install: boolean, ops: FlowOps) {
         class: "notice ok",
         text: `Pronto. Configurações anteriores salvas como ${backup}. Abra uma nova sessão do Claude Code para os hooks entrarem em ação.`,
       }));
-      window.setTimeout(ops.done, 2600);
+      ui.timeout(ops.done, 2600);
     } catch (err) {
       confirm.disabled = false;
       body.append(h("div", { class: "notice err", text: `Não foi possível gravar: ${String(err)}` }));
@@ -163,7 +164,7 @@ async function previewFlow(body: HTMLElement, install: boolean, ops: FlowOps) {
 
 const NO_STATUS: HookStatus = { installed: false, settingsPath: "", hookPath: "", hookReady: false, claudeCli: null };
 
-function hooksSection(ms: ModuleSettings, status: HookStatus, signal: AbortSignal): HTMLElement {
+function hooksSection(ms: ModuleSettings, ui: SettingsUi, status: HookStatus, signal: AbortSignal): HTMLElement {
   const body = h("div", { style: "display:flex;flex-direction:column;gap:12px" });
   const section = h(
     "section",
@@ -253,7 +254,7 @@ function hooksSection(ms: ModuleSettings, status: HookStatus, signal: AbortSigna
       back: () => { clear(body); draw(); },
       done: () => void rebuild(),
       what: "settings.json",
-    });
+    }, ui);
   }
 
   // Claude Code may have been installed (or signed in) since launch.
@@ -269,7 +270,7 @@ function hooksSection(ms: ModuleSettings, status: HookStatus, signal: AbortSigna
 // Asking a distro for its state starts it, so this only runs while the window
 // is on screen (the shown cue), never at launch.
 
-function wslSection(status: HookStatus, signal: AbortSignal): HTMLElement {
+function wslSection(ui: SettingsUi, status: HookStatus, signal: AbortSignal): HTMLElement {
   const dot = statusDot(false);
   const body = h("div", { style: "display:flex;flex-direction:column;gap:14px" });
   const section = h("section", { id: "wsl" }, h("h2", {}, dot, h("span", { text: "WSL" })), body);
@@ -356,7 +357,7 @@ function wslSection(status: HookStatus, signal: AbortSignal): HTMLElement {
         extra: install
           ? `O script relay é gravado em ${st.relayPath} junto com ele.`
           : `O script relay ${st.relayPath} também é removido.`,
-      });
+      }, ui);
     };
 
     const install = h("button", {
@@ -382,11 +383,11 @@ function wslSection(status: HookStatus, signal: AbortSignal): HTMLElement {
 }
 
 /** The module's section: hooks, then WSL. */
-export function claudeSettingsSection(ms: ModuleSettings): { el: HTMLElement; dispose(): void } {
+export function claudeSettingsSection(ms: ModuleSettings, ui: SettingsUi): { el: HTMLElement; dispose(): void } {
   const ac = new AbortController();
   // Shared by both sections: the hooks one refreshes it, the WSL one reads it when it draws.
   const status: HookStatus = { ...NO_STATUS };
-  const el = h("div", { style: "display:flex;flex-direction:column;gap:22px" }, hooksSection(ms, status, ac.signal), wslSection(status, ac.signal));
+  const el = h("div", { style: "display:flex;flex-direction:column;gap:22px" }, hooksSection(ms, ui, status, ac.signal), wslSection(ui, status, ac.signal));
   return { el, dispose: () => ac.abort() };
 }
 

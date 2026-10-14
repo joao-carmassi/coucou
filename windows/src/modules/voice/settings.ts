@@ -3,11 +3,12 @@
 
 import { onEvent } from "../../kit/tauri";
 import { VoiceBridge } from "./bridge";
+import type { SettingsUi } from "../../core/moduleApi";
 import type { ModuleSettings } from "../../core/moduleSettings";
 import { h } from "../../kit/dom";
 
 /** Rust keeps the hotkey in `extra`: absent = the default (settingsDefaults), "" = off. */
-export function voiceSettingsSection(ms: ModuleSettings): { el: HTMLElement; dispose(): void } {
+export function voiceSettingsSection(ms: ModuleSettings, ui: SettingsUi): { el: HTMLElement; dispose(): void } {
   const status = h("span", { class: "hint" });
   const err = h("div", { class: "notice warn", style: "display:none" });
   const dl = h("button", { class: "btn secondary", text: "Baixar modelo (~20 MB)" }) as HTMLButtonElement;
@@ -38,7 +39,7 @@ export function voiceSettingsSection(ms: ModuleSettings): { el: HTMLElement; dis
   }) as HTMLInputElement;
   input.addEventListener("change", () => {
     // Rust tries the new combo on save; the verdict comes back as `hotkey-error`.
-    void ms.save({ voiceHotkey: input.value.trim() }).then(() => setTimeout(() => void refresh(), 300));
+    void ms.save({ voiceHotkey: input.value.trim() }).then(() => ui.timeout(() => void refresh(), 300));
   });
 
   const offs = [

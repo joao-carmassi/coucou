@@ -6,7 +6,7 @@ import type { BoardCardOf, BoardNewsOf } from "../../src/modules/board/api";
 
 const probe: Record<string, import("../../src/core/moduleApi").IslandApi | null> = {};
 
-vi.mock("../../src/modules/index", async () => {
+const loadModules = async () => {
   const { board } = await import("../../src/modules/board");
   const provider = (id: string, label: string, news = false): ModuleDef => ({
     id,
@@ -25,8 +25,8 @@ vi.mock("../../src/modules/index", async () => {
     },
   } as ModuleDef);
   return { MODULES: [board, provider("alpha", "Alpha"), provider("beta", "Beta", true)] };
-});
-vi.mock("../../src/modules/catalog", async () => {
+};
+const loadCatalog = async () => {
   const { buildCatalog } = await import("../../src/modules/resolve");
   return {
     MODULE_INFO: buildCatalog([
@@ -35,7 +35,7 @@ vi.mock("../../src/modules/catalog", async () => {
       { id: "beta", label: "Beta", default: true, order: 2 },
     ], true),
   };
-});
+};
 
 import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
@@ -46,11 +46,11 @@ const tick = (ms: number) => vi.advanceTimersByTime(ms);
 const text = (sel: string) => [...document.querySelectorAll(sel)].map((e) => e.textContent);
 const home = () => { probe.alpha?.island.setView("overview"); tick(100); };
 
-beforeAll(() => {
+beforeAll(async () => {
   vi.useFakeTimers();
   document.body.innerHTML = '<div id="root"></div>';
   island = new Island(document.getElementById("root")!);
-  Registry.init(island);
+  Registry.init(island, (await loadModules()).MODULES, (await loadCatalog()).MODULE_INFO);
   Registry.apply({ board: true, alpha: false, beta: false });
   island.launch();
   tick(15_000);

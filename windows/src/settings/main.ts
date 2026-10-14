@@ -3,10 +3,8 @@
 
 import "./settings.css";
 import { Bridge, onEvent } from "../core/bridge";
-import { resolveEnabled } from "../core/moduleApi";
+import { resolveEnabled, type ModuleInfo, type SettingsSection, type SettingsUi } from "../core/moduleApi";
 import { moduleSettings } from "../core/moduleSettings";
-import { MODULE_INFO } from "../modules/catalog";
-import { SETTINGS_SECTIONS } from "../modules/settings";
 import { DEFAULT_SETTINGS, State, type Settings } from "../core/state";
 import { h, clear } from "../kit/dom";
 
@@ -128,7 +126,13 @@ function generalSection(): HTMLElement {
 const modulesBox = h("div", {});
 /** The sections of the modules that are on, in catalog order: they sit between the switches and the footer. */
 const sectionsBox = h("div", { style: "display:contents" });
-const sections = new Map<string, { el: HTMLElement; dispose?(): void }>();
+const sections = new Map<string, { el: HTMLElement; dispose?(): void; timers: Set<number> }>();
+// Injected by startSettings (src/boot/settings.ts): this file imports no module.
+let MODULE_INFO: ModuleInfo[] = [];
+let SETTINGS_SECTIONS: Record<string, SettingsSection> = {};
+
+const stopTimers = (s: { timers: Set<number> }) => { s.timers.forEach((t) => window.clearTimeout(t)); s.timers.clear(); };
+window.addEventListener("unload", () => sections.forEach(stopTimers));
 
 /** A module's section exists only while the module is on. */
 function renderSections(effective: Record<string, boolean>) {
@@ -138,9 +142,17 @@ function renderSections(effective: Record<string, boolean>) {
     if (!on && has) {
       has.el.remove();
       has.dispose?.();
+      stopTimers(has);
       sections.delete(id);
     } else if (on && !has) {
-      sections.set(id, make(moduleSettings(id, MODULE_INFO.find((m) => m.id === id)?.settingsDefaults)));
+      const timers = new Set<number>();
+      const ui: SettingsUi = {
+        timeout: (fn, ms) => {
+          const t = window.setTimeout(() => { timers.delete(t); fn(); }, ms);
+          timers.add(t);
+        },
+      };
+      sections.set(id, { ...make(moduleSettings(id, MODULE_INFO.find((m) => m.id === id)?.settingsDefaults), ui), timers });
     }
   }
   const order = MODULE_INFO.map((m) => m.id);
@@ -177,6 +189,12 @@ function renderModules(effective: Record<string, boolean> = resolveEnabled(MODUL
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
+export function startSettings(catalog: ModuleInfo[], sectionMakers: Record<string, SettingsSection>) {
+  MODULE_INFO = catalog;
+  SETTINGS_SECTIONS = sectionMakers;
+  void main();
+}
+
 async function main() {
   const boot = await Bridge.boot();
   if (boot) {
@@ -211,5 +229,3 @@ async function main() {
   const pending = (await Bridge.takeSettingsSection()) ?? "";
   if (pending) shown(pending);
 }
-
-void main();

@@ -225,4 +225,6 @@ export function resolveEnabled(catalog: readonly ModuleInfo[], stored: Readonly<
 }
 
 /** A module's section of the settings window; it exists only while the module is on. */
-export type SettingsSection = (settings: ModuleSettings) => { el: HTMLElement; dispose?(): void };
+/** What the settings window lends a section: timers it clears when the section is rebuilt or the window unloads. */
+export type SettingsUi = { timeout(fn: () => void, ms: number): void };
+export type SettingsSection = (settings: ModuleSettings, ui: SettingsUi) => { el: HTMLElement; dispose?(): void };

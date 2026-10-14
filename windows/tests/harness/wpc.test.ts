@@ -4,7 +4,7 @@ import type { IslandApi, ModuleDef } from "../../src/core/moduleApi";
 
 const probe: { api: IslandApi | null } = { api: null };
 
-vi.mock("../../src/modules/index", async () => {
+const loadModules = async () => {
   const { board } = await import("../../src/modules/board");
   const p: ModuleDef = {
     id: "alpha", label: "Alpha", defaultEnabled: true,
@@ -16,25 +16,25 @@ vi.mock("../../src/modules/index", async () => {
     },
   };
   return { MODULES: [board, p] };
-});
-vi.mock("../../src/modules/catalog", async () => {
+};
+const loadCatalog = async () => {
   const { buildCatalog } = await import("../../src/modules/resolve");
   return { MODULE_INFO: buildCatalog([
     { id: "board", label: "Painel", default: true, order: 0 },
     { id: "alpha", label: "Alpha", default: true, order: 1 },
   ], true) };
-});
+};
 
 import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
 import { miniBotCount } from "../../src/mochi/minibots";
 
 const tick = (ms: number) => vi.advanceTimersByTime(ms);
-beforeAll(() => {
+beforeAll(async () => {
   vi.useFakeTimers();
   document.body.innerHTML = '<div id="root"></div>';
   const island = new Island(document.getElementById("root")!);
-  Registry.init(island);
+  Registry.init(island, (await loadModules()).MODULES, (await loadCatalog()).MODULE_INFO);
   Registry.apply({ board: true, alpha: true });
   island.launch();
   tick(15_000);

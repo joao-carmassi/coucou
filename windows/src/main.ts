@@ -1,13 +1,14 @@
-// Entry point: boot the bridge, wire the island, start the greeting.
+// Boot sequence (entry file: boot/island.ts): boot the bridge, wire the island, start the greeting.
 
 import "./style";
 import { Bridge, IS_TAURI, onEvent } from "./core/bridge";
 import { Sound } from "./core/sound";
 import { State, type Settings } from "./core/state";
+import type { ModuleDef, ModuleInfo } from "./core/moduleApi";
 import { Registry } from "./core/registry";
 import { Island } from "./island/island";
 
-async function main() {
+export async function startIsland(modules: ModuleDef[], catalog: ModuleInfo[]) {
   const root = document.getElementById("root");
   if (!root) return;
 
@@ -18,7 +19,7 @@ async function main() {
     State.settings = { ...State.settings, ...boot.settings };
   }
   island.applySettings();
-  Registry.init(island);
+  Registry.init(island, modules, catalog);
   Registry.apply(boot?.modules ?? Registry.defaults(State.settings.modulesEnabled));
   await onEvent<Record<string, boolean>>("modules-changed", Registry.apply);
   if (boot && !boot.cursorPoll) island.followPageCursor();
@@ -70,5 +71,3 @@ async function main() {
     document.addEventListener("click", () => Sound.resume(), { once: true });
   }
 }
-
-void main();
