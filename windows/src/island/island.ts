@@ -372,8 +372,8 @@ export class Island implements IslandHost {
     if (this.botPress) {
       this.botPress = null;
       this.cancelBotHover();
-      // A Mochi with news to tell takes you to it (a module's followNews); any other gets his slap.
-      if (!Hooks.some("followNews")) this.engine.slap();
+      // A Mochi with news to tell takes you to it (a module's avatarClick); any other gets his slap.
+      if (!Hooks.some("avatarClick")) this.engine.slap();
     } else if (this.nudge) {
       const moved = this.nudge.moved;
       this.nudge = null;
@@ -605,7 +605,7 @@ export class Island implements IslandHost {
     if (this.botPress && down && Math.hypot(x - this.botPress.x, y - this.botPress.y) > 7) {
       this.botPress = null;
       this.cancelBotHover();
-      Hooks.all("mochiDrop"); // pulled out of the island: a module may carry him on (media: drop on a window)
+      Hooks.all("avatarPull"); // pulled out of the island: a module may carry him on
     }
     if (held) { this.ensureRunning(); return; } // a module drag owns the pointer: no hover or auto-close bookkeeping
 

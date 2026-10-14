@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Compact } from "../src/core/compact.ts";
 import { Avatar } from "../src/core/avatar.ts";
-import { Hooks, homeOf } from "../src/core/hooks.ts";
+import { Hooks, Services, homeOf } from "../src/core/hooks.ts";
 import { resolveEnabled } from "../src/core/moduleApi.ts";
 import { MODULE_INFO } from "../src/modules/catalog.ts";
 
@@ -84,4 +84,14 @@ test("homeOf: request > tab flagged home > first tab > empty", () => {
   assert.equal(homeOf(null, tabs), "b");
   assert.equal(homeOf(null, [{ view: "a" }, { view: "c" }]), "a");
   assert.equal(homeOf(null, []), "empty");
+});
+
+test("Services: several providers, removed on dispose, missing is empty", () => {
+  assert.deepEqual(Services.all("x.y"), []);
+  const a = Services.provide("x.y", 1), b = Services.provide("x.y", 2);
+  assert.deepEqual(Services.all("x.y"), [1, 2]);
+  a();
+  assert.deepEqual(Services.all("x.y"), [2]);
+  b();
+  assert.deepEqual(Services.all("x.y"), []);
 });

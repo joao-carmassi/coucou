@@ -1,5 +1,5 @@
 // Mochi pulled out of the island and dropped on a window: that window is captured into the inbox
-// and the Mídia list opens on it. The core only reports the pull (hook "mochiDrop") and the button
+// and the Mídia list opens on it. The core only reports the pull (hook "avatarPull") and the button
 // (overlay.cursor's `down`); the ghost, the release and the attach live here.
 
 import { h } from "../../views/dom";
@@ -46,7 +46,7 @@ export function armMochiDrop(api: IslandApi, ctl: MediaCtl): Disposer {
       .catch((err) => api.island.error(err));
   }
 
-  const off = api.provide("mochiDrop", () => {
+  const off = api.provide("avatarPull", () => {
     if (canvas) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     canvas = h("canvas", {

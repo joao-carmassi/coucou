@@ -5,6 +5,7 @@
 
 import { h, clear } from "../../views/dom";
 import { Up } from "./state";
+import { CLAUDE_SERVICE, type LaunchFile } from "../claude/api";
 import type { IslandApi, ViewContext, ViewHost } from "../../core/moduleApi";
 
 /** Dashed rounded rect drawn as SVG so the dashes can march like on macOS. */
@@ -32,7 +33,7 @@ export function ask(api: IslandApi) {
   // Wait for the background copy (if any), then launch the copy; ingest only if it never landed.
   void (Up.ingest ?? Promise.resolve())
     .catch(() => {})
-    .then(() => api.call("launchFile", Up.droppedFile!.path, !Up.ingested));
+    .then(() => api.use<LaunchFile>(CLAUDE_SERVICE.launchFile)?.(Up.droppedFile!.path, !Up.ingested));
 }
 
 export function buildUpload(): ViewHost {

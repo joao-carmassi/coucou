@@ -2,6 +2,7 @@
 // (settleRequest, afterRequest, pickSession, goToAlert, openClient, decide, answer, ...), now
 // working through the module API. One instance per module start; views reach it with claudeOf().
 
+import { CLAUDE_SERVICE, type LaunchFile } from "./api";
 import { Bridge } from "../../core/bridge";
 import { ClaudeBridge } from "./bridge";
 import type { BotStateName } from "../../core/layout";
@@ -329,8 +330,8 @@ export class Claude {
       api.listen("settings-changed", () => void api.timeout(() => store.present(), 0)),
       api.provide("homeView", () => this.home()),
       api.provide("keepAwake", () => this.awake()),
-      api.provide("openTarget", (id) => id === CLAUDE_ID && (this.openClient(), true)),
-      api.provide("launchFile", (path, ingest) => this.launchFile(path, ingest)),
+      api.provide("pillOpen", (id) => id === CLAUDE_ID && (this.openClient(), true)),
+      api.provide<LaunchFile>(CLAUDE_SERVICE.launchFile, (path, ingest) => this.launchFile(path, ingest)),
       // Focus can change under us (another module's pill): keep the avatar in step.
       onStateChange(() => this.publish()),
       onKeys(this),

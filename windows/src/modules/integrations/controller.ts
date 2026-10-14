@@ -4,7 +4,8 @@
 
 import { Bridge } from "../../core/bridge";
 import { type GithubData, type IntegrationUpdate, IntegrationsBridge } from "./bridge";
-import type { Disposer, HomeRequest, IslandApi, TaskCard, TaskNews } from "../../core/moduleApi";
+import type { Disposer, HomeRequest, IslandApi } from "../../core/moduleApi";
+import { CLAUDE_SERVICE, type TaskCard, type TaskNews } from "../claude/api";
 import { Sound } from "../../core/sound";
 import { State, type AgentTask } from "../../core/state";
 import { GITHUB, PROVIDERS, cleanups, info, rt, steps, type IntegrationInfo, type Provider } from "./store";
@@ -227,13 +228,13 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
     }),
     api.listen<IntegrationUpdate>("integration", handle),
     api.listen("secrets-changed", () => void refreshConfigured()),
-    api.provide("openTarget", openTarget),
-    api.provide("taskCard", taskCard),
-    api.provide("taskNews", taskNews),
+    api.provide("pillOpen", openTarget),
+    api.provide(CLAUDE_SERVICE.taskCard, taskCard),
+    api.provide(CLAUDE_SERVICE.taskNews, taskNews),
   ];
   if (isGithub) {
     offs.push(
-      api.provide("followNews", followNews),
+      api.provide("avatarClick", followNews),
       api.provide("homeView", homeView),
       // The panel's own look for Mochi (a run going) lasts while the panel is on screen.
       State.subscribe(() => {

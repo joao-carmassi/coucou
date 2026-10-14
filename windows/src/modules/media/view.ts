@@ -5,7 +5,7 @@
 
 import { h, svg, clear } from "../../views/dom";
 import { MediaBridge, type MediaItem } from "./bridge";
-import { Hooks } from "../../core/hooks";
+import { CLAUDE_SERVICE, type LaunchFile } from "../claude/api";
 import type { Disposer, IslandApi, ViewContext, ViewHost } from "../../core/moduleApi";
 import { ICONS } from "./icons";
 
@@ -144,7 +144,8 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
     const entry = (label: string, fn: () => Promise<void> | void) =>
       menu.append(h("button", { class: "media-menu-row", text: label, onclick: run(fn) }));
     // Only with the Claude module on (it provides this hook).
-    if (Hooks.has("launchFile")) entry("Abrir no Claude", async () => void (await api.call("launchFile", item.path, true)));
+    const launch = api.use<LaunchFile>(CLAUDE_SERVICE.launchFile);
+    if (launch) entry("Abrir no Claude", async () => void (await launch(item.path, true)));
     entry("Abrir", () => MediaBridge.open(item.path));
     entry("Abrir com…", () => MediaBridge.openWith(item.path));
     entry("Mostrar na pasta", () => MediaBridge.reveal(item.path));

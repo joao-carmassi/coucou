@@ -11,6 +11,7 @@ import { createMiniBot, pruneMiniBots } from "../../../mochi/minibots";
 import type { AgentTask } from "../../../core/state";
 import { hasTarget, type Claude } from "../claude";
 import { claudeSettings } from "../store";
+import { CLAUDE_SERVICE, askPill, type TaskCardOf, type TaskNewsOf } from "../api";
 import { ICONS } from "../../../views/icons";
 import { COLOR } from "../../../views/palette";
 import { CARD_AIR_MIN, fittedHeight } from "../fit";
@@ -118,7 +119,7 @@ export function btn(
 /** The two buttons of a card that tells a module's news instead of a session's result. */
 function newsActions(c: Claude): HTMLElement {
   return h("div", { class: "actions" },
-    btn("Abrir", "primary", () => void c.api.call("followNews")),
+    btn("Abrir", "primary", () => void c.api.call("avatarClick")),
     // OK only folds the island: the news stays on the pill until it is opened or gets old.
     btn("OK", "secondary", () => c.api.island.close()),
   );
@@ -133,7 +134,7 @@ function tellNews(
   c: Claude, task: AgentTask | null, who: HTMLElement, title: HTMLElement, facts: HTMLElement,
   hidden: HTMLElement[], newsRow: HTMLElement,
 ): boolean {
-  const news = task ? c.api.call("taskNews", task.id) : undefined;
+  const news = task ? askPill(c.api.useAll<TaskNewsOf>(CLAUDE_SERVICE.taskNews), task.id) : undefined;
   for (const el of hidden) el.style.display = news ? "none" : "";
   newsRow.style.display = news ? "" : "none";
   facts.style.display = news ? "" : "none";
@@ -237,7 +238,7 @@ function buildOverview(c: Claude, ctx: ViewContext): ViewHost {
       onclick: () => {
         const id = State.focusTask?.id;
         if (id === CLAUDE_ID) c.openClient();
-        else if (id) c.api.call("openTarget", id);
+        else if (id) c.api.call("pillOpen", id);
       },
     },
     svg(ICONS.arrowUpRight, 8),
@@ -348,7 +349,7 @@ function buildOverview(c: Claude, ctx: ViewContext): ViewHost {
         syncNow(session);
       } else if (task) {
         // A card a module drew for its own pill (integrations); it says when it must be redrawn.
-        const own = c.api.call("taskCard", task.id);
+        const own = askPill(c.api.useAll<TaskCardOf>(CLAUDE_SERVICE.taskCard), task.id);
         const key = [
           task.id, task.state, store.agentSteps.get(task.id)?.join("|"), own?.key,
           // The idle Claude card's button follows Settings ("Idle button opens").

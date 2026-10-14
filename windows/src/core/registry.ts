@@ -4,9 +4,9 @@
 import { Avatar } from "./avatar";
 import { Bridge, command, onEvent } from "./bridge";
 import { Compact } from "./compact";
-import { Hooks, onMode } from "./hooks";
+import { Hooks, Services, onMode } from "./hooks";
 import { resolveEnabled } from "./moduleApi";
-import type { AvatarSignal, Disposer, IslandApi, IslandHost, ModuleDef, StatusLine } from "./moduleApi";
+import type { AvatarSignal, Disposer, IslandApi, IslandHooks, IslandHost, ModuleDef, StatusLine } from "./moduleApi";
 import { State } from "./state";
 import { MODULE_INFO } from "../modules/catalog";
 import { MODULES } from "../modules/index";
@@ -102,7 +102,10 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
       redraw: () => host.redraw(),
       overlay: (o) => scope.add(host.addOverlay(o)),
     },
-    provide: (hook, fn) => scope.add(Hooks.provide(hook, fn)),
+    provide: ((key: string, impl: unknown) =>
+      scope.add(key.includes(".") ? Services.provide(key, impl) : Hooks.provide(key as keyof IslandHooks, impl as never))) as IslandApi["provide"],
+    use: <T>(key: string) => Services.all(key)[0] as T | undefined,
+    useAll: <T>(key: string) => Services.all(key) as T[],
     call: (hook, ...args) => Hooks.first(hook, ...args),
     onVisibility: (fn) => scope.add(onMode(fn)),
   };

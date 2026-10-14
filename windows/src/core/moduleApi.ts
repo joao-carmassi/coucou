@@ -44,20 +44,16 @@ export interface Overlay {
   place?(islandW: number): void;
   leaving?(nextView: string): void;
 }
-/** A card a module draws for a pill it owns, in the Claude overview's left card; `key` changes when it must be redrawn. */
-export interface TaskCard { key: string; build(): HTMLElement }
-/** News a module's pill tells: the finished and error cards show it in place of a session's result. */
-export interface TaskNews { says: string; title: string; facts: Node[] }
 export interface HomeRequest { view: string; pin: boolean; priority: number }
 export interface IslandHooks {
   homeView(): HomeRequest | null;
   keepAwake(): boolean;
-  openTarget(taskId: string): boolean;
-  followNews(): boolean;
-  mochiDrop(): void;
-  launchFile(path: string, ingest: boolean): Promise<void>;
-  taskCard(taskId: string): TaskCard | null;
-  taskNews(taskId: string): TaskNews | null;
+  /** The pill `taskId` was opened (its arrow); true when a module took it. */
+  pillOpen(taskId: string): boolean;
+  /** Mochi was clicked; true when a module took the click (no slap). */
+  avatarClick(): boolean;
+  /** Mochi was pulled out of the island. */
+  avatarPull(): void;
 }
 
 /** What Island lends the registry. */
@@ -102,6 +98,12 @@ export interface IslandApi {
     note(text: string): void; error(err: unknown): void; pendingAlert(): boolean; layoutHint(): void; redraw(): void; overlay(o: Overlay): Disposer;
   };
   provide<K extends keyof IslandHooks>(hook: K, fn: IslandHooks[K]): Disposer;
+  /** Offers a service under a namespaced key ("<module>.<name>"; the types live in that module's api.ts). Removed when this module stops. */
+  provide<T>(service: `${string}.${string}`, impl: T): Disposer;
+  /** The first provider of a service, or undefined: a missing service means the feature is absent. */
+  use<T>(service: `${string}.${string}`): T | undefined;
+  /** Every provider of a service. */
+  useAll<T>(service: `${string}.${string}`): T[];
   call<K extends keyof IslandHooks>(hook: K, ...args: Parameters<IslandHooks[K]>): ReturnType<IslandHooks[K]> | undefined;
   onVisibility(fn: (mode: IslandMode, prev: IslandMode) => void): Disposer;
 }

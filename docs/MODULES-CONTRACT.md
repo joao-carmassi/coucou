@@ -116,11 +116,11 @@ export interface StatusLine { priority: number; text: string; icon?: string; ttl
 export interface AvatarSignal { state: BotStateName; priority: number; emote?: BotEmoteName; ttlMs?: number }
 export interface ViewHost { el: HTMLElement; sync(): void; focus?(): void; tick?(nowMs: number): void; readonly height?: number }
 export interface ViewContext { actions: ViewActions; onResize(): void; api: IslandApi }
-export interface ViewDef { name: string; layout: ViewLayout; tabOf?: string; keyboard?: boolean; build(ctx: ViewContext): ViewHost }
-export interface TabDef { view: string; title: string; icon(): Element; order: number }
+export interface ViewDef { name: string; layout: ViewLayout; tabOf?: string; lightsHome?: true; keyboard?: boolean; build(ctx: ViewContext): ViewHost }
+export interface TabDef { view: string; title: string; icon(): Element; order: number; home?: true }
 export interface Overlay { el: HTMLElement; active(): boolean; frame(nowMs: number): boolean; cursor?(x:number,y:number):void; place?(islandW:number):void; leaving?(nextView:string):void }
 export interface HomeRequest { view: string; pin: boolean; priority: number }
-export interface IslandHooks { homeView(): HomeRequest | null; keepAwake(): boolean; openTarget(taskId: string): boolean; followNews(): boolean; mochiDrop(): void; launchFile(path: string, ingest: boolean): Promise<void> }
+export interface IslandHooks { homeView(): HomeRequest | null; keepAwake(): boolean; pillOpen(taskId: string): boolean; avatarClick(): boolean; avatarPull(): void }
 export interface IslandHost { // what Island lends the registry
   readonly actions: ViewActions; open(view: string, pinMs?: number): void; hide(): void; collapse(): void; reveal(): void;
   setView(view: string): void; note(text: string): void; error(err: unknown): void; pendingAlert(): boolean; mouseInside(): boolean;
@@ -139,11 +139,14 @@ export interface IslandApi {
     keepAwake(pred: () => boolean): Disposer; isVisible(): boolean; mode(): IslandMode; fsmState(): FsmState; mouseInside(): boolean; view(): string;
     note(text: string): void; error(err: unknown): void; pendingAlert(): boolean; layoutHint(): void; redraw(): void; overlay(o: Overlay): Disposer };
   provide<K extends keyof IslandHooks>(hook: K, fn: IslandHooks[K]): Disposer;
+  provide<T>(service: `${string}.${string}`, impl: T): Disposer; // services: namespaced key, removed when the module stops
+  use<T>(service: `${string}.${string}`): T | undefined;          // first provider; undefined = feature absent
+  useAll<T>(service: `${string}.${string}`): T[];
   call<K extends keyof IslandHooks>(hook: K, ...args: Parameters<IslandHooks[K]>): ReturnType<IslandHooks[K]> | undefined;
   onVisibility(fn: (mode: IslandMode, prev: IslandMode) => void): Disposer;
 }
 export interface ModuleInfo { id: string; label: string; defaultEnabled: boolean; requires?: string[] }
-export interface ModuleDef extends ModuleInfo { views?: ViewDef[]; tab?: TabDef; settings?: () => HTMLElement; start(api: IslandApi): Disposer | void }
+export interface ModuleDef extends ModuleInfo { views?: ViewDef[]; tabs?: TabDef[]; settings?: () => HTMLElement; start(api: IslandApi): Disposer | void }
 export function resolveEnabled(catalog: readonly ModuleInfo[], stored: Readonly<Record<string, boolean>>): Record<string, boolean> {
   const out: Record<string, boolean> = {};
   for (const m of catalog) out[m.id] = (stored[m.id] ?? m.defaultEnabled) && (m.requires ?? []).every((r) => out[r] === true);
@@ -173,7 +176,8 @@ export function resolveEnabled(catalog: readonly ModuleInfo[], stored: Readonly<
 - `setMode`: call `emitMode(mode, prev)` at the exact place where modules used to hook (before `updateWindowCollapsed`/`animateGeometry`).
 - Frame loop: `busy` also includes `overlays.some(o => o.frame(now))`; draws overlays; `onCursor` forwards to `overlay.cursor`.
 - `setView`/`expand`: guard for an unregistered view (log, fall back to `State.defaultView()`); `addView` removes the view and returns to default if it is on screen.
-- Header (`buildHeader` in views.ts): tabs come from `setTabs(TabDef[])`; Home tab is lit for `overview`/`empty` and for any view whose `tabOf` is `"overview"`.
+- Header (`buildHeader` in views.ts): gear + sound + the tabs from `setTabs(TabDef[])`; no built-in Home. A tab is lit when `State.view === tab.view` or the view declares `tabOf: <tab.view>` or `lightsHome` (lights the tab flagged `home`).
+- Home (`homeOf` in core/hooks.ts, `State.defaultView()`): strongest `homeView` request, else the tab flagged `home`, else the first tab by `order`, else the core `empty` view (also the only layout fallback).
 - `main.ts`: `Registry.init(island); Registry.apply(boot?.modules ?? Registry.defaults(State.settings.modulesEnabled)); await onEvent("modules-changed", Registry.apply);`
 - Settings window (`settings/main.ts`): a "Módulos" section with one toggle per `MODULE_INFO`; a dependent is disabled and labelled "Requer <label>" while its requirement is off; writes `modulesEnabled`; re-renders on `modules-changed`.
 
@@ -255,3 +259,17 @@ After M1 (bridge split) the comment-only warnings dropped 99 -> 56 (findings unc
 - `src/main.ts` imports `./style` before anything that reaches `modules/index`, so module sheets land AFTER the shared ones (needed for ties such as `.sess-newbtn` vs `.btn`).
 - Inter-module order = the import order in `modules/index.ts` (claude, upload, integrations, media, timer, voice), NOT the catalog order. Sheets that were interleaved before (upload between claude chat and panel; integrations between claude panel and claude.css) now follow all claude sheets; checked: no tie between rules that can hit the same element.
 - The settings window must never import a module `index.ts` (it would pull the island CSS: `html,body{overflow:hidden}`). It loads `src/modules/settings.ts` (`SETTINGS_SECTIONS`, keyed by module id); each module's `settings.css` is imported from its `settings.ts`. `ModuleDef.settings` was removed.
+
+## Hooks and services (M3/M4)
+
+Core hooks (generic, the island calls them): `homeView`, `keepAwake`, `pillOpen(taskId)` (a pill's arrow), `avatarClick()` (Mochi clicked; true = a module took it, no slap), `avatarPull()` (Mochi pulled out of the island).
+
+Services are module-to-module and invisible to the core: `api.provide("<module>.<name>", impl)`, `api.use<T>(key)` (first provider) and `api.useAll<T>(key)`. Keys and types live ONLY in the owning module's `api.ts` (types only; consumers `import type`). They are dropped when the provider stops; a consumer treats `undefined` as "feature absent".
+
+| Key | Provider | Consumer | Type |
+|---|---|---|---|
+| `claude.launchFile` | claude | media ("Abrir no Claude" entry), upload | `(path, ingest) => Promise<void>` |
+| `claude.taskCard` | each integration, for its own pill | claude overview (first non-null) | `(taskId) => TaskCard \| null` |
+| `claude.taskNews` | each integration, for its own pill | claude finished/error cards | `(taskId) => TaskNews \| null` |
+
+`taskCard`/`taskNews` use the claude namespace because claude owns the slot; the providers are the many integrations, so lookups are lazy and survive claude restarts. Without claude, nobody asks and integrations show no card.

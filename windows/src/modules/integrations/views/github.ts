@@ -2095,7 +2095,7 @@ export function buildGithub(ctx: ViewContext): ViewHost {
     openSettingsWindow: ctx.actions.openSettingsWindow,
     emote: (e: BotEmoteName) => api.avatar.emote(e),
     tintMochi: (color: string | null) => api.avatar.tint(color),
-    followNews: () => api.call("followNews"),
+    followNews: () => api.call("avatarClick"),
     /** The view's state for Mochi while it is up: a signal below a session's own activity. */
     look: (state: BotStateName | null) => api.avatar.publish(state ? { state, priority: 25 } : null),
   };

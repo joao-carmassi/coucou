@@ -48,6 +48,18 @@ export const Hooks = {
   },
 };
 
+const services = new Map<string, Set<unknown>>();
+/** Typed by the module that owns the key (its api.ts); the core only stores them. */
+export const Services = {
+  provide(key: string, impl: unknown): Disposer {
+    let set = services.get(key);
+    if (!set) services.set(key, (set = new Set()));
+    set.add(impl);
+    return () => void set.delete(impl);
+  },
+  all: (key: string): unknown[] => [...(services.get(key) ?? [])],
+};
+
 /** Home: the strongest module request, else the tab flagged `home`, else the first tab (tabs come sorted by order), else the empty card. */
 export function homeOf(home: HomeRequest | null, tabs: { view: string; home?: true }[]): string {
   return home?.view ?? tabs.find((t) => t.home)?.view ?? tabs[0]?.view ?? "empty";
