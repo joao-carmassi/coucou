@@ -12,6 +12,3 @@ export const Up = {
   /** The background inbox copy in flight, so the choose step waits for it instead of copying twice. */
   ingest: null as Promise<{ name: string; path: string }> | null,
 };
-/** The hold on the choose card: taken when it comes up, dropped by the choice (launch or cancel). */
-export const chooseHold: { off: (() => void) | null } = { off: null };
-export const concludeChoose = () => { chooseHold.off?.(); chooseHold.off = null; };

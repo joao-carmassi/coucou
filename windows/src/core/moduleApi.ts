@@ -172,9 +172,10 @@ export interface IslandApi {
     /** Navigation: unfolds the island on `view`. It never pins; to hold the island open use `request`. */
     open(view: string): void;
     /**
-     * Marks `view` as an unfinished task: when the island next reopens it lands there instead of on the home view.
-     * Released by the disposer, by this module stopping, or after the view goes unused for `idleMs` (default: the user's setting).
-     * It never pins the island and never opens it.
+     * Sticky focus for a running task: every reopen lands on `view` instead of the home view, however long the island stayed closed.
+     * Released by the disposer (call it when the task is over, or from an action that should end the focus), by this module stopping,
+     * by the user picking the home view, or, only when `idleMs` is given, after the view goes unseen that long.
+     * It beats the implicit focus (the last view left, kept for the user's focus time). It never pins the island and never opens it.
      */
     hold(view: string, opts?: { idleMs?: number }): Disposer;
     /**

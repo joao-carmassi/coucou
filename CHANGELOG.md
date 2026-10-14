@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.3
+
+- New focus model. Implicit focus for every tab (core, no module code): leaving a view (tab change, or the island leaving `expanded`) remembers it; reopening within `focusHoldMinutes` (default 1) lands on it unless it is the home view. Unknown views are skipped; `0` turns it off.
+- `api.island.hold` is now sticky: no time expiry (only with `opts.idleMs`); it ends by its disposer, the module stopping, or the user clicking the home tab. A live sticky hold beats the implicit last view.
+- Focus is lost only by the home tab (clears implicit focus and all holds) or by the focus time (implicit focus only). Actions no longer drop it: removed the release-on-action from sessions (Retomar, Focar, Nova sessão), upload choose, the GitHub panel and media (Abrir, dblclick). Those modules lost their browsing holds; only the timer keeps a sticky hold (released when it finishes or is cancelled). A module can still release from an action by calling its hold's disposer.
+- Settings: "Voltar à aba" (minutes after closing the island; 0 = always home).
+
 ## 0.8.2
 
 - Clicking the home tab clears all task holds (home is the default).

@@ -124,14 +124,7 @@ interface DayPick extends Pending<GithubDay> {
  * GitHub's own site stays the last place to go rather than the first.
  */
 let stack: Screen[] = [];
-/** An open sheet is an unfinished read: the island reopens on the panel until it is closed or sent to the browser. */
-let sheetHold: Disposer | null = null;
-function syncHold(on = stack.length > 0) {
-  if (on) { sheetHold?.(); sheetHold = rt.api?.island.hold("github") ?? null; }
-  else { sheetHold?.(); sheetHold = null; }
-}
-/** Sending the user to the browser concludes the sheet. */
-const openUrl = (url: string) => { syncHold(false); return App.openUrl(url); };
+const openUrl = (url: string) => App.openUrl(url);
 const top = (): Screen | null => stack[stack.length - 1] ?? null;
 let day: DayPick | null = null;
 
@@ -211,7 +204,6 @@ async function load<T>(target: Pending<T>, isCurrent: () => boolean, fetch: () =
 function push(screen: Screen) {
   rt.api?.sound.play("blip");
   stack.push(screen);
-  syncHold();
   motion = "deeper";
   touch();
 }
@@ -222,7 +214,6 @@ function popTo(depth: number) {
     const left = stack.pop();
     if (left) stopSearching(left);
   }
-  syncHold();
   motion = "back";
   touch();
 }
@@ -230,7 +221,6 @@ function popTo(depth: number) {
 function clearStack() {
   for (const screen of stack) stopSearching(screen);
   stack = [];
-  syncHold();
 }
 
 function loadProject(screen: ProjectScreen, force: boolean) {
@@ -2636,7 +2626,6 @@ export function buildGithub(ctx: ViewContext): ViewHost {
 export function resetGithub() {
   for (const screen of stack) searchingFor === screen && (searchingFor = null);
   stack = [];
-  sheetHold = null;
   day = null;
   motion = null;
   stamp = 0;

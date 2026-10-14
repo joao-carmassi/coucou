@@ -1,5 +1,5 @@
-// Task holds adopted by the modules (sessions list, upload choice, GitHub sheet), driven through the real island:
-// reopening by every path (click outside, auto-close, compact hide; hover/click/hotkey) lands on the held view.
+// Implicit focus on the modules' views (no hold call), driven through the real island: reopening by every path
+// (click outside, auto-close, compact hide; hover/click/hotkey) lands on the last tab; actions do not drop it.
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { dummyProbe } from "./dummyModule";
 
@@ -36,7 +36,7 @@ const loadCatalog = async () => {
 import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
 import { State, DEFAULT_SETTINGS } from "../../src/core/state";
-import { Holds } from "../../src/core/holds";
+import { Holds, Last } from "../../src/core/holds";
 
 let island: Island;
 const tick = (ms: number) => vi.advanceTimersByTime(ms);
@@ -61,11 +61,13 @@ describe("defaults", () => {
   it("focus hold is one minute", () => expect(DEFAULT_SETTINGS.focusHoldMinutes).toBe(1));
 });
 
-describe("sessions hold", () => {
-  const enter = async () => { dummyProbe.api!.island.open("sessions"); tick(10); await settle(); };
-  const leave = async () => { dummyProbe.api!.island.open("dummy-a"); tick(10); await settle(); folded(); Holds.clear(); };
+const clearAll = () => { Holds.clear(); Last.clear(); };
 
-  it("taken on enter; survives click-outside and reopen", async () => {
+describe("sessions: implicit focus", () => {
+  const enter = async () => { dummyProbe.api!.island.open("sessions"); tick(10); await settle(); };
+  const leave = async () => { dummyProbe.api!.island.open("dummy-a"); tick(10); await settle(); folded(); clearAll(); };
+
+  it("survives click-outside and reopen", async () => {
     await enter();
     folded();
     reopen();
@@ -86,49 +88,30 @@ describe("sessions hold", () => {
     await leave();
   });
 
-  it("reopens again after being left a second time (touched on leave)", async () => {
-    await enter();
-    folded(); reopen(); folded(); reopen();
-    expect(lands()).toBe("sessions");
-    await leave();
-  });
-
-  it("expires one minute after the view left the screen", async () => {
+  it("lands within the focus time, goes home after it", async () => {
     await enter();
     folded();
+    vi.setSystemTime(Date.now() + 59_000);
+    reopen();
+    expect(lands()).toBe("sessions");
     vi.setSystemTime(Date.now() + 61_000);
     reopen();
     expect(lands()).toBe(State.defaultView());
     await leave();
   });
 
-  it("released by opening an old session (Retomar)", async () => {
+  it("actions (Retomar, Nova sessão) no longer drop the focus", async () => {
     await enter();
     document.querySelector<HTMLElement>(".sess-act")!.click();
     await settle(50);
-    folded();
-    reopen();
-    expect(lands()).toBe(State.defaultView());
-    await leave();
-  });
-
-  it("held again on the next visit after a conclusion", async () => {
-    await enter();
+    document.querySelector<HTMLElement>(".sess-newbtn")!.click();
+    await settle(50);
     folded(); reopen();
     expect(lands()).toBe("sessions");
     await leave();
   });
 
-  it("released by 'Nova sessão'", async () => {
-    await enter();
-    document.querySelector<HTMLElement>(".sess-newbtn")!.click();
-    await settle(50);
-    folded(); reopen();
-    expect(lands()).toBe(State.defaultView());
-    await leave();
-  });
-
-  it("the claude hotkey with nothing pending reopens a folded island on the held view", async () => {
+  it("the claude hotkey with nothing pending reopens a folded island on it", async () => {
     await enter();
     folded();
     handlers["go-to-alert"]?.({ payload: null });
@@ -138,32 +121,29 @@ describe("sessions hold", () => {
   });
 });
 
-describe("home tab clears holds", () => {
-  it("clicking the home tab drops the focus; a new hold still works", async () => {
+describe("home tab clears focus", () => {
+  it("clicking the home tab drops the implicit focus; a sticky hold too", async () => {
+    const release = dummyProbe.api!.island.hold("github");
     dummyProbe.api!.island.open("sessions"); tick(10); await settle();
-    expect(State.view).toBe("sessions");
     const home = State.tabs.find((t) => t.view === State.defaultView())!;
     [...document.querySelectorAll<HTMLElement>("#header .tabs button")].find((b) => b.title === home.title || b.textContent === home.title)!.click();
     tick(10);
     folded(); reopen();
     expect(lands()).toBe(State.defaultView());
-    const release = dummyProbe.api!.island.hold("sessions");
-    folded(); reopen();
-    expect(lands()).toBe("sessions");
-    release(); Holds.clear();
+    release(); clearAll();
   });
 
-  it("automatic landing on home keeps the holds", async () => {
+  it("automatic landing on home keeps a sticky hold", async () => {
     const release = dummyProbe.api!.island.hold("sessions");
     dummyProbe.api!.island.open("dummy-a"); tick(10);
     dummyProbe.api!.island.setView(State.defaultView()); tick(10);
     folded(); reopen();
     expect(lands()).toBe("sessions");
-    release(); Holds.clear();
+    release(); clearAll();
   });
 });
 
-describe("upload choice hold", () => {
+describe("upload choose and github sheet: no hold of their own, actions keep focus", () => {
   const drop = async () => {
     handlers["file-drag"]({ payload: { type: "enter" } });
     tick(50);
@@ -171,37 +151,23 @@ describe("upload choice hold", () => {
     await settle(8000);
   };
 
-  it("held while the choose card waits; released by cancel", async () => {
+  it("choose card: cancel goes home on its own (setView home), no stale hold", async () => {
     await drop();
-    expect(State.view).toBe("choose");
-    folded(); reopen();
     expect(State.view).toBe("choose");
     press("Cancelar");
     tick(10);
+    clearAll();
     folded(); reopen();
     expect(lands()).toBe(State.defaultView());
   });
 
-  it("released by choosing the action", async () => {
-    await drop();
-    expect(State.view).toBe("choose");
-    press("Abrir no Claude Code");
-    await settle(50);
-    folded(); reopen();
-    expect(lands()).toBe(State.defaultView());
-  });
-});
-
-describe("github sheet hold", () => {
-  it("held while a sheet is open; released when the panel starts over", async () => {
+  it("github panel: implicit focus brings it back, opening in the browser does not drop it", async () => {
     const { enterGithubPanel } = await import("../../src/modules/integrations/views/github");
     dummyProbe.api!.island.open("github"); tick(10);
     enterGithubPanel({ target: { kind: "project", repo: "a/b" }, label: "b", url: "https://github.com/a/b" });
     await settle();
     folded(); reopen();
-    expect(State.view).toBe("github");
-    enterGithubPanel();
-    folded(); reopen();
-    expect(lands()).toBe(State.defaultView());
+    expect(lands()).toBe("github");
+    clearAll();
   });
 });

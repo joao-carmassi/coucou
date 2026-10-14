@@ -104,9 +104,6 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
   const el = panel({ cls: "media-view", side: { title: "Mídia", sub: "capturas e arquivos" }, main });
 
   menu.style.display = "none";
-  // Held while the view is on screen with something in it; releasing it lets a reopened island go home.
-  let release: (() => void) | null = null;
-  const unhold = () => { release?.(); release = null; };
   const closeMenu = () => (menu.style.display = "none");
   grid.addEventListener("scroll", closeMenu, { passive: true });
 
@@ -129,7 +126,6 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
       error = String(err).replace(/^Error:\s*/, "");
     }
     loading = false;
-    if (!items.length) unhold();
     draw();
   }
 
@@ -140,10 +136,9 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
       closeMenu();
       Promise.resolve(fn()).catch(fail);
     };
-    const opening = (fn: () => Promise<void> | void) => run(() => { unhold(); return fn(); });
     clear(menu);
     const entry = (label: string, fn: () => Promise<void> | void) =>
-      menu.append(h("button", { class: "media-menu-row", text: label, onclick: (label === "Remover da lista" ? run : opening)(fn) }));
+      menu.append(h("button", { class: "media-menu-row", text: label, onclick: run(fn) }));
     // Only with the Claude module on (it provides this hook).
     const launch = api.use<LaunchFile>(CLAUDE_SERVICE.launchFile);
     if (launch) entry("Abrir no Claude", async () => void (await launch(item.path, true)));
@@ -244,7 +239,7 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
         e.preventDefault();
         openMenu(item, e.clientX, e.clientY);
       });
-      cell.addEventListener("dblclick", () => { unhold(); void MediaBridge.open(item.path).catch(fail); });
+      cell.addEventListener("dblclick", () => { void MediaBridge.open(item.path).catch(fail); });
       if (item.name === ctl.fresh) {
         cell.classList.add("fresh");
         ctl.fresh = null;
@@ -265,8 +260,7 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
     () => { lazy.disconnect(); queue.length = 0; },
   );
 
-  // sync() only runs while the view is shown, so leaving it is noticed here. The hold is kept (it ends
-  // when the task concludes or expires); the next visit takes a fresh one.
+  // sync() only runs while the view is shown, so leaving it is noticed here.
   api.island.onChange(() => {
     if (!wasOn || api.island.view() === "media") return;
     wasOn = false;
@@ -277,7 +271,6 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
     el,
     sync() {
       const on = api.island.view() === "media";
-      if (on && !wasOn) { release?.(); release = api.island.hold("media"); } // anew: the last may have expired
       if (on && (!wasOn || dirty)) void load();
       wasOn = on;
     },

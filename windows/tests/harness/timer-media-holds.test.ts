@@ -1,4 +1,4 @@
-// Timer and Mídia take a task hold (api.island.hold) while a task is on, and release it when it ends.
+// Timer keeps a sticky hold while a task is on (released when it ends); Mídia relies on the implicit focus only.
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { dummyProbe } from "./dummyModule";
 
@@ -25,6 +25,7 @@ const loadCatalog = async () => {
 import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
 import { State } from "../../src/core/state";
+import { Holds, Last } from "../../src/core/holds";
 
 let island: Island;
 const tick = (ms: number) => vi.advanceTimersByTime(ms);
@@ -53,16 +54,23 @@ beforeAll(async () => {
 });
 afterAll(() => vi.useRealTimers());
 
-describe("timer hold", () => {
-  it("held from ready to cancel; reopen lands on the timer", () => {
+const goHome = () => { Holds.clear(); Last.clear(); };
+
+describe("timer sticky hold", () => {
+  it("held from ready to cancel; reopen lands on the timer even after 10 minutes", () => {
     api().island.open("timer"); tick(10);
     click("button", "5 min");
     expect(landsOn("timer")).toBe(true);
     click("button", "Iniciar");
-    expect(landsOn("timer")).toBe(true);
+    api().island.open("dummy-a"); tick(10); folded();
+    vi.setSystemTime(Date.now() + 10 * 60_000);
+    reopen();
+    expect(State.view).toBe("timer");
+    folded();
     api().island.open("timer"); tick(10);
     click("button", "Cancelar");
     folded();
+    goHome();
     reopen();
     expect(State.view).toBe(State.defaultView());
     folded();
@@ -71,71 +79,68 @@ describe("timer hold", () => {
   it("finishing the countdown releases it", () => {
     api().island.open("timer"); tick(10);
     click("button", "5 min"); click("button", "Iniciar");
+    api().island.open("dummy-a"); tick(10);
     tick(5 * 60_000 + 10);
     folded();
+    Last.clear();
     reopen();
     expect(State.view).toBe(State.defaultView());
     folded();
   });
-});
 
-describe("timer hold after expiry", () => {
-  it("retaken on the next visit; released again on cancel", () => {
+  it("the home tab clears it", () => {
     api().island.open("timer"); tick(10);
     click("button", "5 min");
-    api().island.setView("dummy-a"); tick(1100);
-    folded();
-    vi.setSystemTime(Date.now() + 61_000); // hold expired while unseen
-    reopen();
-    expect(State.view).toBe(State.defaultView());
-    api().island.open("timer"); tick(10); // visit: fresh hold, noticed at once
-    expect(landsOn("timer")).toBe(true);
-    api().island.open("timer"); tick(10);
-    click("button", "Cancelar");
+    const home = State.tabs.find((t) => t.view === State.defaultView())!;
+    [...document.querySelectorAll<HTMLElement>("#header .tabs button")].find((b) => b.title === home.title || b.textContent === home.title)!.click();
+    tick(10);
     folded(); reopen();
     expect(State.view).toBe(State.defaultView());
     folded();
+    api().island.open("timer"); tick(10);
+    click("button", "Cancelar");
+    goHome();
+    folded();
   });
 });
 
-describe("media hold", () => {
+describe("media: implicit focus only", () => {
   const openMedia = async () => { api().island.open("media"); tick(10); await vi.advanceTimersByTimeAsync(10); };
 
-  it("held while the view is on; reopen lands on media", async () => {
+  it("close and reopen within 59 s lands on Mídia with no hold call; after 61 s, home", async () => {
     await openMedia();
-    expect(landsOn("media")).toBe(true);
-  });
-
-  it("leaving the view keeps the hold", async () => {
-    await openMedia();
-    api().island.setView("dummy-a"); tick(10);
-    expect(landsOn("media")).toBe(true);
-  });
-
-  it("dblclick open releases it", async () => {
-    await openMedia();
-    document.querySelector<HTMLElement>(".media-cell")!.dispatchEvent(new Event("dblclick", { bubbles: true }));
     folded();
+    vi.setSystemTime(Date.now() + 59_000);
+    reopen();
+    expect(State.view).toBe("media");
+    folded();
+    vi.setSystemTime(Date.now() + 61_000);
     reopen();
     expect(State.view).toBe(State.defaultView());
     folded();
+    goHome();
   });
 
-  it("'Remover da lista' keeps it; 'Abrir' releases it", async () => {
-    api().island.setView("dummy-a"); tick(1100); // the view syncs while open
+  it("Timer -> Mídia -> close -> reopen within a minute lands on Mídia", async () => {
+    api().island.open("timer"); tick(10);
     await openMedia();
-    const menu = () => document.querySelector<HTMLElement>(".media-cell")!.dispatchEvent(new Event("contextmenu", { cancelable: true, bubbles: true }));
-    menu();
-    click(".media-menu-row", "Remover da lista");
-    await vi.advanceTimersByTimeAsync(10);
-    expect(landsOn("media")).toBe(true);
+    folded();
+    reopen();
+    expect(State.view).toBe("media");
+    folded();
+    goHome();
+  });
+
+  it("Abrir and dblclick no longer drop the focus", async () => {
     await openMedia();
-    menu();
+    document.querySelector<HTMLElement>(".media-cell")!.dispatchEvent(new Event("dblclick", { bubbles: true }));
+    document.querySelector<HTMLElement>(".media-cell")!.dispatchEvent(new Event("contextmenu", { cancelable: true, bubbles: true }));
     click(".media-menu-row", "Abrir");
     await vi.advanceTimersByTimeAsync(10);
     folded();
     reopen();
-    expect(State.view).toBe(State.defaultView());
+    expect(State.view).toBe("media");
     folded();
+    goHome();
   });
 });

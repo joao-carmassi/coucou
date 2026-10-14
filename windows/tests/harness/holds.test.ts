@@ -26,7 +26,7 @@ const loadCatalog = async () => {
 import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
 import { State } from "../../src/core/state";
-import { Holds } from "../../src/core/holds";
+import { Holds, Last } from "../../src/core/holds";
 import { Compact } from "../../src/core/compact";
 
 let island: Island;
@@ -48,54 +48,117 @@ afterAll(() => vi.useRealTimers());
 const folded = () => { island.collapse(); tick(10); };
 /** Reopen with no explicit target, as a click on the compact island does. */
 const reopen = () => { island.fsm.forceHome(); tick(10); };
-/** Hold `view`, open it, fold: the state a user leaves a task in. */
-const leaveOn = (view: string) => { const off = a().island.hold(view); b().island.open(view); tick(10); folded(); return off; };
+/** Visit `view` with the island open, then fold it: the state a user leaves a tab in. */
+const visit = (view: string) => { b().island.open(view); tick(10); folded(); };
+const lastHome = () => { Holds.clear(); Last.clear(); };
 
-describe("task holds", () => {
-  it("reopen lands on the held view; releasing goes home", () => {
-    const off = leaveOn("dummy-b");
+describe("implicit focus (no hold call)", () => {
+  it("reopen within the focus time lands on the last tab; after it, home", () => {
+    visit("dummy-b");
+    tick(59_000);
     reopen();
     expect(State.view).toBe("dummy-b");
     folded();
-    off();
+    vi.setSystemTime(Date.now() + 61_000);
     reopen();
     expect(State.view).toBe(State.defaultView());
     folded();
   });
 
-  it("expires after the idle time; 0 turns it off", () => {
-    const off = leaveOn("dummy-b");
-    vi.setSystemTime(Date.now() + 11 * 60_000);
-    reopen();
-    expect(State.view).toBe(State.defaultView());
+  it("the time counts from the close, not from the tab switch", () => {
+    b().island.open("dummy-b"); tick(10);
+    vi.setSystemTime(Date.now() + 50_000); // a long visit, still open
     folded();
-    off();
+    vi.setSystemTime(Date.now() + 30_000);
+    reopen();
+    expect(State.view).toBe("dummy-b");
+    folded();
+    lastHome();
+  });
+
+  it("A -> B -> close -> reopen lands on B", () => {
+    b().island.open("dummy-b"); tick(10);
+    b().island.setView("dummy-a"); tick(10);
+    b().island.setView("dummy-b"); tick(10);
+    folded();
+    reopen();
+    expect(State.view).toBe("dummy-b");
+    folded();
+    lastHome();
+  });
+
+  it("0 turns it off; unknown view skipped; a home visit lands home", () => {
     State.settings.focusHoldMinutes = 0;
-    const off2 = leaveOn("dummy-b");
+    visit("dummy-b");
     reopen();
     expect(State.view).toBe(State.defaultView());
-    State.settings.focusHoldMinutes = 10;
     folded();
-    off2();
+    State.settings.focusHoldMinutes = 1;
+    visit(State.defaultView());
+    reopen();
+    expect(State.view).toBe(State.defaultView());
+    folded();
+    lastHome();
   });
 
-  it("a pinned request beats the hold", () => {
-    const off = leaveOn("dummy-b");
+  it("a pinned request beats it", () => {
+    visit("dummy-b");
     const req = requestPin(b(), "dummy-a", 0, 10);
     reopen();
     expect(State.view).toBe("dummy-a");
     req();
     folded();
+    lastHome();
+  });
+});
+
+describe("sticky holds", () => {
+  it("land on the held view after any time; releasing goes home", () => {
+    const off = a().island.hold("dummy-b");
+    visit("dummy-a");
+    vi.setSystemTime(Date.now() + 10 * 60_000);
+    reopen();
+    expect(State.view).toBe("dummy-b");
+    folded();
     off();
+    Last.clear();
+    reopen();
+    expect(State.view).toBe(State.defaultView());
+    folded();
+    lastHome();
+  });
+
+  it("beat the implicit last view", () => {
+    const off = a().island.hold("dummy-b");
+    visit("dummy-a");
+    b().island.open("dummy-a"); tick(10); folded();
+    reopen();
+    expect(State.view).toBe("dummy-b");
+    folded();
+    off();
+    lastHome();
+  });
+
+  it("idleMs still expires", () => {
+    const off = a().island.hold("dummy-b", { idleMs: 1000 });
+    visit("dummy-a");
+    vi.setSystemTime(Date.now() + 5000);
+    reopen();
+    expect(State.view).toBe(State.defaultView());
+    folded();
+    off();
+    lastHome();
   });
 
   it("stopping the module drops its hold", () => {
-    leaveOn("dummy-b");
+    a().island.hold("dummy-b");
+    visit("dummy-a");
     Registry.apply({ dummy: false, second: true });
     Registry.apply({ dummy: true, second: true });
     reopen();
     expect(State.view).toBe(State.defaultView());
     folded();
+    lastHome();
   });
 
   it("two holds: the one seen last wins", () => {
@@ -109,7 +172,19 @@ describe("task holds", () => {
     expect(State.view).toBe("dummy-a");
     folded();
     o1(); o2();
-    Holds.clear();
+    lastHome();
+  });
+
+  it("the home tab clears holds and the implicit focus", () => {
+    a().island.hold("dummy-b");
+    b().island.open("dummy-b"); tick(10);
+    const home = State.tabs.find((t) => t.view === State.defaultView())!;
+    [...document.querySelectorAll<HTMLElement>("#header .tabs button")].find((x) => x.title === home.title || x.textContent === home.title)!.click();
+    tick(10);
+    folded(); reopen();
+    expect(State.view).toBe(State.defaultView());
+    folded();
+    lastHome();
   });
 });
 

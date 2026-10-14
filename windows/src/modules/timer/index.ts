@@ -12,8 +12,6 @@ function start(api: IslandApi): Disposer {
   let tick: Disposer | null = null;
   let done: Disposer | null = null;
   let hold: Disposer | null = null;
-  let visit: Disposer | null = null;
-  let wasOn = false;
   const refresh = () => {
     api.status.set(Timer.active ? { priority: 50, text: Timer.text(), overGrid: true } : null);
     api.island.redraw();
@@ -30,14 +28,8 @@ function start(api: IslandApi): Disposer {
     disarm();
     // A configured-but-unstarted timer is still a task in progress.
     if (Timer.status !== "idle") {
-      hold ??= api.island.hold("timer");
-      // The core drops a hold unseen for too long: take a fresh one on each visit. Event-driven, only while a task exists.
-      visit ??= api.island.onChange(() => {
-        const on = api.island.view() === "timer";
-        if (on && !wasOn) { hold?.(); hold = api.island.hold("timer"); }
-        wasOn = on;
-      });
-    } else { hold?.(); hold = null; visit?.(); visit = null; wasOn = false; }
+      hold ??= api.island.hold("timer"); // sticky: until finished or cancelled
+    } else { hold?.(); hold = null; }
     if (Timer.status === "running") {
       // One-shot, so the end still rings (and is shown) if the island is hidden.
       if (Timer.kind === "countdown") done = api.timeout(finish, Timer.remaining());
@@ -53,7 +45,6 @@ function start(api: IslandApi): Disposer {
   return () => {
     disarm();
     hold?.();
-    visit?.();
     offKeep();
     offVis();
     Timer.reset();

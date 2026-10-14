@@ -16,7 +16,7 @@ import { Hooks, emitMode } from "../core/hooks";
 import { glowOf } from "../mochi/moods";
 import { EXPANDED_W, PANEL_H } from "../core/moduleApi";
 import type { Disposer, IslandHost, Overlay, TabDef, ViewContext, ViewDef } from "../core/moduleApi";
-import { Holds } from "../core/holds";
+import { Holds, Last } from "../core/holds";
 import { Requests, type Req, type RequestSpec } from "../core/requests";
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
@@ -144,8 +144,8 @@ export class Island implements IslandHost {
   private makeActions(): ViewActions {
     return {
       setView: (v) => {
-        // The user picked home (the default): that drops every focus. Automatic landings go through this.setView.
-        if (v === State.defaultView()) Holds.clear();
+        // The user picked home (the default): that drops every focus (sticky holds and the last view). Automatic landings go through this.setView.
+        if (v === State.defaultView()) { Holds.clear(); Last.clear(); }
         this.setView(v);
       },
       toggleSound: () => {
@@ -270,7 +270,7 @@ export class Island implements IslandHost {
     this.offsetX.target = 0;
     if (mode === "expanded") Sound.play("open");
     if (prev === "expanded") {
-      Holds.touch(State.view, Date.now());
+      this.leave(State.view);
       Sound.play("close");
       Requests.parked = true;
       this.syncPin();
@@ -288,9 +288,17 @@ export class Island implements IslandHost {
     return view === "greeting" || this.views.has(view);
   }
 
-  /** The held task the island reopens on, if any. */
+  /** The user leaves `view` (tab change or close): stamped lazily, no timers. */
+  private leave(view: string) {
+    const now = Date.now();
+    Holds.touch(view, now);
+    if (view !== "greeting") Last.left(view, now);
+  }
+
+  /** Where a reopen lands: a live sticky hold, else the last view left within focusHoldMinutes (never home). */
   private resting(): string | null {
-    return Holds.front(Date.now(), State.settings.focusHoldMinutes * 60_000, (v) => this.known(v));
+    const now = Date.now(), known = (v: string) => this.known(v);
+    return Holds.front(now, known) ?? Last.front(now, State.settings.focusHoldMinutes * 60_000, State.defaultView(), known);
   }
 
   private guard(view: string): string {
@@ -303,7 +311,7 @@ export class Island implements IslandHost {
     view = this.guard(view);
     if (view !== State.view) {
       for (const o of this.overlays) o.leaving?.(view);
-      if (State.mode === "expanded") Holds.touch(State.view, Date.now());
+      if (State.mode === "expanded") this.leave(State.view);
     }
     State.view = view;
     if (State.mode !== "expanded") this.setMode("expanded");
@@ -326,7 +334,7 @@ export class Island implements IslandHost {
       return;
     }
     const grew = viewLayout(view).height >= viewLayout(State.view).height;
-    if (view !== State.view) Holds.touch(State.view, Date.now());
+    if (view !== State.view) this.leave(State.view);
     State.view = view;
     this.animateGeometry(!grew);
     State.notify();
