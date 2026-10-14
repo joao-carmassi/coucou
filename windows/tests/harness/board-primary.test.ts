@@ -1,0 +1,165 @@
+// The home's primary: a default (setting boardPrimary), a click on a pill that lasts the focus time, and the
+// lazy revert on the next open (no timers). Providers are Rust-less dummies; their pills are `<id>-pill`.
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { IslandApi, ModuleDef } from "../../src/core/moduleApi";
+import type { BoardCardOf, BoardFocus } from "../../src/modules/board/api";
+
+const probe: Record<string, IslandApi | null> = {};
+
+const loadModules = async () => {
+  const { board } = await import("../../src/modules/board");
+  const provider = (id: string, label: string): ModuleDef => ({
+    id,
+    start(api) {
+      probe[id] = api;
+      api.pills.set({ id: `${id}-pill`, label, color: "#88aaff", mood: "idle" });
+      const offs = [
+        api.provide<BoardCardOf>("board.card", (tid) => tid !== `${id}-pill` ? null : {
+          key: id, build: () => Object.assign(document.createElement("div"), { className: "tile-card", textContent: `card of ${label}` }),
+        }),
+        api.provide<BoardFocus>("board.focus", (tid) => { if (tid === `${id}-pill`) api.pills.focus(tid); }),
+      ];
+      return () => { offs.forEach((o) => o()); probe[id] = null; };
+    },
+  } as ModuleDef);
+  return { MODULES: [board, provider("claude", "Claude"), provider("alpha", "Alpha"), provider("vercel", "Vercel")] };
+};
+const loadCatalog = async () => {
+  const { buildCatalog } = await import("../../src/modules/resolve");
+  const manifest = (await import("../../src/modules/board/manifest.json")).default;
+  return {
+    MODULE_INFO: buildCatalog([
+      manifest,
+      { id: "claude", label: "Claude", default: true, order: 1 },
+      { id: "alpha", label: "Alpha", default: true, order: 2 },
+      { id: "vercel", label: "Vercel", default: true, order: 3 },
+    ], true),
+  };
+};
+
+import { Island } from "../../src/island/island";
+import { Registry } from "../../src/core/registry";
+import { State } from "../../src/core/state";
+
+let island: Island;
+const ALL = { board: true, claude: true, alpha: true, vercel: true };
+const tick = (ms: number) => vi.advanceTimersByTime(ms);
+const set = (patch: Record<string, unknown>) => Object.assign(State.settings, patch);
+const front = () => State.focusPill?.id;
+const fold = () => { island.collapse(); tick(10); };
+const reopen = () => { island.fsm.forceHome(); tick(100); };
+const clickPill = (label: string) => {
+  [...document.querySelectorAll<HTMLElement>(".pill")].find((p) => p.textContent === label)!.click();
+  tick(10);
+};
+
+beforeAll(async () => {
+  vi.useFakeTimers();
+  document.body.innerHTML = '<div id="root"></div>';
+  island = new Island(document.getElementById("root")!);
+  Registry.init(island, (await loadModules()).MODULES, (await loadCatalog()).MODULE_INFO);
+  Registry.apply(ALL);
+  island.launch();
+  tick(15_000);
+});
+afterAll(() => vi.useRealTimers());
+beforeEach(() => {
+  Registry.apply(ALL);
+  set({ boardPrimary: "claude", focusHoldMinutes: 1 });
+  probe.claude!.pills.focus("claude-pill");
+  fold();
+  vi.setSystemTime(new Date(2030, 0, 1));
+});
+
+describe("board primary", () => {
+  it("claude is the default, as before", () => {
+    reopen();
+    expect(front()).toBe("claude-pill");
+    expect(document.body.textContent).toContain("card of Claude");
+  });
+
+  it("the setting picks the default primary on the next open", () => {
+    set({ boardPrimary: "alpha" });
+    reopen();
+    expect(front()).toBe("alpha-pill");
+    expect(document.body.textContent).toContain("card of Alpha");
+  });
+
+  it("a default that is not running changes nothing", () => {
+    set({ boardPrimary: "ghost" });
+    reopen();
+    expect(front()).toBe("claude-pill");
+  });
+
+  it("a click on a pill makes it the primary", () => {
+    reopen();
+    clickPill("Vercel");
+    expect(front()).toBe("vercel-pill");
+    expect(document.body.textContent).toContain("card of Vercel");
+  });
+
+  it("before the focus time it stays; after it, the next open is back on the default", () => {
+    reopen();
+    clickPill("Vercel");
+    fold();
+    vi.setSystemTime(Date.now() + 30_000);
+    reopen();
+    expect(front()).toBe("vercel-pill");
+    fold();
+    vi.setSystemTime(Date.now() + 61_000);
+    reopen();
+    expect(front()).toBe("claude-pill");
+  });
+
+  it("time spent open does not count; only time since it closed", () => {
+    reopen();
+    clickPill("Vercel");
+    vi.setSystemTime(Date.now() + 10 * 60_000);
+    fold();
+    reopen();
+    expect(front()).toBe("vercel-pill");
+  });
+
+  it("0 minutes: back to the default at once", () => {
+    set({ focusHoldMinutes: 0 });
+    reopen();
+    clickPill("Vercel");
+    fold();
+    reopen();
+    expect(front()).toBe("claude-pill");
+  });
+
+  it("the provider being switched off falls back to the default", () => {
+    set({ boardPrimary: "alpha" });
+    reopen();
+    clickPill("Vercel");
+    Registry.apply({ ...ALL, vercel: false });
+    tick(100);
+    expect(front()).toBe("alpha-pill");
+  });
+
+  it("news that takes the front ends the pick and wins over the default", () => {
+    reopen();
+    clickPill("Vercel");
+    probe.alpha!.pills.set({ id: "alpha-pill", mood: "done" });
+    probe.alpha!.pills.focus("alpha-pill");
+    fold();
+    reopen();
+    expect(front()).toBe("alpha-pill");
+  });
+
+  it("an error or alert on the front keeps it over the default", () => {
+    set({ boardPrimary: "alpha" });
+    probe.claude!.pills.set({ id: "claude-pill", mood: "error" });
+    reopen();
+    expect(front()).toBe("claude-pill");
+    probe.claude!.pills.set({ id: "claude-pill", mood: "idle" });
+  });
+
+  it("the board stopping leaves nothing behind", () => {
+    Registry.apply({ ...ALL, board: false });
+    Registry.apply(ALL);
+    reopen();
+    expect(front()).toBe("claude-pill");
+  });
+});
