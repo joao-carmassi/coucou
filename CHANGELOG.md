@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1
+
+- Home falls back to the first enabled module's view (timer, media) instead of the "no module" card.
+- Dragging Mochi onto a window captures it again (the release was always read as "dropped back home").
+- Voice: the review text is editable and is sent only on Enter (Esc cancels).
+- `idle-measure.ps1` runs on Windows PowerShell 5, with warm-up and scaled limits.
+
 ## 0.2.0
 
 - Module architecture: the island, the Mochi avatar, tray, settings, hotkeys and log are core; everything else is a module switched on in Settings. A disabled module creates no tab, view, pill, timer, thread or listener. See `docs/MODULES-CONTRACT.md`.
