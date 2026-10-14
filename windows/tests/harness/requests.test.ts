@@ -146,6 +146,47 @@ describe("request queue", () => {
     folded();
   });
 
+  it("MED1: a parked request does not pin an unrelated view opened later", () => {
+    const off = requestPin(a(), "dummy-b", 0, 90);
+    tick(10);
+    island.collapse();
+    tick(10);
+    expect(State.isPinned).toBe(false);
+    b().island.open("dummy-a"); // tray / news / upload style navigation
+    tick(10);
+    expect(State.mode).toBe("expanded");
+    expect(State.view).toBe("dummy-a");
+    expect(State.isPinned).toBe(false);
+    tick(60_000);
+    expect(State.mode).not.toBe("expanded"); // auto-close still works
+    off();
+    folded();
+  });
+
+  it("MED2: dropping the on-screen card behind the front switches to the front's view", () => {
+    const front = requestPin(a(), "dummy-b", 0, 90);
+    tick(10);
+    const quietOn = b().island.request({ view: "dummy-a", priority: 10, pin: true });
+    expect(State.view).toBe("dummy-b");
+    b().island.setView("dummy-a"); // the lower card is what the screen shows
+    tick(10);
+    expect(State.view).toBe("dummy-a");
+    quietOn();
+    tick(10);
+    expect(State.view).toBe("dummy-b");
+    front();
+    folded();
+  });
+
+  it("LOW4: open() while already home with the mouse outside starts the auto-close countdown", () => {
+    b().island.open("dummy-a");
+    tick(10);
+    b().island.open("dummy-b"); // already home: no transition runs
+    tick(60_000);
+    expect(State.mode).not.toBe("expanded");
+    folded();
+  });
+
   it("busy() is true while a pinned request exists", () => {
     expect(a().island.busy()).toBe(false);
     const off = requestPin(b(), "dummy-a", 0, 1);

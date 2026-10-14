@@ -155,7 +155,8 @@ mod tests {
     fn patch_with_a_wrong_type_is_refused() {
         let cur = Settings::default();
         let patch = serde_json::json!({"soundVolume": "loud"});
-        assert!(merge_patch(&cur, patch.as_object().unwrap().clone()).is_err());
+        let err = merge_patch(&cur, patch.as_object().unwrap().clone()).unwrap_err();
+        assert!(err.contains("invalid type"), "the caller gets the reason: {err}");
     }
 
     #[test]
