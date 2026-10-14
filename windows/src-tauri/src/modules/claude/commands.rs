@@ -6,7 +6,7 @@ use std::process::Command;
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::core::inbox::{self, DroppedFile};
+use crate::core::inbox;
 use super::hooks::{HookPreview, HookStatus};
 use super::{cfg, focus, hooks, local_claude, pipe, sessions, wsl};
 use crate::core::host::{blocking, ModuleHost};
@@ -466,17 +466,3 @@ fn strip_verbatim(p: &std::path::Path) -> String {
 pub async fn claude_session_erase(profile: String, id: String) -> Result<(), String> {
     blocking(move || sessions::erase(&profile, &id)).await?
 }
-
-/// Copies a dropped file into the inbox and reports its name back.
-#[tauri::command]
-pub async fn claude_ingest_file(handle: AppHandle, path: String) -> Result<DroppedFile, String> {
-    // Off the main thread: a big copy must not freeze the webview.
-    log::line("ingest start");
-    let r = blocking(move || inbox::ingest(Some(&handle), &path)).await?;
-    log::line(match &r {
-        Ok(f) => format!("ingest done: {} ({} bytes)", f.name, f.size),
-        Err(e) => format!("ingest failed: {e}"),
-    });
-    r
-}
-

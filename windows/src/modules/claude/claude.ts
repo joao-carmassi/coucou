@@ -271,7 +271,7 @@ export class Claude {
     try {
       if (ingest) {
         this.api.island.note("Abrindo no terminal…");
-        path = (await ClaudeBridge.ingestClaudeFile(path)).path;
+        path = (await Bridge.inboxIngest(path)).path;
       }
       this.launchWith(path);
     } catch (err) {

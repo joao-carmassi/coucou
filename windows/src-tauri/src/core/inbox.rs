@@ -32,6 +32,19 @@ fn note_drop(app: Option<&AppHandle>, path: &str) {
     }
 }
 
+/// Copies a dropped file into the inbox and reports its name back.
+#[tauri::command]
+pub async fn inbox_ingest(handle: AppHandle, path: String) -> Result<DroppedFile, String> {
+    // Off the main thread: a big copy must not freeze the webview.
+    crate::core::log::line("ingest start");
+    let r = crate::core::host::blocking(move || ingest(Some(&handle), &path)).await?;
+    crate::core::log::line(match &r {
+        Ok(f) => format!("ingest done: {} ({} bytes)", f.name, f.size),
+        Err(e) => format!("ingest failed: {e}"),
+    });
+    r
+}
+
 pub fn ingest(app: Option<&AppHandle>, source: &str) -> Result<DroppedFile, String> {
     let src = Path::new(source);
     let meta = std::fs::metadata(src).map_err(|e| format!("não consegui ler {source}: {e}"))?;

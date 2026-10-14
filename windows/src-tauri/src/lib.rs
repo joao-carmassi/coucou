@@ -299,6 +299,7 @@ pub fn run() {
             open_settings_window,
             take_settings_section,
             set_paused,
+            crate::core::inbox::inbox_ingest,
         ))
         .setup(move |app| {
             let handle = app.handle().clone();

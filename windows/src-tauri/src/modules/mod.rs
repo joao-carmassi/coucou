@@ -39,7 +39,6 @@ macro_rules! handler {
             crate::modules::claude::commands::claude_approval_ack,
             crate::modules::claude::commands::claude_approval_decline,
             crate::modules::claude::commands::claude_approval_answer,
-            crate::modules::claude::commands::claude_ingest_file,
             crate::modules::voice::voice::voice_start,
             crate::modules::voice::voice::voice_stop,
             crate::modules::voice::voice::voice_cancel,

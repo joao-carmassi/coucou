@@ -98,7 +98,7 @@ pub fn migrate_modules(s: &mut Settings) -> bool; // claude/media/upload => true
 ```
 Tests: keep `removed_keys_round_trip`; add `migrate_installed_baseline` (same sample JSON; expected map `{claude,media,upload:true; timer,voice,github,vercel,stripe,n8n,resend,calcom,notion:false}`; every original key still equal after serialize), `migrate_keeps_user_choice` (`{"timer":true,"claude":false}` stays), `migrate_from_legacy` (`voiceEnabled:true` -> voice on).
 
-`lib.rs`: `.manage(ModuleHost::new(modules::CATALOG, modules::registry()))`; in `run()`: `let mut loaded = settings::load(); if settings::migrate_modules(&mut loaded) { let _ = settings::save(&loaded); }`; in setup after log line: `handle.state::<ModuleHost>().sync(&handle, &loaded);`. `BootInfo` gains `modules: BTreeMap<String,bool>` (= host.state()). `save_settings`: inside the lock `if settings.modules_enabled.is_empty() { settings.modules_enabled = current.modules_enabled.clone(); }`; AFTER releasing the lock call `app.state::<ModuleHost>().sync(&app, &settings)` (never under the Shared lock: deadlock risk). Commands stay the 12 core ones.
+`lib.rs`: `.manage(ModuleHost::new(modules::CATALOG, modules::registry()))`; in `run()`: `let mut loaded = settings::load(); if settings::migrate_modules(&mut loaded) { let _ = settings::save(&loaded); }`; in setup after log line: `handle.state::<ModuleHost>().sync(&handle, &loaded);`. `BootInfo` gains `modules: BTreeMap<String,bool>` (= host.state()). `save_settings`: inside the lock `if settings.modules_enabled.is_empty() { settings.modules_enabled = current.modules_enabled.clone(); }`; AFTER releasing the lock call `app.state::<ModuleHost>().sync(&app, &settings)` (never under the Shared lock: deadlock risk). Commands stay the 13 core ones (the 13th, `inbox_ingest`, lives in `core/inbox.rs`).
 
 ## TypeScript (M4b)
 
@@ -210,7 +210,7 @@ Nothing below is verified at runtime beyond the checks in `docs/idle-baseline.md
 | Module | Default | Notes |
 |---|---|---|
 | claude | ON | Backend `src-tauri/src/modules/claude`, frontend `src/modules/claude`. Integration news on its finished/error cards comes through the `taskNews` hook |
-| media | ON | Mochi drag-out ghost lives in the module (core hooks: `mochiDrop`, `Overlay.cursor(down)`). `attach_window` and claude's `ingest_file` share `core/inbox.rs` |
+| media | ON | Mochi drag-out ghost lives in the module (core hooks: `mochiDrop`, `Overlay.cursor(down)`). `attach_window` and the core `inbox_ingest` share `core/inbox.rs` |
 | upload | ON, requires claude | The drop animation starts after the island opens |
 | timer | OFF | Countdown and stopwatch |
 | voice | OFF, requires claude | English only (Cactus `needle.exe` + Whistle model). The "go to alert" hotkey belongs to claude |
