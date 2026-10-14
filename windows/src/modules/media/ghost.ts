@@ -4,7 +4,7 @@
 
 import { h } from "../../views/dom";
 import { wipe } from "../../core/canvas";
-import { MediaBridge } from "../../core/bridge";
+import { MediaBridge } from "./bridge";
 import type { Disposer, IslandApi } from "../../core/moduleApi";
 import { Sound } from "../../core/sound";
 import { State } from "../../core/state";

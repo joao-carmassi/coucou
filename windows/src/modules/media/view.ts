@@ -4,7 +4,7 @@
 // never touches the file.
 
 import { h, svg, clear } from "../../views/dom";
-import { MediaBridge, type MediaItem } from "../../core/bridge";
+import { MediaBridge, type MediaItem } from "./bridge";
 import { Hooks } from "../../core/hooks";
 import type { Disposer, IslandApi, ViewContext, ViewHost } from "../../core/moduleApi";
 import { ICONS } from "./icons";

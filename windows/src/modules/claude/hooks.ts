@@ -9,7 +9,7 @@
 // what it said to end its turn (the session panel) — and the questions it asks
 // with its question tool, answered on the island.
 
-import { Bridge } from "../../core/bridge";
+import { ClaudeBridge } from "./bridge";
 import { Sound } from "../../core/sound";
 import { State } from "../../core/state";
 import {
@@ -219,7 +219,7 @@ function forget(c: Claude, session: ClaudeSession) {
   const at = c.store.sessions.indexOf(session);
   if (at < 0) return;
   const request = (session.approval ?? session.question)?.requestId;
-  if (request) void Bridge.approvalDecline(request);
+  if (request) void ClaudeBridge.approvalDecline(request);
   stopWaiting(c, session);
   c.store.sessions.splice(at, 1);
   c.store.changes.delete(session.id);
@@ -523,7 +523,7 @@ function handleAgent(c: Claude, payload: HookPayload, agent: string) {
       // External agents do not get an approval card — showing one would look like
       // a Claude Code request. Decline immediately so the agent re-asks in its
       // terminal. Approval support for other agents will come with Codex support.
-      if (payload.request_id) void Bridge.approvalDecline(payload.request_id);
+      if (payload.request_id) void ClaudeBridge.approvalDecline(payload.request_id);
       break;
 
     default:
@@ -551,7 +551,7 @@ export function handleHook(c: Claude, payload: HookPayload) {
     // Silence here used to cost Claude Code nearly two minutes: the relay waited
     // for a decision from an island that had already decided not to look. Say so,
     // and the terminal takes the question immediately.
-    if (payload.request_id) void Bridge.approvalDecline(payload.request_id);
+    if (payload.request_id) void ClaudeBridge.approvalDecline(payload.request_id);
     return;
   }
 
@@ -696,7 +696,7 @@ export function handleHook(c: Claude, payload: HookPayload) {
       // waits for a decision nobody can give. Hand it straight back to the terminal.
       const held = session.approval ?? session.question;
       if (held && held.requestId !== requestId) {
-        if (requestId) void Bridge.approvalDecline(requestId);
+        if (requestId) void ClaudeBridge.approvalDecline(requestId);
         break;
       }
       stopWaiting(c, session);
@@ -718,7 +718,7 @@ export function handleHook(c: Claude, payload: HookPayload) {
       if (asking) asking.permission = "asked";
       // The relay's short ack window closes in 800 ms; everything below this
       // line is synchronous, so the card really is up by the time it lands.
-      if (requestId) void Bridge.approvalAck(requestId);
+      if (requestId) void ClaudeBridge.approvalAck(requestId);
       session.state = questions ? "question" : "approval";
       Sound.play(questions ? "question" : "approval");
       if (!front) {

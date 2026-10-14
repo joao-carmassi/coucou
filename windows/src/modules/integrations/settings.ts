@@ -3,7 +3,8 @@
 // Port of the integrations part of settings/main.ts at m3-ok. The window renders it only while
 // the module is on (ModuleDef.settings).
 
-import { Bridge, type GithubAccount } from "../../core/bridge";
+import { Bridge } from "../../core/bridge";
+import { type GithubAccount, IntegrationsBridge } from "./bridge";
 import { h, clear } from "../../views/dom";
 import { GITHUB, type Provider } from "./providers";
 
@@ -49,7 +50,7 @@ function githubSetup(present: Record<string, boolean>): Setup {
   }
 
   async function refresh() {
-    show((await Bridge.secretPresent(GITHUB_KEY)) ?? false);
+    show((await IntegrationsBridge.secretPresent(GITHUB_KEY)) ?? false);
   }
 
   /** Saves whatever is in the field. True when there was nothing to save, too. */
@@ -57,11 +58,11 @@ function githubSetup(present: Record<string, boolean>): Setup {
     const value = field.value.trim();
     if (!value) return true;
     try {
-      await Bridge.secretSet(GITHUB_KEY, value);
+      await IntegrationsBridge.secretSet(GITHUB_KEY, value);
       field.value = "";
       await refresh();
       // Fill the pill now rather than at the next poll.
-      void Bridge.refreshIntegration(GITHUB);
+      void IntegrationsBridge.refreshIntegration(GITHUB);
       return true;
     } catch (err) {
       feedback.append(h("div", { class: "notice err", text: `Não foi possível salvar: ${String(err)}` }));
@@ -78,7 +79,7 @@ function githubSetup(present: Record<string, boolean>): Setup {
   clearBtn.addEventListener("click", async () => {
     clear(feedback);
     try {
-      await Bridge.secretClear(GITHUB_KEY);
+      await IntegrationsBridge.secretClear(GITHUB_KEY);
       feedback.append(h("div", { class: "notice ok", text: "Token removido." }));
       await refresh();
     } catch (err) {
@@ -94,7 +95,7 @@ function githubSetup(present: Record<string, boolean>): Setup {
     testBtn.disabled = true;
     testBtn.textContent = "Testando…";
     try {
-      feedback.append(githubResult(await Bridge.githubTest()));
+      feedback.append(githubResult(await IntegrationsBridge.githubTest()));
     } catch (err) {
       feedback.append(h("div", { class: "notice err", text: String(err).replace(/^Error:\s*/, "") }));
     } finally {
@@ -166,8 +167,8 @@ export function providerSettingsSection(def: Provider): { el: HTMLElement; dispo
 
   let gone = false;
   void (async () => {
-    for (const f of def.fields) present[f.key] = (await Bridge.secretPresent(f.key)) ?? false;
-    present[GITHUB_KEY] = (await Bridge.secretPresent(GITHUB_KEY)) ?? false;
+    for (const f of def.fields) present[f.key] = (await IntegrationsBridge.secretPresent(f.key)) ?? false;
+    present[GITHUB_KEY] = (await IntegrationsBridge.secretPresent(GITHUB_KEY)) ?? false;
     if (gone) return;
     if (def.id === GITHUB) {
       const setup = githubSetup(present);
@@ -192,7 +193,7 @@ function fieldRow(field: Provider["fields"][number], present: Record<string, boo
   saveBtn.addEventListener("click", async () => {
     const value = input.value.trim();
     try {
-      await Bridge.secretSet(field.key, value);
+      await IntegrationsBridge.secretSet(field.key, value);
       present[field.key] = value.length > 0;
       input.value = "";
       input.placeholder = value ? "••••••••  (salva)" : field.placeholder;

@@ -5,6 +5,7 @@ import { h, svg, clear, dot, replay } from "../../../views/dom";
 import { card } from "../../../views/views";
 import type { ViewContext, ViewHost } from "../../../core/moduleApi";
 import { Bridge } from "../../../core/bridge";
+import { ClaudeBridge } from "../bridge";
 import { State } from "../../../core/state";
 import { createMiniBot, pruneMiniBots } from "../../../mochi/minibots";
 import type { AgentTask } from "../../../core/state";
@@ -403,11 +404,11 @@ function idleCard(c: Claude, task: AgentTask): HTMLElement {
       text: desktop ? "Abrir Claude" : terminal ? "Abrir terminal" : "Abrir Visual Studio Code",
       onclick: () =>
         void (desktop
-          ? Bridge.openClaudeApp()
+          ? ClaudeBridge.openClaudeApp()
           : terminal
             // No Claude Code to start: the click still opens something.
-            ? Bridge.startClaudeTerminal().then((ok) => ok || Bridge.openInVSCode(store.session.cwd, store.session.wslDistro))
-            : Bridge.openInVSCode(store.session.cwd, store.session.wslDistro)),
+            ? ClaudeBridge.startClaudeTerminal().then((ok) => ok || ClaudeBridge.openInVSCode(store.session.cwd, store.session.wslDistro))
+            : ClaudeBridge.openInVSCode(store.session.cwd, store.session.wslDistro)),
     }),
   );
   if (!configured) {

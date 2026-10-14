@@ -6,7 +6,8 @@
 // The settings window keeps one Settings object in State.settings (settings/main.ts), so a
 // field changed here travels with the window's own saves.
 
-import { Bridge, type HookPreview, type HookStatus, type WslStatus } from "../../core/bridge";
+import { Bridge } from "../../core/bridge";
+import { type HookPreview, type HookStatus, type WslStatus, ClaudeBridge } from "./bridge";
 import { State } from "../../core/state";
 import { h, clear } from "../../views/dom";
 import { claudeSettings } from "./store";
@@ -177,7 +178,7 @@ function hooksSection(status: HookStatus, signal: AbortSignal): HTMLElement {
   );
 
   const rebuild = async () => {
-    const fresh = await Bridge.hooksStatus();
+    const fresh = await ClaudeBridge.hooksStatus();
     if (fresh) Object.assign(status, fresh);
     clear(body);
     draw();
@@ -217,7 +218,7 @@ function hooksSection(status: HookStatus, signal: AbortSignal): HTMLElement {
 
     // One row per Claude Code profile (~/.claude, ~/.claude-qf…). The default
     // profile passes no configDir; every one goes through the same reviewed diff.
-    void Bridge.claudeProfiles().then((list) => {
+    void ClaudeBridge.claudeProfiles().then((list) => {
       const profiles = list && list.length ? list : [null];
       for (const p of profiles) {
         const dir = p && !p.isDefault ? p.configDir : undefined;
@@ -225,7 +226,7 @@ function hooksSection(status: HookStatus, signal: AbortSignal): HTMLElement {
         if (p && profiles.length > 1) actions.append(h("label", { text: p.label }));
         body.append(actions);
         void (async () => {
-          const st = dir ? ((await Bridge.hooksStatus(dir)) ?? status) : status;
+          const st = dir ? ((await ClaudeBridge.hooksStatus(dir)) ?? status) : status;
           const install = h("button", {
             class: "primary",
             text: st.installed ? "Reinstalar hooks…" : "Instalar hooks…",
@@ -252,8 +253,8 @@ function hooksSection(status: HookStatus, signal: AbortSignal): HTMLElement {
 
   function showPreview(install: boolean, configDir?: string) {
     void previewFlow(body, install, {
-      preview: () => Bridge.hooksPreview(install, configDir),
-      apply: (fingerprint) => Bridge.hooksApply(install, fingerprint, configDir),
+      preview: () => ClaudeBridge.hooksPreview(install, configDir),
+      apply: (fingerprint) => ClaudeBridge.hooksApply(install, fingerprint, configDir),
       back: () => { clear(body); draw(); },
       done: () => void rebuild(),
       what: "settings.json",
@@ -288,11 +289,11 @@ function wslSection(status: HookStatus, signal: AbortSignal): HTMLElement {
     try {
       clear(body);
       body.append(h("div", { class: "hint", text: "Procurando distribuições WSL…" }));
-      const names = (await Bridge.wslDistros()) ?? [];
+      const names = (await ClaudeBridge.wslDistros()) ?? [];
       statuses = [];
       for (const name of names) {
         try {
-          statuses.push(await Bridge.wslStatus(name));
+          statuses.push(await ClaudeBridge.wslStatus(name));
         } catch (err) {
           statuses.push({
             distro: name, installed: false, settingsPath: "", relayPath: "",
@@ -352,8 +353,8 @@ function wslSection(status: HookStatus, signal: AbortSignal): HTMLElement {
       clear(block);
       block.append(h("div", { class: "row" }, h("span", { style: "font-weight:600", text: st.distro })));
       void previewFlow(block, install, {
-        preview: () => Bridge.wslHooksPreview(st.distro, install),
-        apply: (fingerprint) => Bridge.wslHooksApply(st.distro, install, fingerprint),
+        preview: () => ClaudeBridge.wslHooksPreview(st.distro, install),
+        apply: (fingerprint) => ClaudeBridge.wslHooksApply(st.distro, install, fingerprint),
         back,
         done: () => void refresh(),
         what: `settings.json de ${st.distro}`,

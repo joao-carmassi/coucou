@@ -2,7 +2,8 @@
 // Port of integrations.ts and the openTarget/followNews parts of island.ts at m3-ok.
 // Polls are on the Rust side; this only listens (`integration`, `secrets-changed`).
 
-import { Bridge, type GithubData, type IntegrationUpdate } from "../../core/bridge";
+import { Bridge } from "../../core/bridge";
+import { type GithubData, type IntegrationUpdate, IntegrationsBridge } from "./bridge";
 import type { Disposer, HomeRequest, IslandApi, TaskCard, TaskNews } from "../../core/moduleApi";
 import { Sound } from "../../core/sound";
 import { State, type AgentTask } from "../../core/state";
@@ -66,14 +67,14 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
       info[id] ??= empty(true);
       info[id].configured = true;
       steps.set(id, []);
-      void Bridge.refreshIntegration(id);
+      void IntegrationsBridge.refreshIntegration(id);
     }
     if (!State.tasks.some((t) => t.id === State.focusId)) State.focusId = State.tasks[0]?.id ?? null;
     redraw();
   }
 
   async function refreshConfigured() {
-    syncPill((await Bridge.secretPresent(def.key)) ?? false);
+    syncPill((await IntegrationsBridge.secretPresent(def.key)) ?? false);
   }
 
   // ── News ───────────────────────────────────────────────────────────────────
@@ -206,7 +207,7 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
   /** The ↗ button: same targets as openAgentTarget() on macOS. */
   function openTarget(taskId: string): boolean {
     if (taskId !== id || !owned) return false;
-    if (id === "integration_n8n") void Bridge.openN8n();
+    if (id === "integration_n8n") void IntegrationsBridge.openN8n();
     else if (isGithub && githubData()) void Bridge.openUrl(githubData()!.profileUrl);
     else if (def.url) void Bridge.openUrl(def.url);
     return true;

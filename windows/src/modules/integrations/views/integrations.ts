@@ -9,7 +9,8 @@ import { ICONS } from "../../../views/icons";
 import { COLOR } from "../../../views/palette";
 import { timeAgo } from "../../../views/format";
 import type { AgentTask } from "../../../core/state";
-import { Bridge, type GithubActivityKind, type GithubData, type GithubTarget } from "../../../core/bridge";
+import { Bridge } from "../../../core/bridge";
+import { type GithubActivityKind, type GithubData, type GithubTarget, IntegrationsBridge } from "../bridge";
 import { GITHUB, PROVIDERS, info, steps } from "../store";
 
 function header(color: string, name: string, kind: string, extra?: Node): HTMLElement {
@@ -53,7 +54,7 @@ function idleCard(task: AgentTask, openSettings: () => void): HTMLElement {
         class: "link-btn",
         style: `color:${task.color}d9`,
         text: "Abrir n8n",
-        onclick: () => void Bridge.openN8n(),
+        onclick: () => void IntegrationsBridge.openN8n(),
       }),
     );
   } else if (OPEN_URLS[task.id]) {
@@ -72,7 +73,7 @@ function idleCard(task: AgentTask, openSettings: () => void): HTMLElement {
         class: "link-btn",
         style: `color:${task.color}d9`,
         text: "Atualizar",
-        onclick: () => void Bridge.refreshIntegration(task.id),
+        onclick: () => void IntegrationsBridge.refreshIntegration(task.id),
       }),
     );
   } else {

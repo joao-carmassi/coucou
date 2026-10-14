@@ -3,6 +3,7 @@
 // working through the module API. One instance per module start; views reach it with claudeOf().
 
 import { Bridge } from "../../core/bridge";
+import { ClaudeBridge } from "./bridge";
 import type { BotStateName } from "../../core/layout";
 import type { Disposer, HomeRequest, IslandApi } from "../../core/moduleApi";
 import { Sound } from "../../core/sound";
@@ -159,7 +160,7 @@ export class Claude {
     if (!req) return;
     const denied = d === "deny" || d === "plan-keep";
     Sound.play(denied ? "blip" : "approve");
-    void Bridge.approvalDecision(req.requestId, d);
+    void ClaudeBridge.approvalDecision(req.requestId, d);
     this.noteOutcome(req.tool, (step) => (step.permission = denied ? "denied" : "allowed"));
     this.settleRequest();
   }
@@ -168,7 +169,7 @@ export class Claude {
     const req = this.store.pendingQuestion;
     if (!req) return;
     Sound.play("approve");
-    void Bridge.approvalAnswer(req.requestId, answers);
+    void ClaudeBridge.approvalAnswer(req.requestId, answers);
     this.noteOutcome(QUESTION_TOOL, (step) => (step.answers = answers));
     this.settleRequest();
   }
@@ -177,7 +178,7 @@ export class Claude {
     const req = this.store.pendingQuestion;
     if (!req) return;
     Sound.play("blip");
-    void Bridge.approvalDecision(req.requestId, "skip");
+    void ClaudeBridge.approvalDecision(req.requestId, "skip");
     this.noteOutcome(QUESTION_TOOL, (step) => (step.state = "failed"));
     this.settleRequest();
   }
@@ -188,7 +189,7 @@ export class Claude {
     if (!req) return;
     Sound.play("blip");
     // Declined, not denied: Claude Code asks it in its own window at once.
-    void Bridge.approvalDecline(req.requestId);
+    void ClaudeBridge.approvalDecline(req.requestId);
     this.settleRequest();
   }
 
@@ -231,8 +232,8 @@ export class Claude {
   /** Where the session runs: the Claude app brought forward, or its terminal (VS Code without WSL). */
   openClient() {
     const s = this.store.session;
-    if (s.client === "desktop") void Bridge.openClaudeApp();
-    else void Bridge.openTerminal(s.cwd, s.wslDistro, s.terminalPids);
+    if (s.client === "desktop") void ClaudeBridge.openClaudeApp();
+    else void ClaudeBridge.openTerminal(s.cwd, s.wslDistro, s.terminalPids);
     // The window is in front now: fold the island back.
     this.api.island.close();
   }
@@ -261,7 +262,7 @@ export class Claude {
     const front = this.store.session;
     // Shown at once: it also takes the choose card down, so a second click can't launch twice.
     this.api.island.note("Abrindo no terminal…");
-    Bridge.sessionLaunch({ profile: front.profile, cwd: front.cwd, resume: null, attach: path })
+    ClaudeBridge.sessionLaunch({ profile: front.profile, cwd: front.cwd, resume: null, attach: path })
       .then(() => Sound.play("attach"))
       .catch((err) => this.showError(err));
   }
@@ -271,7 +272,7 @@ export class Claude {
     try {
       if (ingest) {
         this.api.island.note("Abrindo no terminal…");
-        path = (await Bridge.ingestClaudeFile(path)).path;
+        path = (await ClaudeBridge.ingestClaudeFile(path)).path;
       }
       this.launchWith(path);
     } catch (err) {
@@ -342,7 +343,7 @@ export class Claude {
       // A request nobody can answer any more goes back to the terminal.
       for (const s of store.sessions) {
         const req = (s.approval ?? s.question)?.requestId;
-        if (req) void Bridge.approvalDecline(req);
+        if (req) void ClaudeBridge.approvalDecline(req);
       }
       if (store.hasPending()) State.isPinned = false;
       State.tasks = State.tasks.filter((t) => t.id !== CLAUDE_ID && !store.agentSteps.has(t.id));

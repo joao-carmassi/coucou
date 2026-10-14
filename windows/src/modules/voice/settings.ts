@@ -2,6 +2,7 @@
 // The speech model is downloaded only on the button; the microphone opens only on the hotkey.
 
 import { Bridge, onEvent } from "../../core/bridge";
+import { VoiceBridge } from "./bridge";
 import { State } from "../../core/state";
 import { h } from "../../views/dom";
 
@@ -18,7 +19,7 @@ export function voiceSettingsSection(): { el: HTMLElement; dispose(): void } {
     err.textContent = msg;
   };
   const refresh = async () => {
-    const st = await Bridge.voiceModelStatus();
+    const st = await VoiceBridge.voiceModelStatus();
     status.textContent = st?.ready ? "Modelo instalado." : "Modelo não instalado.";
     dl.disabled = !!st?.ready;
     showError(st?.hotkeyError ?? "");
@@ -27,7 +28,7 @@ export function voiceSettingsSection(): { el: HTMLElement; dispose(): void } {
     dl.disabled = true;
     status.textContent = "Baixando…";
     try {
-      await Bridge.voiceDownloadModel();
+      await VoiceBridge.voiceDownloadModel();
     } catch (e) {
       status.textContent = String(e).replace(/^Error:\s*/, "");
       dl.disabled = false;

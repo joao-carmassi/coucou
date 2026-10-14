@@ -1,7 +1,7 @@
 // The Claude module's own state: sessions, the one in front, what each changed. Moved out of
 // core/state.ts (m3-ok). Nothing here is global: one store per module start.
 
-import type { ManagedSession } from "../../core/bridge";
+import type { ManagedSession } from "./bridge";
 import { State } from "../../core/state";
 import {
   CLAUDE_ID, newSession,

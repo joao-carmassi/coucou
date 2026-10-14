@@ -5,7 +5,7 @@
 
 import { h } from "../../../views/dom";
 import { timeAgo } from "../../../views/format";
-import { Bridge, type ClaudeProfile, type LiveSession, type ManagedSession } from "../../../core/bridge";
+import { type ClaudeProfile, type LiveSession, type ManagedSession, ClaudeBridge } from "../bridge";
 import type { ViewContext, ViewHost } from "../../../core/moduleApi";
 import type { Claude } from "../claude";
 
@@ -62,15 +62,15 @@ export function buildSessionsView(c: Claude, ctx: ViewContext): ViewHost {
 
   async function newSession() {
     const profile = filter ?? (profiles.find((p) => p.isDefault) ?? profiles[0])?.key ?? "";
-    await run(() => Bridge.sessionLaunch({ profile, cwd: null, resume: null, attach: null }));
+    await run(() => ClaudeBridge.sessionLaunch({ profile, cwd: null, resume: null, attach: null }));
   }
 
   async function load() {
     try {
-      if (profiles.length === 0) profiles = (await Bridge.claudeProfiles()) ?? [];
-      all = (await Bridge.sessionsAll()) ?? [];
+      if (profiles.length === 0) profiles = (await ClaudeBridge.claudeProfiles()) ?? [];
+      all = (await ClaudeBridge.sessionsAll()) ?? [];
       store.managedSessions = all;
-      live = new Map((await Bridge.sessionsLive() ?? []).map((l) => [keyOf(l), l]));
+      live = new Map((await ClaudeBridge.sessionsLive() ?? []).map((l) => [keyOf(l), l]));
     } catch (err) {
       error = message(err);
     }
@@ -80,7 +80,7 @@ export function buildSessionsView(c: Claude, ctx: ViewContext): ViewHost {
   async function poll() {
     if (!isOn()) return stop();
     try {
-      live = new Map(((await Bridge.sessionsLive()) ?? []).map((l) => [keyOf(l), l]));
+      live = new Map(((await ClaudeBridge.sessionsLive()) ?? []).map((l) => [keyOf(l), l]));
       draw();
     } catch { /* next tick */ }
     if (polling) schedule();
@@ -109,10 +109,10 @@ export function buildSessionsView(c: Claude, ctx: ViewContext): ViewHost {
     const act = running
       ? h("button", { class: "btn secondary sess-act", text: "Focar", onclick: () => void run(async () => {
           // The bridge reports failure as a falsy result, never by throwing.
-          if (!(await Bridge.openTerminal(s.cwd, hook?.wslDistro ?? null, [l?.pid ?? s.pid, ...(hook?.terminalPids ?? [])].filter((p): p is number => !!p))))
+          if (!(await ClaudeBridge.openTerminal(s.cwd, hook?.wslDistro ?? null, [l?.pid ?? s.pid, ...(hook?.terminalPids ?? [])].filter((p): p is number => !!p))))
             throw new Error("Não foi possível abrir o terminal.");
         }) })
-      : h("button", { class: "btn secondary sess-act", text: "Retomar", onclick: () => void run(() => Bridge.sessionLaunch({ profile: s.profile, cwd: s.cwd, resume: s.id, attach: null })) });
+      : h("button", { class: "btn secondary sess-act", text: "Retomar", onclick: () => void run(() => ClaudeBridge.sessionLaunch({ profile: s.profile, cwd: s.cwd, resume: s.id, attach: null })) });
     // A running session can't be erased (Rust refuses): no × for it.
     const del = running ? null : h("button", {
       class: isArmed ? "sess-del armed" : "sess-del",
@@ -124,7 +124,7 @@ export function buildSessionsView(c: Claude, ctx: ViewContext): ViewHost {
           return draw();
         }
         armed = null;
-        void run(() => Bridge.sessionErase(s.profile, s.id));
+        void run(() => ClaudeBridge.sessionErase(s.profile, s.id));
       },
     });
     return h(

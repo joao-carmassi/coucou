@@ -2,7 +2,7 @@
 // core never sees it (it gets pills, hooks and a view). The views reach the island through `rt`.
 
 import type { Disposer, IslandApi } from "../../core/moduleApi";
-import type { IntegrationNews } from "../../core/bridge";
+import type { IntegrationNews } from "./bridge";
 import { State } from "../../core/state";
 
 export { GITHUB, PROVIDERS, providerOf, type Provider } from "./providers";

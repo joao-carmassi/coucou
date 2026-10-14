@@ -3,6 +3,7 @@
 
 import type { Disposer, IslandApi, ModuleDef } from "../../core/moduleApi";
 import { Bridge } from "../../core/bridge";
+import { VoiceBridge } from "./bridge";
 import { State } from "../../core/state";
 import { voiceSettingsSection } from "./settings";
 import { buildVoiceView, send, Voice } from "./view";
@@ -37,10 +38,10 @@ function start(api: IslandApi): Disposer {
       if (api.island.view() !== "voice") return; // a request card in front owns the keys
       const listening = Voice.phase === "listening";
       if (!listening && !reviewing()) return;
-      if (e.key === "Enter") { e.preventDefault(); if (listening) void Bridge.voiceStop(); else void send(); }
+      if (e.key === "Enter") { e.preventDefault(); if (listening) void VoiceBridge.voiceStop(); else void send(); }
       else if (e.key === "Escape") {
         e.preventDefault();
-        if (listening) void Bridge.voiceCancel();
+        if (listening) void VoiceBridge.voiceCancel();
         Voice.phase = "none";
         Voice.leave();
       }
@@ -66,7 +67,7 @@ function start(api: IslandApi): Disposer {
     // Hotkey while not recording: bring a waiting transcript back, else start listening.
     api.listen("voice-hotkey", () => {
       if (reviewing()) { keys(false); show(); keys(true); return; }
-      Bridge.voiceStart().catch((e) => { Voice.phase = "error"; Voice.note = String(e).replace(/^Error:\s*/, ""); State.isPinned = true; line(); show(); });
+      VoiceBridge.voiceStart().catch((e) => { Voice.phase = "error"; Voice.note = String(e).replace(/^Error:\s*/, ""); State.isPinned = true; line(); show(); });
     }),
     api.listen<{ state: string; message: string }>("voice-state", ({ state, message }) => {
       if (state === "listening") Voice.phase = "listening";

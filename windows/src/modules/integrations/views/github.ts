@@ -11,14 +11,8 @@ import { COLOR, wear } from "../../../views/palette";
 import { ACTIVITY_STYLE, GITHUB_LEVELS, compact, githubData, repoName, type GithubOpening } from "./integrations";
 import { timeAgo } from "../../../views/format";
 import { GITHUB, cleanups, info as infos, integrationSettings, later, redraw } from "../store";
-import {
-  Bridge,
-  type GithubActivity, type GithubBuild, type GithubCommentsDetail, type GithubCommitsDetail, type GithubContributions,
-  type GithubData, type GithubDay, type GithubDeploy, type GithubDetail, type GithubEntry, type GithubFile,
-  type GithubIssueDetail, type GithubJob, type GithubLabel, type GithubProject, type GithubPull, type GithubPullDetail,
-  type GithubReleaseDetail, type GithubRemark, type GithubRepo, type GithubRunDetail, type GithubTarget,
-  type GithubThread, type GithubTimed, type IntegrationNews,
-} from "../../../core/bridge";
+import { Bridge } from "../../../core/bridge";
+import { type GithubActivity, type GithubBuild, type GithubCommentsDetail, type GithubCommitsDetail, type GithubContributions, type GithubData, type GithubDay, type GithubDeploy, type GithubDetail, type GithubEntry, type GithubFile, type GithubIssueDetail, type GithubJob, type GithubLabel, type GithubProject, type GithubPull, type GithubPullDetail, type GithubReleaseDetail, type GithubRemark, type GithubRepo, type GithubRunDetail, type GithubTarget, type GithubThread, type GithubTimed, type IntegrationNews, IntegrationsBridge } from "../bridge";
 import type { BotEmoteName, BotStateName } from "../../../core/layout";
 import type { Disposer, ViewContext, ViewHost } from "../../../core/moduleApi";
 import { hexToRGB, type BotEngine } from "../../../mochi/engine";
@@ -231,7 +225,7 @@ function clearStack() {
 }
 
 function loadProject(screen: ProjectScreen, force: boolean) {
-  return load(screen, () => top() === screen, () => Bridge.githubProject(screen.fullName, force));
+  return load(screen, () => top() === screen, () => IntegrationsBridge.githubProject(screen.fullName, force));
 }
 
 /** The sheet itself is up, or one of its run's jobs is. */
@@ -241,7 +235,7 @@ function showing(screen: DetailScreen): boolean {
 }
 
 async function loadDetail(screen: DetailScreen, force: boolean) {
-  await load(screen, () => showing(screen), () => Bridge.githubDetail(screen.target, force));
+  await load(screen, () => showing(screen), () => IntegrationsBridge.githubDetail(screen.target, force));
   await loadRun(screen, force);
 }
 
@@ -262,7 +256,7 @@ async function loadRun(screen: DetailScreen, force: boolean) {
     return;
   }
   try {
-    const run = await Bridge.githubDetail({ kind: "run", repo: ci.repo, id: ci.id }, force);
+    const run = await IntegrationsBridge.githubDetail({ kind: "run", repo: ci.repo, id: ci.id }, force);
     screen.run = run.kind === "run" ? run : null;
   } catch {
     // The CI line still says how it went; the jobs can wait for a refresh.
@@ -339,7 +333,7 @@ function armLive() {
     const screen = liveRun();
     if (!screen || screen.loading || !watching()) return;
     try {
-      screen.data = await Bridge.githubDetail(screen.target, true);
+      screen.data = await IntegrationsBridge.githubDetail(screen.target, true);
       screen.error = null;
       await loadRun(screen, true);
     } catch {
@@ -432,7 +426,7 @@ function localDay(date: string): { from: string; to: string; today: boolean } {
 
 function loadDay(current: DayPick) {
   const { from, to, today } = localDay(current.date);
-  return load(current, () => day === current, () => Bridge.githubDay(from, to, today));
+  return load(current, () => day === current, () => IntegrationsBridge.githubDay(from, to, today));
 }
 
 /** A second click on the same day lets go of it, as on GitHub. */
@@ -484,7 +478,7 @@ export function enterGithubPanel(open?: GithubOpening) {
   motion = null;
   touch();
   const d = githubData();
-  if (!d || Date.now() - d.fetchedAt > STALE_MS) void Bridge.refreshIntegration(ID);
+  if (!d || Date.now() - d.fetchedAt > STALE_MS) void IntegrationsBridge.refreshIntegration(ID);
   if (open?.target) openTarget(open.target, open.label ?? "", open.url ?? "");
 }
 
@@ -2519,7 +2513,7 @@ export function buildGithub(ctx: ViewContext): ViewHost {
     redraw();
     const started = performance.now();
     // Resolves once Rust has finished — the new data has already arrived by then.
-    await Bridge.refreshIntegration(ID);
+    await IntegrationsBridge.refreshIntegration(ID);
     const left = MIN_SPIN_MS - (performance.now() - started);
     if (left > 0) await new Promise<void>((r) => later(r, left));
     refreshing = false;

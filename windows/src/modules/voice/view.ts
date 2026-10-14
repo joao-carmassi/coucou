@@ -2,7 +2,8 @@
 // waits for Enter (the module's key listener calls send), Esc or "Aguardar" (parks it hidden), never a timer; Enter launches a NEW Claude Code session; nothing here types into
 // an existing one. State lives here (one voice at a time); the module resets it on start/stop.
 
-import { Bridge } from "../../core/bridge";
+import { ClaudeBridge } from "../claude/bridge";
+import { VoiceBridge } from "./bridge";
 import type { ViewContext, ViewHost } from "../../core/moduleApi";
 import { State } from "../../core/state";
 import { h, clear } from "../../views/dom";
@@ -36,9 +37,9 @@ export async function send() {
   if (Voice.busy || !Voice.text) return;
   Voice.busy = true;
   try {
-    const profiles = (await Bridge.claudeProfiles()) ?? [];
+    const profiles = (await ClaudeBridge.claudeProfiles()) ?? [];
     const profile = (profiles.find((p) => p.isDefault) ?? profiles[0])?.key ?? "";
-    await Bridge.sessionLaunch({ profile, cwd: null, resume: null, attach: null, prompt: Voice.text });
+    await ClaudeBridge.sessionLaunch({ profile, cwd: null, resume: null, attach: null, prompt: Voice.text });
     Voice.phase = "none";
     Voice.leave();
   } catch (err) {
@@ -76,7 +77,7 @@ export function buildVoiceView(_ctx: ViewContext): ViewHost {
         case "listening":
           title.textContent = "● Microfone aberto";
           sub.textContent = "Fale em inglês, sem pressa. Enter ou atalho finaliza · Esc cancela.";
-          actions.append(button("Finalizar", "secondary", () => void Bridge.voiceStop()));
+          actions.append(button("Finalizar", "secondary", () => void VoiceBridge.voiceStop()));
           break;
         case "transcribing":
           title.textContent = "Transcrevendo…";

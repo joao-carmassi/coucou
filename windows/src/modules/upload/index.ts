@@ -4,6 +4,7 @@
 // The core only sees an Overlay and three views; the file goes to Claude through the launchFile hook.
 
 import { Bridge } from "../../core/bridge";
+import { ClaudeBridge } from "../claude/bridge";
 import { EXPANDED_W } from "../../core/layout";
 import type { Disposer, IslandApi, ModuleDef, Overlay } from "../../core/moduleApi";
 import { Sound } from "../../core/sound";
@@ -132,7 +133,7 @@ function start(api: IslandApi): Disposer {
     }
     UploadSeq.performDrop(Up.duration);
     api.island.redraw();
-    Up.ingest = Bridge.ingestClaudeFile(path);
+    Up.ingest = ClaudeBridge.ingestClaudeFile(path);
     Up.ingest
       .then((file) => { Up.droppedFile = { name: file.name, path: file.path }; Up.ingested = true; api.island.redraw(); })
       .catch((err) => { UploadSeq.deactivate(); api.avatar.morph(0); api.island.error(err); });
