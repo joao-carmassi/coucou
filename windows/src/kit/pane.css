@@ -29,11 +29,11 @@
 .pane-side {
   position: relative;
   z-index: 1;
-  flex: 0 0 113px;
+  flex: 0 0 var(--pane-side-w, 113px);
   min-width: 0;
   display: flex;
   flex-direction: column;
-  padding: 119px 8px 12px 13px;
+  padding: var(--pane-side-top, 119px) 8px 12px 13px;
 }
 .pane-side-who {
   display: flex;

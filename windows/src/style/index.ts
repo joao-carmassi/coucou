@@ -7,5 +7,6 @@ import "./ui.css";
 import "./core.css";
 import "./text.css";
 import "../kit/pane.css";
+import "../kit/tile.css";
 import "../kit/code.css";
 import "./settings.css";

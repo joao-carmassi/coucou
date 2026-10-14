@@ -17,6 +17,7 @@
 // Claude app, VS Code, a terminal.
 
 import { h, svg, clear, dot, replay } from "../../../kit/dom";
+import { panel } from "../../../kit/panel";
 import { diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath, type FileKind } from "../../../kit/code";
 import { ICONS } from "../icons";
 import { COLOR } from "../../../kit/palette";
@@ -301,8 +302,7 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
   const name = h("b", { text: UNNAMED });
   const nameSub = h("span", { text: UNNAMED });
   const steps = h("div", { class: "sess-steps" });
-  const side = h("div", { class: "pane-side" }, h("div", { class: "pane-side-who" }, name, nameSub), steps);
-  const el = h("div", { class: "view pane-view session-view" }, h("div", { class: "card pane-card" }, side, h("div", { class: "pane-col" }, main)));
+  const el = panel({ cls: "session-view", side: { title: name, sub: nameSub, body: steps }, main });
 
   backBtn.addEventListener("click", () => {
     actions.blip();

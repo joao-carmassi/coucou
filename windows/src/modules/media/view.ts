@@ -4,6 +4,7 @@
 // never touches the file.
 
 import { h, svg, clear } from "../../kit/dom";
+import { panel } from "../../kit/panel";
 import { MediaBridge, type MediaItem } from "./bridge";
 import { CLAUDE_SERVICE, type LaunchFile } from "../claude/api";
 import type { Disposer, IslandApi, ViewContext, ViewHost } from "../../core/moduleApi";
@@ -100,12 +101,7 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
   const grid = h("div", { class: "pane-list media-grid" });
   const menu = h("div", { class: "media-menu" });
   const main = h("div", { class: "pane-main" }, head, grid, menu);
-  const side = h(
-    "div",
-    { class: "pane-side" },
-    h("div", { class: "pane-side-who" }, h("b", { text: "Mídia" }), h("span", { text: "capturas e arquivos" })),
-  );
-  const el = h("div", { class: "view pane-view media-view" }, h("div", { class: "card pane-card" }, side, h("div", { class: "pane-col" }, main)));
+  const el = panel({ cls: "media-view", side: { title: "Mídia", sub: "capturas e arquivos" }, main });
 
   menu.style.display = "none";
   const closeMenu = () => (menu.style.display = "none");

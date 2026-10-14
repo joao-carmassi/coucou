@@ -90,49 +90,13 @@
   height: 6px;
 }
 
-/* The cards a module draws for a pill in the home's left card (the tile-* pieces): providers dress in them (see api.ts). */
+/* The home's left slot: the tile-* cards modules draw for a pill live in kit/tile.css. */
 
 .left-body {
   position: relative;
   z-index: 1;
   height: 100%;
 }
-.tile-card {
-  padding: 10px 12px 0 108px;
-  display: flex;
-  flex-direction: column;
-}
-.tile-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  padding-right: 24px;
-}
-.tile-head b {
-  font: 600 12px var(--font);
-  color: var(--ink);
-}
-.tile-head > span {
-  font: 400 11px var(--font);
-  color: var(--dim-2);
-  white-space: nowrap;
-}
-.tile-status {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding-top: 4px;
-  font: 400 11px var(--font);
-  color: var(--dim-3);
-}
-.tile-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-top: 6px;
-}
-
 /* A card that opens something: the whole card is the button. */
 .card.opens:hover {
   background: color-mix(in srgb, var(--card), #fff 2.5%);

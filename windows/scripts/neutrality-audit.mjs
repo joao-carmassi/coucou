@@ -11,6 +11,8 @@
 //   A2. crossModuleImports: a module value-imports `../<other>/x` where x is not `api` (`import type` is fine).
 //   K. kit rule (a finding, not a ratchet): src/kit/** may value-import only kit/* and @tauri-apps/*; from core/ and mochi/
 //      only `import type`.
+//   K2. kit CSS: kit stylesheets use only kit class prefixes (pane-, tile-, diff-, code-, file-, hl-), and no module stylesheet
+//      defines a NEW pane-/tile-/diff- class (it may refine one the kit defines, e.g. `.tile-card.detail`).
 //   B. dead fields: every field of Settings, AppState, ViewLayout and IslandApi must be READ in src/{core,island,views,mochi,kit}
 //      (Settings: also src/settings/** and src/main.ts; IslandApi: used by any src file but moduleApi.ts/registry.ts, since modules are its readers).
 // scripts/neutrality-ratchet.json holds the counts; they may only go down (zero is enforced regardless).
@@ -174,6 +176,26 @@ for (const f of files(join(root, "src/kit"), [".ts"])) {
   for (const im of code.matchAll(/\b(?:import|export)\s+(?!type\b)([^;]*?)\s+from\s+["']([^"']+)["']/g)) {
     if (!/\w/.test(im[1].replace(/\btype\s+\w+/g, "")) || /^(\.\/|@tauri-apps\/|\.\.\/kit\/)/.test(im[2])) continue;
     add(rel(f), code.slice(0, im.index).split("\n").length, "kit value import outside kit/@tauri-apps", im[0].split("\n")[0], false);
+  }
+}
+
+// K2: kit CSS prefixes, and modules do not grow the kit's namespaces. (Separate from the rules above.)
+{
+  const KIT_PREFIXES = ["pane", "tile", "diff", "code", "file", "hl"];
+  const NAMESPACES = ["pane", "tile", "diff"];
+  const kitCss = files(join(root, "src/kit"), [".css"]);
+  const kitDefined = new Set();
+  for (const f of kitCss) {
+    const lines = readFileSync(f, "utf8").split("\n");
+    for (const { cls, n } of selectorClasses(f)) {
+      kitDefined.add(cls);
+      if (!KIT_PREFIXES.includes(cls.split("-")[0])) add(rel(f), n, "K2 kit css prefix", lines[n - 1], false);
+    }
+  }
+  for (const m of moduleDirs) for (const f of files(join(root, "src/modules", m), [".css"])) {
+    const lines = readFileSync(f, "utf8").split("\n");
+    for (const { cls, n } of selectorClasses(f))
+      if (NAMESPACES.includes(cls.split("-")[0]) && !kitDefined.has(cls)) add(rel(f), n, "K2 module defines kit-namespace class", lines[n - 1], false);
   }
 }
 

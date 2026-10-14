@@ -5,6 +5,7 @@
 // rather than from GitHub's look.
 
 import { h, svg, clear, dot } from "../../../kit/dom";
+import { panel } from "../../../kit/panel";
 import { diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath } from "../../../kit/code";
 import { ICONS } from "../icons";
 import { COLOR, wear } from "../../../kit/palette";
@@ -2141,7 +2142,6 @@ export function buildGithub(ctx: ViewContext): ViewHost {
   const account = h("b", { text: "GitHub" });
   const accountSub = h("span", { text: "GitHub" });
   const trail = h("div", { class: "gh-trail" });
-  const side = h("div", { class: "pane-side" }, h("div", { class: "pane-side-who" }, account, accountSub), trail);
 
   /**
    * A run on screen: the big Mochi works while it goes, with his crew — the
@@ -2167,8 +2167,7 @@ export function buildGithub(ctx: ViewContext): ViewHost {
     actions.look(ending?.state ?? (run?.state === "running" ? "working" : null));
   }
 
-  const card = h("div", { class: "card pane-card" }, side, h("div", { class: "pane-col" }, notice, main));
-  const el = h("div", { class: "view pane-view" }, card);
+  const el = panel({ side: { title: account, sub: accountSub, body: trail }, main: [notice, main] });
 
   /** Says which kind of screen is up: the tab's badge, and its colour on the tab. */
   function dress(look: ScreenLook | null) {
