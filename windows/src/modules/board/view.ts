@@ -5,7 +5,8 @@ import type { ViewContext, ViewHost } from "../../core/moduleApi";
 import type { Pill } from "../../core/state";
 import { askPill } from "../../kit/ask";
 import { clear, h, svg } from "../../kit/dom";
-import { homeLayout } from "../../kit/home";
+import { card } from "../../kit/card";
+import { homeBody, homeLayout, setSolo } from "../../kit/home";
 import { ICONS } from "../../kit/icons";
 import { tile } from "../../kit/tile";
 import type { BoardCard, BoardCardOf, BoardFocus, BoardPillOf } from "./api";
@@ -31,7 +32,7 @@ export function buildBoard(ctx: ViewContext): ViewHost {
   const askCard = (id: string) => askPill(api.useAll<BoardCardOf>("board.card"), id);
   const askLook = (id: string) => askPill(api.useAll<BoardPillOf>("board.pill"), id);
 
-  const leftBody = h("div", { class: "left-body" });
+  const leftBody = homeBody();
   const jump = h(
     "button",
     {
@@ -44,9 +45,9 @@ export function buildBoard(ctx: ViewContext): ViewHost {
     },
     svg(ICONS.arrowUpRight, 8),
   );
-  const left = h("div", { class: "card" }, leftBody, jump);
+  const left = card(null, leftBody, jump);
   const pills = h("div", { class: "pills" });
-  const right = h("div", { class: "card" }, pills);
+  const right = card(null, pills);
   const el = homeLayout({ left, right });
 
   let shown: BoardCard | null = null;
@@ -131,7 +132,7 @@ export function buildBoard(ctx: ViewContext): ViewHost {
 
       const others = api.pills.others().slice(0, 4);
       // Nothing else active: the left card takes the full width.
-      el.classList.toggle("solo", others.length === 0);
+      setSolo(el, others.length === 0);
       const nextPills = others.map((t) => { const look = askLook(t.id); return `${t.id}:${look?.badge ?? t.badge ?? ""}:${look?.label ?? t.label}`; }).join("|");
       if (nextPills !== pillKey) {
         pillKey = nextPills;

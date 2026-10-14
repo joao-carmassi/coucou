@@ -4,7 +4,7 @@
 // never touches the file.
 
 import { h, svg, clear } from "../../kit/dom";
-import { panel } from "../../kit/panel";
+import { paneHead, paneIcon, paneList, paneMain, paneSub, paneTab, panel } from "../../kit/panel";
 import { MediaBridge, type MediaItem } from "./bridge";
 import { CLAUDE_SERVICE, type LaunchFile } from "../claude/api";
 import type { Disposer, IslandApi, ViewContext, ViewHost } from "../../core/moduleApi";
@@ -96,11 +96,11 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
   let error = "";
   let wasOn = false;
 
-  const sub = h("span", { class: "pane-sub" });
-  const head = h("div", { class: "pane-head" }, h("div", { class: "pane-tab" }, h("b", { text: "Mídia" })), h("div", { class: "grow" }), sub);
-  const grid = h("div", { class: "pane-list media-grid" });
+  const sub = paneSub();
+  const head = paneHead(paneTab(h("b", { text: "Mídia" })), h("div", { class: "grow" }), sub);
+  const grid = paneList("media-grid");
   const menu = h("div", { class: "media-menu" });
-  const main = h("div", { class: "pane-main" }, head, grid, menu);
+  const main = paneMain(head, grid, menu);
   const el = panel({ cls: "media-view", side: { title: "Mídia", sub: "capturas e arquivos" }, main });
 
   menu.style.display = "none";
@@ -222,7 +222,7 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
     const cells = h("div", { class: "media-cells" });
     for (const item of items) {
       const img = h("img", { class: "media-thumb", alt: "", draggable: false, "data-path": item.path, "data-size": item.size });
-      const more = h("button", { class: "pane-icon media-more", title: "Ações" }, svg(ICONS.ellipsis, 12));
+      const more = paneIcon({ class: "media-more", title: "Ações" }, svg(ICONS.ellipsis, 12));
       more.addEventListener("click", () => {
         const a = more.getBoundingClientRect();
         openMenu(item, a.right - 140, a.bottom + 2);

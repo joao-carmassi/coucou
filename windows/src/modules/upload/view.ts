@@ -4,6 +4,7 @@
 // `choose` offers the one action the spec asks for: open the file in Claude Code.
 
 import { h, clear } from "../../kit/dom";
+import { card, view } from "../../kit/card";
 import { Up } from "./state";
 import { CLAUDE_SERVICE, type LaunchFile } from "../claude/api";
 import type { IslandApi, ViewContext, ViewHost } from "../../core/moduleApi";
@@ -44,18 +45,17 @@ export function buildUpload(): ViewHost {
     { class: "drop-tags" },
     ...["PDF", "Imagens", "Código", "Docs"].map((t) => h("span", { text: t })),
   );
-  const card = h(
-    "div",
-    { class: "card drop-card" },
+  const dropCard = card(
+    { cls: "drop-card" },
     frame,
     h("div", { class: "drop-body" }, title, tags),
   );
-  const el = h("div", { class: "view" }, card);
+  const el = view(dropCard);
 
   return {
     el,
     sync() {
-      card.classList.toggle("over", Up.dragOver);
+      dropCard.classList.toggle("over", Up.dragOver);
     },
   };
 }
@@ -65,13 +65,12 @@ export function buildUploading(): ViewHost {
   const percent = h("span", { class: "up-pct" });
   const fill = h("div", { class: "up-fill" });
   const glow = h("div", { class: "up-glow" });
-  const card = h(
-    "div",
-    { class: "card up-card" },
+  const upCard = card(
+    { cls: "up-card" },
     h("div", { class: "up-row" }, label, percent),
     h("div", { class: "up-track" }, fill, glow),
   );
-  const el = h("div", { class: "view" }, card);
+  const el = view(upCard);
 
   return {
     el,
@@ -87,7 +86,7 @@ export function buildUploading(): ViewHost {
       fill.style.width = `${w}px`;
       glow.style.transform = `translateX(${Math.max(0, w - 14)}px)`;
       glow.style.opacity = Up.progress > 0.01 ? "1" : "0";
-      card.classList.toggle("done", done);
+      upCard.classList.toggle("done", done);
     },
   };
 }
@@ -109,12 +108,9 @@ export function buildChoose(ctx: ViewContext, cancel: () => void): ViewHost {
       onclick: cancel,
     }),
   );
-  const el = h(
-    "div",
-    { class: "view" },
-    h(
-      "div",
-      { class: "card" },
+  const el = view(
+    card(
+      null,
       h("div", { class: "stack", style: "padding:0 18px 0 98px" }, title, sub, row),
     ),
   );
