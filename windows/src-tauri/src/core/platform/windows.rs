@@ -22,7 +22,7 @@ use ::windows::Win32::UI::WindowsAndMessaging::{
 use super::LocalTime;
 use crate::core::island::WINDOW_LABEL;
 
-/// File name of the Claude Code relay.
+/// File name of the hook relay executable.
 pub const HOOK_EXE: &str = "coucou-hook.exe";
 
 /// Environment variable holding the home directory.

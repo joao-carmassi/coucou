@@ -37,7 +37,7 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
     const t = window.setTimeout(() => { scope.remove(d); fn(); }, ms);
     return scope.add(d);
   };
-  /** The resolvers check ttl at draw time: redraw once it has passed. One timer per kind. */
+  /** The resolvers check ttl at draw time: redraw once it has passed. One scheduled callback per kind. */
   const expiry: Record<"status" | "avatar", Disposer | null> = { status: null, avatar: null };
   const expire = (kind: "status" | "avatar", ttlMs?: number) => {
     expiry[kind]?.();

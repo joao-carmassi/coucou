@@ -73,7 +73,7 @@ export class IslandStateMachine {
     this.transition("home");
   }
 
-  /** Greeting animation finished (T.end). Doesn't override a running hover timer. */
+  /** Greeting animation finished (T.end). Doesn't override a running hover delay. */
   greetComplete() {
     if (this.state !== "coucou") return;
     if (this.greetCollapse == null) this.scheduleGreetCollapse(this.greetAutoCollapseDelay);

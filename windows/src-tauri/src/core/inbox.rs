@@ -25,7 +25,7 @@ pub fn inbox_dir() -> PathBuf {
 }
 
 /// Announces (`inbox-added`) a file that came onto the island. It is an event
-/// because the list lives in the media module, which listens for it; no handle means no event.
+/// because the list lives in a module, which listens for it; no handle means no event.
 fn note_drop(app: Option<&AppHandle>, path: &str) {
     if let Some(app) = app {
         let _ = app.emit("inbox-added", path);
@@ -48,7 +48,7 @@ pub fn ingest(app: Option<&AppHandle>, source: &str) -> Result<DroppedFile, Stri
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "file".into());
 
-    // Already in the inbox (the Mídia list): attach it as it is, no second copy.
+    // Already in the inbox (the dropped-files list): attach it as it is, no second copy.
     if let (Ok(s), Ok(d)) = (src.canonicalize(), dir.canonicalize()) {
         if s.parent() == Some(d.as_path()) {
             return Ok(DroppedFile { name, path: source.to_string(), size: meta.len() });

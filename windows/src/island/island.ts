@@ -80,7 +80,7 @@ export class Island implements IslandHost {
 
   /** The colour Mochi body is drawn in, eased towards what it should be. */
   private bodyRGB: RGB | null = null;
-  /** A body colour a view asked for (the GitHub graph's day under the mouse); wins over the pill's. His body only. */
+  /** A body colour a view asked for (a hovered chart cell, say); wins over the pill's. His body only. */
   private tintRequest: RGB | null = null;
 
   private running = false;
@@ -400,7 +400,7 @@ export class Island implements IslandHost {
     return Compact.resolve(State.otherPills.length)?.text ?? "";
   }
 
-  /** The line takes the place of the mini grid (timer). */
+  /** The line takes the place of the mini grid. */
   private textOverGrid(): boolean {
     return !!Compact.resolve(State.otherPills.length)?.overGrid;
   }
@@ -724,7 +724,7 @@ export class Island implements IslandHost {
   private frame = (nowMs: number) => {
     // Compact, cursor away, only the looping avatar idle (breathe/scan/sweat/zz): ~15 fps.
     // Every presented frame costs the GPU process ~4 ms of CPU (a 720x320 transparent window), so
-    // the rate is the cost. The skipped frame is a timer, not a rAF poll: polling woke the main
+    // the rate is the cost. The skipped frame is a timeout, not a rAF poll: polling woke the main
     // thread on every vsync (240 Hz). dt keeps accumulating (capped below) so motion speed is unchanged.
     if (State.mode === "compact" && !this.wasInIsland && !this.dirty && !this.lastOverlayBusy &&
         !this.width.animating && !this.height.animating && !this.radius.animating && this.offsetX.settled &&

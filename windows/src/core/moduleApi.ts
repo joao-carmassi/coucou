@@ -17,11 +17,10 @@ export interface StatusLine {
   icon?: string;
   ttlMs?: number;
   urgent?: boolean;
-  /** Shown beside other pills in place of the mini grid (the timer). Default: only when no other pill. */
+  /** Shown beside other pills in place of the mini grid. Default: only when no other pill. */
   overGrid?: boolean;
 }
 
-/** `state` also takes the old mood names (approval, question, finished, ratelimit) for one version. */
 export interface AvatarSignal { state: BotStateName; priority: number; emote?: BotEmoteName; ttlMs?: number }
 
 export interface ViewHost {

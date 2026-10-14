@@ -342,7 +342,7 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
             // take the mouse. The tick that was running when the island collapsed
             // may just have made it click-through, and setters from this thread are
             // queued to the event loop — so clear the flag from here, behind it.
-            // Otherwise the hidden island can only be woken by Claude Code events.
+            // Otherwise the hidden island can only be woken by module events.
             if let Some(win) = window(&app) {
                 let _ = win.set_ignore_cursor_events(false);
             }

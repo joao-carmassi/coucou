@@ -7,7 +7,7 @@ use std::path::PathBuf;
 mod windows;
 pub use self::windows::*;
 
-/// Wall-clock time in the user's time zone, for log lines and backup names.
+/// Local date and time in the user's time zone, for log lines and backup names.
 pub struct LocalTime {
     pub year: u32,
     pub month: u32,
@@ -17,7 +17,7 @@ pub struct LocalTime {
     pub second: u32,
 }
 
-/// The user's home directory, where `.claude/settings.json` lives.
+/// The user's home directory, where per-user config folders live.
 pub fn home_dir() -> PathBuf {
     std::env::var_os(HOME_VAR)
         .map(PathBuf::from)

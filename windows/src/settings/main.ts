@@ -201,7 +201,7 @@ async function main() {
   // Scroll to the section the window was opened for, if any.
   const shown = (target: string) => {
     if (target) document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    // The cue module sections wait for (WSL is slow, so it only looks while someone is looking).
+    // The cue sections wait for (slow checks only run while someone is looking).
     window.dispatchEvent(new Event("coucou:settings-shown"));
   };
   void onEvent<null>("settings-shown", async () => shown((await Bridge.takeSettingsSection()) ?? ""));

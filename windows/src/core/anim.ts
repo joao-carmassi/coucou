@@ -23,7 +23,7 @@ export const seg = (t: number, a: number, b: number) => clamp((t - a) / (b - a),
 
 // ── Colour blending ───────────────────────────────────────────────────────────
 // Mixing two colours channel by channel in sRGB dips through a dark, muddy
-// middle — GitHub red to green passes through brown. OKLab is built so equal
+// middle — red to green passes through brown. OKLab is built so equal
 // steps look equal, which keeps a colour change bright and even throughout.
 
 type Triple = readonly [number, number, number];

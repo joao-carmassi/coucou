@@ -239,7 +239,7 @@ pub fn show_settings_window(app: &AppHandle) {
 }
 
 /// Shows the settings window and tells it which section to scroll to ("" for
-/// none). The window also refreshes what is slow to compute (WSL) on this cue.
+/// none). The window also refreshes what is slow to compute on this cue.
 pub(crate) fn show_settings_section(app: &AppHandle, section: &str) {
     let Some(win) = app.get_webview_window("settings") else {
         log::line("settings window missing");

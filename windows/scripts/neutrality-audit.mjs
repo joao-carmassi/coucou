@@ -1,14 +1,14 @@
 // Static neutrality audit: "the core (island + Mochi) knows no module".
 // Scope: src/{core,island,views,mochi,settings,style}/**, src/main.ts, src-tauri/src/core/**, src-tauri/src/lib.rs.
-// FAIL by default: exit 1 on any non-allowlisted finding (comment-only hits are warnings and never fail).
-// `--warn` keeps the old behaviour (print, exit 0).
+// FAIL by default: exit 1 on any non-allowlisted finding, comment-only hits included.
+// `--warn` prints everything and exits 0 (comment hits shown as warnings).
 // Run: npm run neutrality-audit [-- --warn] [-- --verbose]
 //
 // Rules:
 //   1. TS import path containing `/modules/` (core/registry.ts and settings/main.ts may import modules/settings + catalog).
 //   2. Module id / label / group (derived from src/modules/* folders and their manifest.json) as a whole word in code
-//      (comment-only hits are counted as warnings: rule "... (comment)").
-//   3. Concept denylist (approval, session, overview, ...) in code (comment-only: warning).
+//      (comment hits carry the rule suffix "(comment)" and fail too).
+//   3. Concept denylist (approval, session, overview, ...) in code or comments.
 //   4. Rust: `modules::` outside CATALOG/registry/handler lines; events emitted by core must be generic;
 //      `#[cfg(test)]` blocks are skipped.
 //
@@ -117,7 +117,7 @@ for (const f of files(join(root, "src/style"), [".css"]).concat(files(join(root,
 for (const f of files(join(root, "src-tauri/src/core"), [".rs"]).concat([join(root, "src-tauri/src/lib.rs")])) scan(f, "rs");
 
 const live = findings.filter((x) => !x.reason);
-const bad = live.filter((x) => !x.warn);
+const bad = fail ? live : live.filter((x) => !x.warn);
 if (process.argv.includes("--verbose"))
   for (const x of live) console.log(`${x.file}:${x.n}`.padEnd(48) + (x.warn ? "warn " : "FIND ") + x.rule.padEnd(22) + x.line);
 const per = new Map();

@@ -43,7 +43,7 @@ impl FileDropTarget {
 }
 
 /// The dragged files, if the data carries any (CF_HDROP — Explorer, the
-/// desktop, `\\wsl.localhost` folders…).
+/// desktop, network shares…).
 fn file_paths(data: Ref<'_, IDataObject>) -> Option<Vec<PathBuf>> {
     let data = data.as_ref()?;
     let format = FORMATETC {
