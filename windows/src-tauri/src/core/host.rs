@@ -22,6 +22,12 @@ pub struct ModuleInfo {
     pub group: Option<&'static str>,
 }
 
+/// One folder's invoke handler. `generate_handler!` cannot be stored directly (E0282), so folders build it through `handler`.
+pub type Handler = Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync>;
+pub fn handler<F: Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static>(f: F) -> Handler {
+    Box::new(f)
+}
+
 pub trait Module: Send + Sync {
     fn id(&self) -> &'static str;
     /// Never called while the module is off. Must not call the host (its lock is held).
@@ -136,6 +142,7 @@ pub struct ModuleHost {
 
 impl ModuleHost {
     pub fn new(catalog: &'static [ModuleInfo], modules: Vec<Box<dyn Module>>) -> Self {
+        debug_assert!(modules.iter().all(|m| catalog.iter().any(|c| c.id == m.id())), "a Module id is not in the catalog (manifest.json)");
         Self { catalog, modules, running: Mutex::default(), effective: Mutex::default() }
     }
 

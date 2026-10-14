@@ -83,3 +83,20 @@ fn offer_wsl_setup(app: &AppHandle, stop: &AtomicBool) {
     log::line("WSL detected — offering to set up its Claude Code hooks");
     crate::show_settings_section(app, "wsl");
 }
+
+pub const PREFIXES: &[&str] = &["claude_"];
+
+pub fn modules() -> Vec<Box<dyn Module>> {
+    vec![Box::new(Claude)]
+}
+
+pub fn handler() -> crate::core::host::Handler {
+    use commands::*;
+    crate::core::host::handler(tauri::generate_handler![
+        claude_open_app, claude_open_in_vscode, claude_open_terminal, claude_start_terminal, claude_resume_in_terminal,
+        claude_profiles, claude_sessions_all, claude_sessions_live, claude_session_launch, claude_session_erase,
+        claude_hooks_status, claude_hooks_preview, claude_hooks_apply, claude_wsl_distros, claude_wsl_status,
+        claude_wsl_hooks_preview, claude_wsl_hooks_apply, claude_approval_decision, claude_approval_ack,
+        claude_approval_decline, claude_approval_answer,
+    ])
+}

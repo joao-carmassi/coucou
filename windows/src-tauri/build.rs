@@ -1,4 +1,4 @@
-use std::{env, fs, path::PathBuf};
+use std::{env, fs, path::{Path, PathBuf}};
 
 /// Generates `CATALOG` from src/modules/*/manifest.json (the same files the TS side reads), sorted by
 /// `order` then id. `devOnly` entries compile only in debug builds.
@@ -33,7 +33,98 @@ fn catalog() {
     fs::write(PathBuf::from(env::var("OUT_DIR").unwrap()).join("catalog.rs"), out).unwrap();
 }
 
+/// Every `.rs` file under `dir`, recursively.
+fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    for e in fs::read_dir(dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display())) {
+        let p = e.unwrap().path();
+        if p.is_dir() { rs_files(&p, out) } else if p.extension().is_some_and(|x| x == "rs") { out.push(p) }
+    }
+}
+
+/// Names of the `#[tauri::command]` fns in a file (the first `fn` after each attribute).
+fn commands_in(path: &Path) -> Vec<String> {
+    let text = fs::read_to_string(path).unwrap();
+    let mut out = Vec::new();
+    let mut pending = false;
+    for line in text.lines() {
+        let t = line.trim();
+        if t.starts_with("#[tauri::command") { pending = true; }
+        if !pending { continue; }
+        if let Some(i) = t.find("fn ").filter(|&i| i == 0 || !t.as_bytes()[i - 1].is_ascii_alphanumeric()) {
+            let name: String = t[i + 3..].chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            out.push(name);
+            pending = false;
+        }
+    }
+    out
+}
+
+/// `modules/<f>/mod.rs` -> `pub mod <f>;` entries in OUT_DIR/modules.rs, the module registry and the
+/// invoke-handler table, so a new Rust module is just a new folder. Build-time collision checks:
+/// prefixes end with '_' and never nest, a folder's commands use its prefixes, core commands use none.
+fn modules() {
+    let src = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("src");
+    println!("cargo:rerun-if-changed=src/modules");
+    println!("cargo:rerun-if-changed=src/core");
+    println!("cargo:rerun-if-changed=src/lib.rs");
+    let mut folders: Vec<String> = fs::read_dir(src.join("modules")).unwrap().filter_map(|e| {
+        let p = e.unwrap().path();
+        p.join("mod.rs").is_file().then(|| p.file_name().unwrap().to_string_lossy().into_owned())
+    }).collect();
+    folders.sort();
+    let mut prefixes: Vec<(String, Vec<String>)> = Vec::new();
+    for f in &folders {
+        let text = fs::read_to_string(src.join("modules").join(f).join("mod.rs")).unwrap();
+        let decl = text.split("pub const PREFIXES").nth(1).unwrap_or_else(|| panic!("modules/{f}/mod.rs: missing `pub const PREFIXES: &[&str] = &[\"{f}_\"];`"));
+        let list = &decl[decl.find('=').unwrap()..decl.find(';').unwrap()];
+        let p: Vec<String> = list.split('"').skip(1).step_by(2).map(String::from).collect();
+        for x in &p {
+            assert!(x.len() > 1 && x.ends_with('_'), "modules/{f}: prefix {x:?} must end with '_'");
+        }
+        prefixes.push((f.clone(), p));
+    }
+    for (f, pf) in &prefixes {
+        for (g, pg) in &prefixes {
+            if f == g { continue; }
+            for a in pf { for b in pg {
+                assert!(!a.starts_with(b.as_str()), "command prefix collision: modules/{f} {a:?} starts with modules/{g} {b:?}");
+            } }
+        }
+    }
+    let mut files = Vec::new();
+    rs_files(&src, &mut files);
+    for file in files {
+        let owner = file.strip_prefix(src.join("modules")).ok().map(|r| r.components().next().unwrap().as_os_str().to_string_lossy().into_owned());
+        for cmd in commands_in(&file) {
+            match &owner {
+                Some(f) => {
+                    let own = prefixes.iter().find(|(g, _)| g == f).map(|(_, p)| p);
+                    assert!(own.is_some_and(|p| p.iter().any(|x| cmd.starts_with(x.as_str()))),
+                        "{}: command `{cmd}` must start with a prefix of modules/{f} ({own:?})", file.display());
+                }
+                None => for (g, p) in &prefixes {
+                    assert!(!p.iter().any(|x| cmd.starts_with(x.as_str())),
+                        "{}: core command `{cmd}` collides with the prefixes of modules/{g} ({p:?})", file.display());
+                },
+            }
+        }
+    }
+    let mut out = String::new();
+    for f in &folders {
+        // Absolute, forward slashes, not canonicalized (no \\?\ prefix).
+        let p = src.join("modules").join(f).join("mod.rs").to_string_lossy().replace('\\', "/");
+        out += &format!("#[path = {p:?}]\npub mod {f};\n");
+    }
+    out += "\n/// Every module of every folder, in folder order.\npub fn registry() -> Vec<Box<dyn Module>> {\n    let mut v: Vec<Box<dyn Module>> = Vec::new();\n";
+    for f in &folders { out += &format!("    v.extend({f}::modules());\n"); }
+    out += "    v\n}\n\n/// (command prefixes, invoke handler) per folder; lib.rs routes by prefix.\npub fn handlers() -> Vec<(&'static [&'static str], Handler)> {\n    vec![\n";
+    for f in &folders { out += &format!("        ({f}::PREFIXES, {f}::handler()),\n"); }
+    out += "    ]\n}\n";
+    fs::write(PathBuf::from(env::var("OUT_DIR").unwrap()).join("modules.rs"), out).unwrap();
+}
+
 fn main() {
     catalog();
+    modules();
     tauri_build::build()
 }

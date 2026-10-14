@@ -11,7 +11,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::{ManagerExt, MacosLauncher};
 
-use crate::core::host::ModuleHost;
+use crate::core::host::{self, ModuleHost};
 use crate::core::{island, log, platform, settings, tray};
 
 use island::{PollGate, ScreenInfo};
@@ -284,6 +284,22 @@ pub fn run() {
         let _ = settings::save(&loaded);
     }
     let gate = Arc::new(PollGate::new());
+    let core = host::handler(tauri::generate_handler![
+        boot,
+        save_settings,
+        set_collapsed,
+        set_island_rect,
+        focus_window,
+        reposition,
+        open_url,
+        quit_app,
+        log_line,
+        open_settings_window,
+        take_settings_section,
+        set_paused,
+        crate::core::inbox::inbox_ingest,
+    ]);
+    let mods = modules::handlers();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
@@ -296,21 +312,14 @@ pub fn run() {
             gate: gate.clone(),
             settings_section: Mutex::new(String::new()),
         })
-        .invoke_handler(modules::handler!(
-            boot,
-            save_settings,
-            set_collapsed,
-            set_island_rect,
-            focus_window,
-            reposition,
-            open_url,
-            quit_app,
-            log_line,
-            open_settings_window,
-            take_settings_section,
-            set_paused,
-            crate::core::inbox::inbox_ingest,
-        ))
+        .invoke_handler(move |inv| {
+            // Route by command-name prefix: a handler consumes the invoke, so they cannot be chained.
+            let cmd = inv.message.command().to_string();
+            match mods.iter().position(|(p, _)| p.iter().any(|p| cmd.starts_with(p))) {
+                Some(i) => (mods[i].1)(inv),
+                None => core(inv),
+            }
+        })
         .setup(move |app| {
             let handle = app.handle().clone();
             handle.state::<ModuleHost>().setup(&handle);

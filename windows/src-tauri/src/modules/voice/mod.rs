@@ -43,3 +43,14 @@ fn set_hotkey(app: &AppHandle, s: &Settings) {
     let combo = hotkeys::clean(&cfg::hotkey(s), cfg::DEFAULT_HOTKEY);
     hotkeys::set(app, "voice", "Voz", &combo, voice::on_hotkey);
 }
+
+pub const PREFIXES: &[&str] = &["voice_"];
+
+pub fn modules() -> Vec<Box<dyn Module>> {
+    vec![Box::new(Voice)]
+}
+
+pub fn handler() -> crate::core::host::Handler {
+    use voice::*;
+    crate::core::host::handler(tauri::generate_handler![voice_start, voice_stop, voice_cancel, voice_model_status, voice_download_model])
+}

@@ -23,8 +23,11 @@
 //   4. CSS: a selector of a core sheet (src/style, src/settings) must not use a module's class prefix (gh-, sess-, int-, ...).
 //      Prefixes come from the selectors of src/modules/*/*.css that no core sheet defines and that only ONE module uses
 //      (a prefix two modules share is the shared kit's: pane-, diff-). Allowlist a hit with a reason.
-//   5. Rust: `modules::` outside CATALOG/registry/handler lines; events emitted by core must be generic;
-//      `#[cfg(test)]` blocks are skipped.
+//   5. Rust: `modules::` outside CATALOG/registry/handlers lines (lib.rs may call `modules::handlers()` / `modules::registry()`);
+//      events emitted by core must be generic; `#[cfg(test)]` blocks are skipped.
+//   R. Rust command prefixes: every string passed to command/commandOrThrow in src/modules/** must start with a prefix some
+//      src-tauri/src/modules/<f>/mod.rs declares (`pub const PREFIXES`, parsed as build.rs does), unless the TS module has no
+//      Rust folder (TS-only).
 //
 // ALLOWLIST: [file suffix, substring of the offending line, reason]. Keep each entry justified.
 import { readdirSync, readFileSync, writeFileSync, statSync, existsSync } from "node:fs";
@@ -121,7 +124,7 @@ function scan(f, lang) {
     if (lang === "ts" && /\bfrom\s+["'][^"']*\/modules\/|\bimport\s*\(\s*["'][^"']*\/modules\//.test(code))
       add(name, i + 1, "import /modules/", raw, false);
     if (lang === "rs") {
-      if (/\bmodules::/.test(code) && !/CATALOG|registry|handler/.test(code)) add(name, i + 1, "modules::", raw, false);
+      if (/\bmodules::/.test(code) && !/CATALOG|registry|handlers/.test(code)) add(name, i + 1, "modules::", raw, false);
       for (const m of code.matchAll(/\.emit(?:_to)?\s*\(\s*(?:"[^"]*"\s*,\s*)?"([^"]+)"/g))
         if (!CORE_EVENTS.includes(m[1])) add(name, i + 1, `event "${m[1]}"`, raw, false);
     }
@@ -279,6 +282,24 @@ for (const [k, v] of Object.entries(lintCounts)) {
   if (cap == null || v > cap) lintBad++;
   console.log(`  ${k.padEnd(20)} ${String(v).padStart(3)} / ${cap ?? "-"}  ${state}`);
   if (ratchet.reasons?.[k]) console.log(`      why it stays: ${ratchet.reasons[k]}`);
+}
+
+// Rule R: command names called from module bridges vs the prefixes the Rust folders declare.
+const rustDir = join(root, "src-tauri/src/modules");
+const rustPrefixes = new Map(); // folder -> prefixes
+for (const f of readdirSync(rustDir)) {
+  const mod = join(rustDir, f, "mod.rs");
+  if (!existsSync(mod)) continue;
+  const decl = readFileSync(mod, "utf8").split("pub const PREFIXES")[1] ?? "";
+  rustPrefixes.set(f, decl.slice(decl.indexOf("="), decl.indexOf(";")).split('"').filter((_, i) => i % 2 === 1));
+}
+const allPrefixes = [...rustPrefixes.values()].flat();
+for (const m of moduleDirs) for (const f of files(join(root, "src/modules", m), [".ts"])) {
+  if (!rustPrefixes.has(m)) continue; // TS-only module: no Rust commands of its own
+  codeLines(f).forEach((c, i) => {
+    for (const x of c.matchAll(/\bcommand(?:OrThrow)?\s*(?:<[^>(]*>)?\s*\(\s*["'`]([^"'`]+)["'`]/g))
+      if (!allPrefixes.some((p) => x[1].startsWith(p))) add(rel(f), i + 1, `command "${x[1]}" matches no Rust PREFIXES`, c, false);
+  });
 }
 
 const live = findings.filter((x) => !x.reason);

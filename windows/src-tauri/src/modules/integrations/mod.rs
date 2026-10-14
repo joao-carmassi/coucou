@@ -64,6 +64,20 @@ pub fn providers() -> Vec<Box<dyn Module>> {
         .collect()
 }
 
+pub const PREFIXES: &[&str] = &["integrations_", "github_", "n8n_"];
+
+pub fn modules() -> Vec<Box<dyn Module>> {
+    providers()
+}
+
+pub fn handler() -> crate::core::host::Handler {
+    use commands::*;
+    crate::core::host::handler(tauri::generate_handler![
+        integrations_secret_present, integrations_secret_set, integrations_secret_clear, github_test, github_project,
+        github_day, github_detail, n8n_open, integrations_refresh,
+    ])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
