@@ -21,7 +21,7 @@ import { BotEngine, hexToRGB, type RGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
 import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
 import { buildHeader, buildViews, type Header, type ViewActions, type ViewHost } from "../views/views";
-import { h } from "../views/dom";
+import { h } from "../kit/dom";
 import { IslandStateMachine, type FsmState } from "./fsm";
 
 const BOT_OVERHANG = 40;

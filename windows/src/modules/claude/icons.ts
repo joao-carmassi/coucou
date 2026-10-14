@@ -1,4 +1,4 @@
-import { ICONS as CORE } from "../../views/icons";
+import { ICONS as CORE } from "../../kit/icons";
 // Glyphs only the Claude module draws (a session's steps: a prompt, an edit, a command, a search), stroked.
 export const ICONS = {
   ...CORE,

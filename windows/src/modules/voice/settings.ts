@@ -4,7 +4,7 @@
 import { Bridge, onEvent } from "../../core/bridge";
 import { VoiceBridge } from "./bridge";
 import { State } from "../../core/state";
-import { h } from "../../views/dom";
+import { h } from "../../kit/dom";
 
 const DEFAULT_HOTKEY = "Ctrl+Alt+V";
 /** Rust keeps the hotkey in `extra`: absent = the default, "" = off. */

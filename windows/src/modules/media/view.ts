@@ -3,7 +3,7 @@
 // or Rust says the list changed; every action is a click, and "Remover da lista"
 // never touches the file.
 
-import { h, svg, clear } from "../../views/dom";
+import { h, svg, clear } from "../../kit/dom";
 import { MediaBridge, type MediaItem } from "./bridge";
 import { CLAUDE_SERVICE, type LaunchFile } from "../claude/api";
 import type { Disposer, IslandApi, ViewContext, ViewHost } from "../../core/moduleApi";

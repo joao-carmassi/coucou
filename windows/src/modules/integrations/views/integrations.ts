@@ -4,10 +4,10 @@
 // Cal.com is the one simplification: macOS shows a three-level calendar
 // (month → day → booking); here it is the list of upcoming bookings.
 
-import { h, svg, dot } from "../../../views/dom";
+import { h, svg, dot } from "../../../kit/dom";
 import { ICONS } from "../icons";
-import { COLOR } from "../../../views/palette";
-import { timeAgo } from "../../../views/format";
+import { COLOR } from "../../../kit/palette";
+import { timeAgo } from "../../../kit/format";
 import type { Pill } from "../../../core/state";
 import { Bridge } from "../../../core/bridge";
 import { type GithubActivityKind, type GithubData, type GithubTarget, IntegrationsBridge } from "../bridge";

@@ -6,6 +6,6 @@
 import "./ui.css";
 import "./core.css";
 import "./text.css";
-import "./pane.css";
-import "./code.css";
+import "../kit/pane.css";
+import "../kit/code.css";
 import "./settings.css";

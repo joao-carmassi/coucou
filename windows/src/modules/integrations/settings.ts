@@ -6,7 +6,7 @@
 import { Bridge } from "../../core/bridge";
 import "./settings.css";
 import { type GithubAccount, IntegrationsBridge } from "./bridge";
-import { h, clear } from "../../views/dom";
+import { h, clear } from "../../kit/dom";
 import { GITHUB, PROVIDERS, moduleIdOf, type Provider } from "./providers";
 
 /** Green for what is in place, red for what is missing. */

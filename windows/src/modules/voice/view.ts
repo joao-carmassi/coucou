@@ -6,7 +6,7 @@ import { ClaudeBridge } from "../claude/bridge";
 import { VoiceBridge } from "./bridge";
 import type { ViewContext, ViewHost } from "../../core/moduleApi";
 import { State } from "../../core/state";
-import { h, clear } from "../../views/dom";
+import { h, clear } from "../../kit/dom";
 
 export type Phase = "none" | "listening" | "transcribing" | "review" | "sending" | "error";
 

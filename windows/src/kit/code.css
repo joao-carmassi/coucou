@@ -1,4 +1,4 @@
-/* A piece of code or a diff: its lines, its gutter, its file badge and an editor's colours (see views/code.ts). */
+/* A piece of code or a diff: its lines, its gutter, its file badge and an editor's colours (see kit/code.ts). */
 :root {
   --code: #d6d9df;
   --code-keyword: #c792ea;

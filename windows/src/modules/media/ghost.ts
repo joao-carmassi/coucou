@@ -2,7 +2,7 @@
 // and the Mídia list opens on it. The core only reports the pull (hook "avatarPull") and the button
 // (overlay.cursor's `down`); the ghost, the release and the attach live here.
 
-import { h } from "../../views/dom";
+import { h } from "../../kit/dom";
 import { wipe } from "../../core/canvas";
 import { MediaBridge } from "./bridge";
 import type { Disposer, IslandApi } from "../../core/moduleApi";

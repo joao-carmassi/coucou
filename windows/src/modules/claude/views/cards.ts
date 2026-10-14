@@ -1,7 +1,7 @@
 // The Claude cards: overview (the session at a glance), approval, question, error, finished.
 // Ported from views/views.ts at m3-ok. Every card works on the module's store, never on State.
 
-import { h, svg, clear, dot, replay } from "../../../views/dom";
+import { h, svg, clear, dot, replay } from "../../../kit/dom";
 import { card } from "../../../views/views";
 import type { ViewContext, ViewHost } from "../../../core/moduleApi";
 import { Bridge } from "../../../core/bridge";
@@ -13,10 +13,10 @@ import { hasTarget, type Claude } from "../claude";
 import { claudeSettings } from "../store";
 import { CLAUDE_SERVICE, askPill, type TaskCardOf, type TaskNewsOf } from "../api";
 import { ICONS } from "../icons";
-import { COLOR } from "../../../views/palette";
+import { COLOR } from "../../../kit/palette";
 import { CARD_AIR_MIN, fittedHeight } from "../fit";
 import { CLAUDE_ID, TURN_DONE, turnSteps, type ClaudeSession, type SessionStep } from "../types";
-import { diffLine, fileKind, plusMinus, readPatch } from "../../../views/code";
+import { diffLine, fileKind, plusMinus, readPatch } from "../../../kit/code";
 import { markdown } from "./markdown";
 import { sessionName, sessionsChip } from "./session";
 import { hasPreview, stepIcon, stepName, stepPreview } from "./step";

@@ -1,6 +1,6 @@
-import { svg } from "../../views/dom";
+import { svg } from "../../kit/dom";
 import "./timer.css";
-import { ICONS } from "../../views/icons";
+import { ICONS } from "../../kit/icons";
 import { Sound } from "../../core/sound";
 import type { Disposer, IslandApi, ModuleDef } from "../../core/moduleApi";
 import { TimerClock } from "./timer";

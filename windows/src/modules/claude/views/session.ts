@@ -16,11 +16,11 @@
 // replay of it, a second behind. The session itself stays where it runs — the
 // Claude app, VS Code, a terminal.
 
-import { h, svg, clear, dot, replay } from "../../../views/dom";
-import { diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath, type FileKind } from "../../../views/code";
+import { h, svg, clear, dot, replay } from "../../../kit/dom";
+import { diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath, type FileKind } from "../../../kit/code";
 import { ICONS } from "../icons";
-import { COLOR } from "../../../views/palette";
-import { timeAgo } from "../../../views/format";
+import { COLOR } from "../../../kit/palette";
+import { timeAgo } from "../../../kit/format";
 import { markdown } from "./markdown";
 import { State } from "../../../core/state";
 import { CLAUDE_ID, type ChangedFile, type ClaudeSession, type SessionStep } from "../types";

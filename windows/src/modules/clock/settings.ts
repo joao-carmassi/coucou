@@ -1,7 +1,7 @@
 // The Relógio section of the settings window (only while the module is on).
 import { Bridge } from "../../core/bridge";
 import { State } from "../../core/state";
-import { h } from "../../views/dom";
+import { h } from "../../kit/dom";
 import { formatOf } from "./format";
 
 function clockSettingsSection(): { el: HTMLElement } {

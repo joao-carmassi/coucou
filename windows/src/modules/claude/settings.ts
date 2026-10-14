@@ -10,7 +10,7 @@ import { Bridge } from "../../core/bridge";
 import "./settings.css";
 import { type HookPreview, type HookStatus, type WslStatus, ClaudeBridge } from "./bridge";
 import { State } from "../../core/state";
-import { h, clear } from "../../views/dom";
+import { h, clear } from "../../kit/dom";
 import { claudeSettings } from "./store";
 
 /** main.ts fires this on `window` every time the settings window comes up (WSL is slow, so only then). */

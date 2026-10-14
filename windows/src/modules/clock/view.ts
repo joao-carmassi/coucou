@@ -1,4 +1,4 @@
-import { h } from "../../views/dom";
+import { h } from "../../kit/dom";
 import { card } from "../../views/views";
 import type { ViewHost } from "../../core/moduleApi";
 

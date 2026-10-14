@@ -7,7 +7,7 @@ import { resolveEnabled } from "../core/moduleApi";
 import { MODULE_INFO } from "../modules/catalog";
 import { SETTINGS_SECTIONS } from "../modules/settings";
 import { DEFAULT_SETTINGS, State, type Settings } from "../core/state";
-import { h, clear } from "../views/dom";
+import { h, clear } from "../kit/dom";
 
 let settings: Settings = { ...DEFAULT_SETTINGS };
 // Module sections (ModuleDef.settings) read and write the same object through State.settings.

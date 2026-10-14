@@ -1,4 +1,4 @@
-import { ICONS as CORE } from "../../views/icons";
+import { ICONS as CORE } from "../../kit/icons";
 // Glyphs only the service modules draw, stroked unless noted: pass `{ stroke: 2 }` to svg().
 export const ICONS = {
   ...CORE,
