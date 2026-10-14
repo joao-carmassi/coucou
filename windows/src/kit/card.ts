@@ -1,4 +1,5 @@
 // The card every view sits on, and the wash colours it takes (CardBackground.washColor).
+// API: card(wash | {wash?, cls?}, ...kids), view(...kids) (the `div.view` shell), washRGBA(wash).
 
 import { h } from "./dom";
 
@@ -25,8 +26,12 @@ export function washRGBA(wash: Wash): string {
   }
 }
 
-export function card(wash: Wash, ...children: (Node | string)[]): HTMLElement {
-  const el = h("div", { class: wash ? "card wash" : "card" }, ...children);
+/** `card(wash, ...kids)` or `card({wash?, cls?}, ...kids)`: `div.card[.wash][.cls]`, with `--wash` set. */
+export function card(o: Wash | { wash?: Wash; cls?: string }, ...children: (Node | string)[]): HTMLElement {
+  const { wash = null, cls } = o !== null && typeof o === "object" ? o : { wash: o, cls: undefined };
+  const el = h("div", { class: ["card", wash && "wash", cls].filter(Boolean).join(" ") }, ...children);
   if (wash) el.style.setProperty("--wash", washRGBA(wash));
   return el;
 }
+
+export const view = (...children: (Node | string | null | undefined | false)[]): HTMLElement => h("div", { class: "view" }, ...children);

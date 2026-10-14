@@ -6,6 +6,8 @@
 // knows nothing of what came on the line before (a string or a comment left
 // open), which a diff's fragments wouldn't tell it anyway.
 //
+// API: diffBlock(cls?, ...lines), diffLine(n, sign, text, kind), plusMinus(a, d, bare?), readPatch, highlight, fileKind, extBadge, splitPath
+//
 // Public classes (styled in kit/code.css)
 //   .code-diff              a block of diff lines; colours its .hl-* tokens
 //   .diff-line              one line (grid: .n number, .s sign, .t text); `.add` / `.del` / `.hunk` say what it is, `.gone` strikes a removed word
@@ -232,6 +234,10 @@ export function* readPatch(patch: string): Generator<PatchLine> {
 }
 
 /** A line of a diff: its number, its sign, its code in an editor's colours. */
+/** A block of diff lines: `div.code-diff`, `cls` appended. */
+export const diffBlock = (cls?: string, ...lines: (Node | null | undefined | false)[]): HTMLElement =>
+  h("div", { class: cls ? `code-diff ${cls}` : "code-diff" }, ...lines);
+
 export function diffLine(number: number | null, sign: string, text: string, kind: FileKind): HTMLElement {
   const change = sign === "+" ? "add" : sign === "-" ? "del" : "ctx";
   return h(
@@ -247,10 +253,11 @@ export function diffLine(number: number | null, sign: string, text: string, kind
   );
 }
 
-export function plusMinus(additions: number, deletions: number): HTMLElement {
+/** `bare` drops the `diff-pm` class (a plain `<span>`). */
+export function plusMinus(additions: number, deletions: number, bare = false): HTMLElement {
   return h(
     "span",
-    { class: "diff-pm" },
+    bare ? {} : { class: "diff-pm" },
     h("span", { class: "diff-add", text: `+${additions}` }),
     " ",
     h("span", { class: "diff-del", text: `−${deletions}` }),

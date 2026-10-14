@@ -41,7 +41,7 @@ describe("home", () => {
     expect(State.tabs.some((t) => t.view === "overview")).toBe(false);
     island.open(State.defaultView());
     tick(100);
-    expect(document.querySelector(".overview")).toBeNull();
+    expect(document.querySelector(".home")).toBeNull();
   });
 
   it("the board on: overview is home", () => {
@@ -50,7 +50,7 @@ describe("home", () => {
     expect(State.defaultView()).toBe("overview");
     island.open("overview");
     tick(100);
-    expect(document.querySelector(".overview")).not.toBeNull();
+    expect(document.querySelector(".home")).not.toBeNull();
     expect(document.querySelector(".left-body .tile-card")).not.toBeNull();
   });
 
@@ -63,7 +63,7 @@ describe("home", () => {
     Registry.apply({ board: false, claude: true });
     tick(100);
     expect(State.view).not.toBe("overview");
-    expect(document.querySelector(".overview")).toBeNull();
+    expect(document.querySelector(".home")).toBeNull();
   });
 
   it("both off: empty", () => {

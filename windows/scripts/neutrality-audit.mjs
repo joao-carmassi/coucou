@@ -186,7 +186,7 @@ for (const f of files(join(root, "src/kit"), [".ts"])) {
 
 // K2: kit CSS prefixes, and modules do not grow the kit's namespaces. (Separate from the rules above.)
 {
-  const KIT_PREFIXES = ["pane", "tile", "diff", "code", "file", "hl", "overview", "left", "solo"];
+  const KIT_PREFIXES = ["pane", "tile", "diff", "code", "file", "hl", "home", "left", "solo"];
   const NAMESPACES = ["pane", "tile", "diff"];
   const kitCss = files(join(root, "src/kit"), [".css"]);
   const kitDefined = new Set();

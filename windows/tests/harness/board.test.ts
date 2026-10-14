@@ -73,7 +73,7 @@ describe("board", () => {
     island.open("overview");
     tick(100);
     expect(text(".tile-card")).toContain("card of Alpha");
-    expect(document.querySelector(".overview.solo")).not.toBeNull();
+    expect(document.querySelector(".home.solo")).not.toBeNull();
   });
 
   it("another provider joining does not change the front card; its pill is listed", () => {
@@ -81,7 +81,7 @@ describe("board", () => {
     tick(100);
     expect(text(".tile-card")).toContain("card of Alpha");
     expect(text(".pill .lbl")).toEqual(["Beta"]);
-    expect(document.querySelector(".overview.solo")).toBeNull();
+    expect(document.querySelector(".home.solo")).toBeNull();
   });
 
   it("a provider leaving keeps the others' cards", () => {

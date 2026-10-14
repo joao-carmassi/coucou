@@ -35,9 +35,9 @@ describe("kit builders", () => {
   it("homeLayout = the old board literals (board and solo cases)", () => {
     const l = () => h("div", { class: "card" }, h("div", { class: "left-body" }));
     const r = () => h("div", { class: "card" }, h("div", { class: "pills" }));
-    const board = h("div", { class: "view overview" }, h("div", { class: "left" }, l()), h("div", { class: "right" }, r()));
+    const board = h("div", { class: "view home" }, h("div", { class: "left" }, l()), h("div", { class: "right" }, r()));
     expect(homeLayout({ left: l(), right: r() }).outerHTML).toBe(board.outerHTML);
-    const solo = h("div", { class: "view overview solo" }, h("div", { class: "left" }, l()));
+    const solo = h("div", { class: "view home solo" }, h("div", { class: "left" }, l()));
     expect(homeLayout({ left: l(), solo: true }).outerHTML).toBe(solo.outerHTML);
   });
 
