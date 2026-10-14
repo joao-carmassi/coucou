@@ -11,6 +11,9 @@
   align-content: center;
   padding: 0 8px;
 }
+.pills[data-cols="1"] {
+  grid-template-columns: minmax(0, 1fr);
+}
 .pill {
   position: relative;
   height: 28px;

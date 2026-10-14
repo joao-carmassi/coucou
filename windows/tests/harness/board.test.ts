@@ -94,6 +94,29 @@ describe("board", () => {
     expect(State.pills.map((p) => p.id)).toEqual(["beta-pill"]);
   });
 
+  it("the right card adapts to the other pills: slim for 1-3, two columns for 4-6, capped at 6", () => {
+    const layout = () => document.querySelector(".home") as HTMLElement;
+    const pills = () => document.querySelector(".pills") as HTMLElement;
+    let made = 0;
+    const add = (n: number) => { for (let i = 0; i < n; i++, made++) probe.beta!.pills.set({ id: `extra${made}`, label: `X${made}`, color: "#88aaff", mood: "idle" }); tick(100); };
+    const expectShape = (others: number, slim: boolean, cols: string) => {
+      expect(layout().classList.contains("slim")).toBe(slim);
+      expect(layout().classList.contains("solo")).toBe(false);
+      expect(pills().dataset.cols).toBe(cols);
+      expect(pills().children).toHaveLength(others);
+    };
+    // beta-pill is the front one; each add() adds others
+    add(1); expectShape(1, true, "1");
+    add(2); expectShape(3, true, "1");
+    add(1); expectShape(4, false, "2");
+    add(2); expectShape(6, false, "2");
+    add(1); expectShape(6, false, "2");
+    for (let i = 0; i < made; i++) probe.beta!.pills.remove(`extra${i}`);
+    tick(100);
+    expect(layout().classList.contains("solo")).toBe(true);
+    expect(layout().classList.contains("slim")).toBe(false);
+  });
+
   it("no modules at all: the empty view, no tabs", () => {
     Registry.apply({ board: false, alpha: false, beta: false });
     tick(100);

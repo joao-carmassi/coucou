@@ -1,9 +1,10 @@
 /* The island's home layout (build with kit/home.ts): a left card, optionally a right card beside it.
  *
- * Public classes (kit-owned names: `home`, `left`, `left-body`, `solo` are the kit's, not a module's)
+ * Public classes (kit-owned names: `home`, `left`, `left-body`, `solo`, `slim` are the kit's, not a module's)
  *   .home        the layout (row, 100% high)
  *   .left            left slot, 322px; .right is the optional right slot (grows)
  *   .home.solo   only the left slot: it takes the full width, .right is hidden
+ *   .home.slim   the right slot is 150px and the left one takes the rest
  *   .left-body       positioned body of the left card (the card's content; .jump, in style/ui.css, sits over it)
  */
 .home {
@@ -27,6 +28,14 @@
 }
 .home.solo > .right {
   display: none;
+}
+.home.slim > .left {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+.home.slim > .right {
+  flex: 0 0 150px;
 }
 .left-body {
   position: relative;

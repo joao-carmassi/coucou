@@ -622,7 +622,7 @@ describe("board", () => {
     await flush();
     snap("board-plain", await showing("overview"));
   });
-  it("plain card and pills, with badges", async () => {
+  it("plain card and pills, with badges (six others: the cap, two columns)", async () => {
     board().pills.set({ id: "p2", label: "Beta", color: "#ffaa88", mood: "working", badge: "done" });
     board().pills.set({ id: "p3", label: "Gama", color: "#aaffaa", mood: "idle", badge: "error" });
     board().pills.set({ id: "p4", label: "Delta", color: "#ffaaff", mood: "idle", badge: "alert" });
