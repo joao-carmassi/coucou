@@ -9,6 +9,7 @@ import { card } from "../../kit/card";
 import { homeBody, homeLayout, setSlim, setSolo } from "../../kit/home";
 import { ICONS } from "../../kit/icons";
 import { tile } from "../../kit/tile";
+import { rt } from "./primary";
 import type { BoardCard, BoardCardOf, BoardFocus, BoardPillOf } from "./api";
 
 /** The layout's height (see index.ts). */
@@ -64,6 +65,7 @@ export function buildBoard(ctx: ViewContext): ViewHost {
 
   const focus = (id: string) => {
     actions.blip();
+    if (rt.choose) return rt.choose(id);
     for (const f of api.useAll<BoardFocus>("board.focus")) {
       try { f(id); } catch (err) { console.error("[coucou] pill service failed", err); }
     }

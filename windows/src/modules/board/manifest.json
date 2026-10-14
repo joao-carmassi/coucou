@@ -2,5 +2,10 @@
   "id": "board",
   "label": "Painel",
   "default": true,
-  "order": 0
+  "order": 0,
+  "settingsDefaults": {
+    "boardPrimary": "claude",
+    "focusHoldMinutes": 1,
+    "modulesEnabled": {}
+  }
 }
