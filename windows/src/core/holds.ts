@@ -47,6 +47,9 @@ export class LastView {
     return l.view !== home && known(l.view) ? l.view : null;
   }
 
+  /** The island closed on a card that is not a tab: the remembered tab is stamped with the close time. */
+  refresh(now: number) { if (this.last) this.last.at = now; }
+
   clear() { this.last = null; }
 }
 

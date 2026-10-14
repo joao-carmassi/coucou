@@ -104,6 +104,27 @@ describe("timer sticky hold", () => {
   });
 });
 
+describe("timer retakes a cleared hold", () => {
+  it("after the home tab cleared it, pause/resume of the same timer holds again", () => {
+    api().island.open("timer"); tick(10);
+    click("button", "5 min"); click("button", "Iniciar");
+    const home = State.tabs.find((t) => t.view === State.defaultView())!;
+    [...document.querySelectorAll<HTMLElement>("#header .tabs button")].find((b) => b.title === home.title || b.textContent === home.title)!.click();
+    tick(10);
+    api().island.open("timer"); tick(10);
+    click("button", "Pausar"); click("button", "Retomar");
+    api().island.open("dummy-a"); tick(10); folded();
+    Last.clear();
+    vi.setSystemTime(Date.now() + 10 * 60_000);
+    reopen();
+    expect(State.view).toBe("timer");
+    folded();
+    api().island.open("timer"); tick(10);
+    click("button", "Cancelar");
+    folded(); goHome();
+  });
+});
+
 describe("media: implicit focus only", () => {
   const openMedia = async () => { api().island.open("media"); tick(10); await vi.advanceTimersByTimeAsync(10); };
 

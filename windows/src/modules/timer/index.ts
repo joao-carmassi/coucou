@@ -28,7 +28,8 @@ function start(api: IslandApi): Disposer {
     disarm();
     // A configured-but-unstarted timer is still a task in progress.
     if (Timer.status !== "idle") {
-      hold ??= api.island.hold("timer"); // sticky: until finished or cancelled
+      // Sticky until finished or cancelled. Re-added on each arm (idempotent: same owner+view replaces), so a hold the home tab cleared is retaken.
+      hold = api.island.hold("timer");
     } else { hold?.(); hold = null; }
     if (Timer.status === "running") {
       // One-shot, so the end still rings (and is shown) if the island is hidden.

@@ -50,6 +50,7 @@ const folded = () => { island.collapse(); tick(10); };
 const reopen = () => { island.fsm.forceHome(); tick(10); };
 /** Visit `view` with the island open, then fold it: the state a user leaves a tab in. */
 const visit = (view: string) => { b().island.open(view); tick(10); folded(); };
+const MIN = 60_000;
 const lastHome = () => { Holds.clear(); Last.clear(); };
 
 describe("implicit focus (no hold call)", () => {
@@ -107,6 +108,33 @@ describe("implicit focus (no hold call)", () => {
     reopen();
     expect(State.view).toBe("dummy-a");
     req();
+    folded();
+    lastHome();
+  });
+});
+
+describe("cards that are not tabs are never the focus", () => {
+  it("closing on a card reopens on the previous tab, counted from the close", () => {
+    lastHome();
+    b().island.open("dummy-b"); tick(10);
+    a().island.note("card"); tick(10);
+    expect(State.view).toBe("note");
+    vi.setSystemTime(Date.now() + 50_000); // the card stays up, then the island closes
+    folded();
+    vi.setSystemTime(Date.now() + 30_000);
+    reopen();
+    expect(State.view).toBe("dummy-b");
+    folded();
+    lastHome();
+  });
+
+  it("nothing recorded: a card alone reopens home, not on the dead card", () => {
+    lastHome();
+    a().island.note("card"); tick(10);
+    expect(State.view).toBe("note");
+    folded();
+    reopen();
+    expect(State.view).toBe(State.defaultView());
     folded();
     lastHome();
   });
@@ -181,6 +209,8 @@ describe("sticky holds", () => {
     const home = State.tabs.find((t) => t.view === State.defaultView())!;
     [...document.querySelectorAll<HTMLElement>("#header .tabs button")].find((x) => x.title === home.title || x.textContent === home.title)!.click();
     tick(10);
+    // Right after the click, before any close re-stamps the view left: nothing is remembered.
+    expect(Last.front(Date.now(), MIN, "none", () => true)).toBeNull();
     folded(); reopen();
     expect(State.view).toBe(State.defaultView());
     folded();

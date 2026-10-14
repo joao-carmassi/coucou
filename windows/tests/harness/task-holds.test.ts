@@ -161,13 +161,13 @@ describe("upload choose and github sheet: no hold of their own, actions keep foc
     expect(lands()).toBe(State.defaultView());
   });
 
-  it("github panel: implicit focus brings it back, opening in the browser does not drop it", async () => {
+  it("github panel has no tab, so it is not remembered: reopen goes home", async () => {
     const { enterGithubPanel } = await import("../../src/modules/integrations/views/github");
     dummyProbe.api!.island.open("github"); tick(10);
     enterGithubPanel({ target: { kind: "project", repo: "a/b" }, label: "b", url: "https://github.com/a/b" });
     await settle();
     folded(); reopen();
-    expect(lands()).toBe("github");
+    expect(lands()).toBe(State.defaultView());
     clearAll();
   });
 });

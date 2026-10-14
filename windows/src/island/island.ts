@@ -145,8 +145,8 @@ export class Island implements IslandHost {
     return {
       setView: (v) => {
         // The user picked home (the default): that drops every focus (sticky holds and the last view). Automatic landings go through this.setView.
-        if (v === State.defaultView()) { Holds.clear(); Last.clear(); }
         this.setView(v);
+        if (v === State.defaultView()) { Holds.clear(); Last.clear(); } // after setView: it records the tab left
       },
       toggleSound: () => {
         State.settings.soundEnabled = !State.settings.soundEnabled;
@@ -270,7 +270,7 @@ export class Island implements IslandHost {
     this.offsetX.target = 0;
     if (mode === "expanded") Sound.play("open");
     if (prev === "expanded") {
-      this.leave(State.view);
+      this.leave(State.view, true);
       Sound.play("close");
       Requests.parked = true;
       this.syncPin();
@@ -289,10 +289,13 @@ export class Island implements IslandHost {
   }
 
   /** The user leaves `view` (tab change or close): stamped lazily, no timers. */
-  private leave(view: string) {
+  private leave(view: string, closing = false) {
     const now = Date.now();
     Holds.touch(view, now);
-    if (view !== "greeting") Last.left(view, now);
+    // Only views reachable from a tab count; a card on top never becomes the focus.
+    const tab = this.viewDefs.get(view)?.tabOf ?? view;
+    if (State.tabs.some((t) => t.view === tab)) Last.left(view, now);
+    else if (closing) Last.refresh(now); // closed on a card: the focus time counts from the close
   }
 
   /** Where a reopen lands: a live sticky hold, else the last view left within focusHoldMinutes (never home). */
