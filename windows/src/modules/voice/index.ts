@@ -111,7 +111,7 @@ export const voiceModule: ModuleDef = {
   id: "voice",
   views: [{
     name: "voice",
-    layout: { height: 160, botX: 60, botY: null, botDiameter: 50, agentMode: "column" },
+    layout: { height: 160, botX: 60, botY: null, botDiameter: 50 },
     build: buildVoiceView,
   }],
   start,

@@ -199,10 +199,10 @@ function start(api: IslandApi): Disposer {
 export const uploadModule: ModuleDef = {
   id: "upload",
   views: [
-    { name: "upload", layout: { height: 176, botX: 140, botY: 104, botDiameter: 62, agentMode: "column" }, build: () => buildUpload() },
+    { name: "upload", layout: { height: 176, botX: 140, botY: 104, botDiameter: 62 }, build: () => buildUpload() },
     // botY 103 = bar top (42 + 58) + 3, so the dot rides the bar.
-    { name: "uploading", layout: { height: 176, botX: 46, botY: 103, botDiameter: 20, agentMode: "none", botTrack: { from: 36, span: 526 }, glow: false }, build: () => buildUploading() },
-    { name: "choose", layout: { height: 176, botX: 60, botY: 101, botDiameter: 52, agentMode: "column" }, build: (ctx) => buildChoose(ctx, () => cancelDrop(ctx.api)) },
+    { name: "uploading", layout: { height: 176, botX: 46, botY: 103, botDiameter: 20, botTrack: { from: 36, span: 526 }, glow: false }, build: () => buildUploading() },
+    { name: "choose", layout: { height: 176, botX: 60, botY: 101, botDiameter: 52 }, build: (ctx) => buildChoose(ctx, () => cancelDrop(ctx.api)) },
   ],
   start,
 };

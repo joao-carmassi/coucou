@@ -32,7 +32,6 @@ export interface Settings {
   autoCloseInterval: number;
   /** Seconds minimized before hiding; 0 = never. */
   compactHideInterval: number;
-  absenceInterval: number;
   screen: "primary" | "cursor";
   autostart: boolean;
   /** Per-module switches; a missing key means the module default. */
@@ -44,7 +43,6 @@ export const DEFAULT_SETTINGS: Settings = {
   soundVolume: 0.12,
   autoCloseInterval: 15,
   compactHideInterval: 60,
-  absenceInterval: 180,
   screen: "primary",
   autostart: false,
   modulesEnabled: {},

@@ -18,7 +18,7 @@ export function providerModule(def: Provider): ModuleDef {
       views: [{
         name: "github",
         // As tall as the window allows, Mochi in the column on its left (VIEW_LAYOUTS.github at m3-ok).
-        layout: { height: PANEL_H, botX: 67, botY: 108, botDiameter: 71, agentMode: "none" as const },
+        layout: { height: PANEL_H, botX: 67, botY: 108, botDiameter: 71 },
         lightsHome: true as const,
         build: buildGithub,
       }],

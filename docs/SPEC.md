@@ -27,7 +27,7 @@ Mini pills grid: 1 pill is 13 x 13, 2 are side by side, 3 or 4 are 2 x 2.
 3. Something is running and the user is active: `compact`; Mochi follows the cursor with its eyes.
 4. Hover on compact opens it; click on Mochi opens it at once.
 5. Auto-close: an opened island folds after `autoCloseInterval` seconds without activity (Settings). Leaving the island does not close it. `Esc` closes unless the island is pinned.
-6. After `compactHideInterval` seconds folded (0 = never) the island hides. After `absenceInterval` seconds without mouse movement it hides even with tasks; the first movement brings it back.
+6. After `compactHideInterval` seconds folded (0 = never) the island hides. 
 7. Alerts (permission, question, error) open the island on their own view, even when the user is away, and keep it open until answered or deferred with **Aguardar**.
 8. Finished: the island opens on the `finished` card, then folds.
 9. Several alerts: queued, one at a time, in arrival order; the card shows how many wait.
