@@ -8,7 +8,7 @@ import { Bridge } from "../../../core/bridge";
 import { ClaudeBridge } from "../bridge";
 import { State } from "../../../core/state";
 import { createMiniBot, pruneMiniBots } from "../../../mochi/minibots";
-import type { AgentTask } from "../../../core/state";
+import type { Pill } from "../../../core/state";
 import { hasTarget, type Claude } from "../claude";
 import { claudeSettings } from "../store";
 import { CLAUDE_SERVICE, askPill, type TaskCardOf, type TaskNewsOf } from "../api";
@@ -82,7 +82,7 @@ function nowOf(session: ClaudeSession): Now {
   // from Claude Code after it (a notification that it is waiting, a subagent
   // winding down) does not put the session back to work.
   const ended = [...session.steps].reverse().find((step) => step.kind !== "note")?.tool === TURN_DONE;
-  if (ended || session.state === "finished") {
+  if (ended || session.state === "done") {
     // What matters then is that Claude is done and has answered: its words
     // take the place of the last thing it ran. With no words, that stays.
     const said = plainWords(session.answer);
@@ -131,7 +131,7 @@ function newsActions(c: Claude): HTMLElement {
  * front pill has none; `hidden` are the parts of the session's version.
  */
 function tellNews(
-  c: Claude, task: AgentTask | null, who: HTMLElement, title: HTMLElement, facts: HTMLElement,
+  c: Claude, task: Pill | null, who: HTMLElement, title: HTMLElement, facts: HTMLElement,
   hidden: HTMLElement[], newsRow: HTMLElement,
 ): boolean {
   const news = task ? askPill(c.api.useAll<TaskNewsOf>(CLAUDE_SERVICE.taskNews), task.id) : undefined;
@@ -146,10 +146,10 @@ function tellNews(
 }
 
 /** AgentWho — coloured dot + task name + grey label. */
-function agentWho(task: AgentTask | null, label: string): HTMLElement {
+function agentWho(task: Pill | null, label: string): HTMLElement {
   const row = h("div", { class: "who-row" });
   if (task) {
-    row.append(dot(task.color, 8), h("span", { class: "n", text: task.name }));
+    row.append(dot(task.color, 8), h("span", { class: "n", text: task.label }));
   }
   row.append(h("span", { text: label }));
   return row;
@@ -161,10 +161,10 @@ function agentWho(task: AgentTask | null, label: string): HTMLElement {
  * and, when other sessions are waiting for an answer behind it, how many.
  */
 function sessionWho(c: Claude, label: string): HTMLElement {
-  const task = State.tasks.find((t) => t.id === CLAUDE_ID) ?? State.focusTask;
+  const task = State.pills.find((t) => t.id === CLAUDE_ID) ?? State.focusPill;
   const session = c.store.session;
   const row = h("div", { class: "who-row" });
-  if (task) row.append(dot(task.color, 8), h("span", { class: "n", text: session.id ? sessionName(session) : task.name }));
+  if (task) row.append(dot(task.color, 8), h("span", { class: "n", text: session.id ? sessionName(session) : task.label }));
   row.append(h("span", { text: label }));
   const waiting = c.store.waiting.length;
   if (waiting > 0) row.append(h("span", { class: "who-waiting", text: `+${waiting} esperando`, title: "Outras sessões esperando uma resposta" }));
@@ -208,10 +208,10 @@ function airy(lines: HTMLElement, onResize: () => void): { fit(): void; readonly
 // ── Overview ──────────────────────────────────────────────────────────────────
 
 /** Third-party agents and the integrations other modules add: their pill's last words. */
-function otherCard(c: Claude, task: AgentTask): HTMLElement {
+function otherCard(c: Claude, task: Pill): HTMLElement {
   const steps = c.store.agentSteps.get(task.id);
   return h("div", { class: "int-card" },
-    h("div", { class: "int-head" }, dot(task.color, 7), h("b", { text: task.name }), h("span", { text: steps ? "Agente" : "Integração" })),
+    h("div", { class: "int-head" }, dot(task.color, 7), h("b", { text: task.label }), h("span", { text: steps ? "Agente" : "Integração" })),
     h("div", { class: "int-status" }, h("span", { text: steps?.at(-1) ?? "" })),
   );
 }
@@ -236,7 +236,7 @@ function buildOverview(c: Claude, ctx: ViewContext): ViewHost {
       class: "icon-btn jump",
       title: "Abrir",
       onclick: () => {
-        const id = State.focusTask?.id;
+        const id = State.focusPill?.id;
         if (id === CLAUDE_ID) c.openClient();
         else if (id) c.api.call("pillOpen", id);
       },
@@ -309,7 +309,7 @@ function buildOverview(c: Claude, ctx: ViewContext): ViewHost {
       return mode === "session" ? OVERVIEW_H + SESSION_CARD_ROOM : undefined;
     },
     sync() {
-      const task = State.focusTask;
+      const task = State.focusPill;
       if (task?.id !== lastFocus) {
         lastFocus = task?.id ?? null;
         cardKey = "";
@@ -332,8 +332,8 @@ function buildOverview(c: Claude, ctx: ViewContext): ViewHost {
           dot(task.color, 7),
           // A conversation that has a title goes by it, as it does in Claude
           // Code, with its project after; untitled, the project is its name.
-          h("span", { class: "name", text: session.title ?? task.name, title: session.title ?? "" }),
-          h("span", { class: "tool", text: session.title ? task.name : "Claude Code" }),
+          h("span", { class: "name", text: session.title ?? task.label, title: session.title ?? "" }),
+          h("span", { class: "tool", text: session.title ? task.label : "Claude Code" }),
         );
         sessionsBtn.sync();
         who.append(sessionsBtn.el);
@@ -351,7 +351,7 @@ function buildOverview(c: Claude, ctx: ViewContext): ViewHost {
         // A card a module drew for its own pill (integrations); it says when it must be redrawn.
         const own = askPill(c.api.useAll<TaskCardOf>(CLAUDE_SERVICE.taskCard), task.id);
         const key = [
-          task.id, task.state, store.agentSteps.get(task.id)?.join("|"), own?.key,
+          task.id, task.mood, store.agentSteps.get(task.id)?.join("|"), own?.key,
           // The idle Claude card's button follows Settings ("Idle button opens").
           store.clientName, claudeSettings().hooksInstalled, claudeSettings().idleOpen, store.session.client,
         ].join("~");
@@ -373,11 +373,11 @@ function buildOverview(c: Claude, ctx: ViewContext): ViewHost {
       // "Abrir" is the ↗'s, to where the session runs: the card leads to its panel.
       left.title = mode === "session" ? "Ver a sessão" : "";
 
-      const others = State.otherTasks.slice(0, 4);
+      const others = State.otherPills.slice(0, 4);
       // Nothing else active: the left card takes the full width.
       el.classList.toggle("solo", others.length === 0);
       // The Claude pill's name changes with Settings too, not only with a session.
-      const pillKey = others.map((t) => `${t.id}:${store.badges.get(t.id) ?? t.pillBadge ?? ""}`).join("|") + `|${store.clientName}`;
+      const pillKey = others.map((t) => `${t.id}:${store.badges.get(t.id) ?? t.badge ?? ""}`).join("|") + `|${store.clientName}`;
       if (pillKey !== pillIds) {
         pillIds = pillKey;
         clear(pills);
@@ -389,7 +389,7 @@ function buildOverview(c: Claude, ctx: ViewContext): ViewHost {
 }
 
 /** The Claude card with no session to show: whether the hooks are in, and a way to open Claude. */
-function idleCard(c: Claude, task: AgentTask): HTMLElement {
+function idleCard(c: Claude, task: Pill): HTMLElement {
   const store = c.store;
   const configured = claudeSettings().hooksInstalled;
   const label = configured ? "Conectado · carregando…" : "Hooks não instalados";
@@ -424,8 +424,8 @@ function idleCard(c: Claude, task: AgentTask): HTMLElement {
   );
 }
 
-function buildPill(c: Claude, task: AgentTask): HTMLElement {
-  const label = task.id === CLAUDE_ID ? c.store.clientName : task.name;
+function buildPill(c: Claude, task: Pill): HTMLElement {
+  const label = task.id === CLAUDE_ID ? c.store.clientName : task.label;
   const canvas = createMiniBot(task, 24);
   const pill = h(
     "div",
@@ -447,11 +447,11 @@ function buildPill(c: Claude, task: AgentTask): HTMLElement {
     (pill.querySelector(".lbl") as HTMLElement).style.color = "";
   });
 
-  const badgeKind = c.store.badges.get(task.id) ?? task.pillBadge;
+  const badgeKind = c.store.badges.get(task.id) ?? task.badge;
   if (badgeKind) {
-    const colors = { approval: "#F5A524", finished: "#22C55E", error: "#F4505E" } as const;
-    const icons = { approval: ICONS.bang, finished: ICONS.check, error: ICONS.xmark } as const;
-    const inner = h("i", { style: `background:${colors[badgeKind]}` }, svg(icons[badgeKind], 6, { stroke: badgeKind === "finished" ? 3 : 0 }));
+    const colors = { alert: "#F5A524", done: "#22C55E", error: "#F4505E" } as const;
+    const icons = { alert: ICONS.bang, done: ICONS.check, error: ICONS.xmark } as const;
+    const inner = h("i", { style: `background:${colors[badgeKind]}` }, svg(icons[badgeKind], 6, { stroke: badgeKind === "done" ? 3 : 0 }));
     const badge = h("div", { class: "pill-badge" }, inner);
     badge.style.boxShadow = `0 0 4px ${colors[badgeKind]}99`;
     pill.append(badge);
@@ -813,7 +813,7 @@ function buildError(c: Claude, ctx: ViewContext): ViewHost {
       return air.height;
     },
     sync() {
-      const task = State.focusTask;
+      const task = State.focusPill;
       const claude = task?.id === CLAUDE_ID;
       // A module's pill with news to tell (integrations) puts it here in place of a session's result.
       if (tellNews(c, task, who, title, facts, [row, detail], newsRow)) {
@@ -861,7 +861,7 @@ function buildFinished(c: Claude, ctx: ViewContext): ViewHost {
       return air.height;
     },
     sync() {
-      const task = State.focusTask;
+      const task = State.focusPill;
       if (tellNews(c, task, who, title, facts, [row], newsRow)) {
         title.classList.remove("said");
         air.fit();

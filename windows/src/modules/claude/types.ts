@@ -2,7 +2,8 @@
 
 import type { BotStateName } from "../../core/layout";
 
-export type PillBadge = "approval" | "finished" | "error";
+import type { PillBadge } from "../../core/badge";
+export type { PillBadge };
 
 export interface ApprovalInfo {
   requestId: string;

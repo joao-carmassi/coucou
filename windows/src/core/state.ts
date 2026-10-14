@@ -2,20 +2,29 @@
 
 import { Hooks, homeOf } from "./hooks";
 import type { TabDef } from "./moduleApi";
-import type { BotEmoteName, BotStateName, IslandMode, IslandViewName } from "./layout";
+import type { BotEmoteName, BotStateName, IslandMode, IslandViewName, LegacyMoodName } from "./layout";
 import type { EyeShape } from "../mochi/engine";
-import { applyBadge, type PillBadge } from "./badge";
+import { applyBadge, type LegacyBadgeName, type PillBadge } from "./badge";
 export type { PillBadge };
 
-export interface AgentTask {
+/** A mini Mochi in the compact grid / pill row. Neutral: any module may own some (api.pills). */
+export interface Pill {
   id: string;
-  name: string;
+  label: string;
   color: string;
-  state: BotStateName;
+  mood: BotStateName;
   emote?: BotEmoteName | null;
-  miniEye?: EyeShape | null;
-  pillBadge?: PillBadge | null;
+  eye?: EyeShape | null;
+  badge?: PillBadge | null;
+  /** Module id, stamped by api.pills; never set by hand. */
+  owner?: string;
 }
+/** A new pill needs label and color; later calls patch fields (null clears emote / eye / badge). */
+export type PillPatch = Pick<Pill, "id"> & Partial<Omit<Pill, "id" | "owner">>;
+/** What api.pills.set takes: a PillPatch that also accepts the old mood / badge names for one version. */
+export type PillInput = Omit<PillPatch, "mood" | "badge"> & { mood?: BotStateName | LegacyMoodName; badge?: PillBadge | LegacyBadgeName | null };
+/** Where a new pill goes: default the end. `after`: missing anchor = start; `before`: missing anchor = end. */
+export type PillAt = "start" | { after: string } | { before: string };
 
 export interface Settings {
   soundEnabled: boolean;
@@ -51,7 +60,7 @@ class AppState {
   modules: Record<string, boolean> = {};
 
   /** Mini Mochis shown in the compact grid; empty until a module adds some. */
-  tasks: AgentTask[] = [];
+  pills: Pill[] = [];
   focusId: string | null = null;
 
   /** What the avatar wears while nothing else decides: set it and `notify()`. */
@@ -85,19 +94,19 @@ class AppState {
   }
 
   setPillBadge(id: string, badge: PillBadge | null) {
-    if (applyBadge(this.tasks, id, badge)) this.notify();
+    if (applyBadge(this.pills, id, badge)) this.notify();
   }
 
-  get focusTask(): AgentTask | null {
-    return this.tasks.find((t) => t.id === this.focusId) ?? this.tasks[0] ?? null;
+  get focusPill(): Pill | null {
+    return this.pills.find((t) => t.id === this.focusId) ?? this.pills[0] ?? null;
   }
 
   get effectiveState(): BotStateName {
-    return this.stateOverride ?? this.focusTask?.state ?? this.avatarState;
+    return this.stateOverride ?? this.focusPill?.mood ?? this.avatarState;
   }
 
-  get otherTasks(): AgentTask[] {
-    return this.tasks.filter((t) => t.id !== this.focusTask?.id);
+  get otherPills(): Pill[] {
+    return this.pills.filter((t) => t.id !== this.focusPill?.id);
   }
 
   /** Tabs of the running modules, in order; the home falls back to the first. */

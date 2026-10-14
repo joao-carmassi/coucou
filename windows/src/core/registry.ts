@@ -5,6 +5,10 @@ import { Avatar } from "./avatar";
 import { Bridge, command, onEvent } from "./bridge";
 import { Compact } from "./compact";
 import { Hooks, Services, onMode } from "./hooks";
+import { dropPills, putPill } from "./pills";
+import { Sound } from "./sound";
+import { moodName } from "./layout";
+import { badgeName } from "./badge";
 import { resolveEnabled } from "./moduleApi";
 import type { AvatarSignal, Disposer, IslandApi, IslandHooks, IslandHost, ModuleDef, StatusLine } from "./moduleApi";
 import { State } from "./state";
@@ -43,12 +47,19 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
     expiry[kind] = ttlMs != null ? timeout(() => { expiry[kind] = null; host.redraw(); }, ttlMs + 20) : null;
   };
 
-  const badged = new Set<string>();
-  scope.add(() => { for (const t of badged) State.setPillBadge(t, null); });
+  scope.add(() => { if (dropPills(State, id)) State.notify(); });
 
   return {
     id,
-    pill: { badge(taskId, badge) { badged.add(taskId); State.setPillBadge(taskId, badge); } },
+    pills: {
+      set(pill, at) {
+        const p = { ...pill, mood: pill.mood && moodName(pill.mood), badge: pill.badge === undefined ? undefined : badgeName(pill.badge) };
+        if (putPill(State, id, p, at)) State.notify();
+      },
+      remove(pid) { if (dropPills(State, id, pid)) State.notify(); },
+      clear() { if (dropPills(State, id)) State.notify(); },
+    },
+    sound: { register: (name, url) => scope.add(Sound.register(name, url)) },
     settings: () => State.settings,
     invoke: (cmd, args) => command(cmd, args),
     listen<T>(event: string, fn: (p: T) => void): Disposer {
@@ -74,7 +85,7 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
     },
     avatar: {
       publish(sig: AvatarSignal | null) {
-        if (Avatar.publish(id, sig)) host.redraw();
+        if (Avatar.publish(id, sig && { ...sig, state: moodName(sig.state) })) host.redraw();
         expire("avatar", sig?.ttlMs);
       },
       emote: (e) => host.avatarEmote(e),

@@ -10,6 +10,7 @@ import { ICONS } from "../../../views/icons";
 import { COLOR, wear } from "../../../views/palette";
 import { ACTIVITY_STYLE, GITHUB_LEVELS, compact, githubData, repoName, type GithubOpening } from "./integrations";
 import { timeAgo } from "../../../views/format";
+import { rt } from "../store";
 import { GITHUB, cleanups, info as infos, integrationSettings, later, redraw } from "../store";
 import { Bridge } from "../../../core/bridge";
 import { type GithubActivity, type GithubBuild, type GithubCommentsDetail, type GithubCommitsDetail, type GithubContributions, type GithubData, type GithubDay, type GithubDeploy, type GithubDetail, type GithubEntry, type GithubFile, type GithubIssueDetail, type GithubJob, type GithubLabel, type GithubProject, type GithubPull, type GithubPullDetail, type GithubReleaseDetail, type GithubRemark, type GithubRepo, type GithubRunDetail, type GithubTarget, type GithubThread, type GithubTimed, type IntegrationNews, IntegrationsBridge } from "../bridge";
@@ -154,22 +155,21 @@ function touch() {
  */
 let searchingFor: object | null = null;
 
-function setTask(task: { state: BotStateName }, state: BotStateName) {
-  task.state = state;
-  State.notify();
+function setTask(task: { id: string }, mood: BotStateName) {
+  rt.api?.pills.set({ id: task.id, mood });
 }
 
 function startSearching(for_: object) {
   searchingFor = for_;
-  const task = State.tasks.find((t) => t.id === ID);
-  if (task?.state === "idle") setTask(task, "searching");
+  const task = State.pills.find((t) => t.id === ID);
+  if (task?.mood === "idle") setTask(task, "searching");
 }
 
 function stopSearching(for_: object) {
   if (searchingFor !== for_) return;
   searchingFor = null;
-  const task = State.tasks.find((t) => t.id === ID);
-  if (task?.state === "searching") setTask(task, "idle");
+  const task = State.pills.find((t) => t.id === ID);
+  if (task?.mood === "searching") setTask(task, "idle");
 }
 
 /**
@@ -1704,7 +1704,7 @@ function crewLook(t: GithubTimed): { state: BotStateName; color: string } {
     case "running":
       return { state: "working", color: BUILD_STYLE.running.color };
     case "success":
-      return { state: "finished", color: BUILD_STYLE.success.color };
+      return { state: "done", color: BUILD_STYLE.success.color };
     case "failure":
       return { state: "error", color: BUILD_STYLE.failure.color };
     case "neutral":
@@ -2164,7 +2164,7 @@ export function buildGithub(ctx: ViewContext): ViewHost {
       const how = justEnded;
       justEnded = null;
       if (how !== "neutral") {
-        ending = { state: how === "success" ? "finished" : "error", until: performance.now() + END_LOOK_MS };
+        ending = { state: how === "success" ? "done" : "error", until: performance.now() + END_LOOK_MS };
         later(redraw, END_LOOK_MS + 50);
         Sound.play(how === "success" ? "finish" : "error");
       }

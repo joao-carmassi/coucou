@@ -8,7 +8,7 @@ import { h, svg, dot } from "../../../views/dom";
 import { ICONS } from "../../../views/icons";
 import { COLOR } from "../../../views/palette";
 import { timeAgo } from "../../../views/format";
-import type { AgentTask } from "../../../core/state";
+import type { Pill } from "../../../core/state";
 import { Bridge } from "../../../core/bridge";
 import { type GithubActivityKind, type GithubData, type GithubTarget, IntegrationsBridge } from "../bridge";
 import { GITHUB, PROVIDERS, info, steps } from "../store";
@@ -39,7 +39,7 @@ function arr(id: string, key: string): Record<string, unknown>[] {
 
 const OPEN_URLS: Record<string, string | undefined> = Object.fromEntries(PROVIDERS.map((p) => [p.id, p.url]));
 
-function idleCard(task: AgentTask, openSettings: () => void): HTMLElement {
+function idleCard(task: Pill, openSettings: () => void): HTMLElement {
   const own = info[task.id];
   const configured = own?.configured ?? false;
   const error = own?.error ?? null;
@@ -62,7 +62,7 @@ function idleCard(task: AgentTask, openSettings: () => void): HTMLElement {
       h("button", {
         class: "link-btn",
         style: `color:${task.color}d9`,
-        text: `Abrir ${task.name}`,
+        text: `Abrir ${task.label}`,
         onclick: () => void Bridge.openUrl(OPEN_URLS[task.id]!),
       }),
     );
@@ -85,7 +85,7 @@ function idleCard(task: AgentTask, openSettings: () => void): HTMLElement {
   return h(
     "div",
     { class: "int-card" },
-    header(task.color, task.name, "Integração"),
+    header(task.color, task.label, "Integração"),
     h("div", { class: "int-status" }, dot(statusColor, 5), h("span", { text: label })),
     actions,
   );
@@ -192,8 +192,8 @@ export function githubData(): GithubData | null {
 
 /**
  * Icon and colour of each kind of activity. The colours are Mochi's own state
- * colours rather than GitHub's: a merged PR is green like `finished`, a push
- * blue like `working`, an open issue amber like `approval`.
+ * colours rather than GitHub's: a merged PR is green like `done`, a push
+ * blue like `working`, an open issue amber like `alert`.
  */
 export const ACTIVITY_STYLE: Record<GithubActivityKind | "review", { icon: string; color: string }> = {
   push: { icon: ICONS.commit, color: COLOR.blue },
@@ -204,7 +204,7 @@ export const ACTIVITY_STYLE: Record<GithubActivityKind | "review", { icon: strin
   issue_closed: { icon: ICONS.issue, color: COLOR.grey },
   release: { icon: ICONS.tag, color: COLOR.cyan },
   create: { icon: ICONS.add, color: COLOR.dim },
-  // A review asked for your eyes, like a question: Mochi's `question` cyan.
+  // A review asked for your eyes, like a question: Mochi's `ask` cyan.
   review: { icon: ICONS.pullRequest, color: COLOR.cyan },
 };
 
@@ -392,11 +392,11 @@ function calcomCard(): HTMLElement {
 
 // ── n8n ───────────────────────────────────────────────────────────────────────
 
-function n8nCard(task: AgentTask, onDetail: () => void, openSettings: () => void): HTMLElement {
+function n8nCard(task: Pill, onDetail: () => void, openSettings: () => void): HTMLElement {
   const lines = steps.get(task.id) ?? [];
-  const hasActivity = lines.length > 0 && (task.state === "finished" || task.state === "error");
+  const hasActivity = lines.length > 0 && (task.mood === "done" || task.mood === "error");
   if (!hasActivity) return idleCard(task, openSettings);
-  const success = task.state === "finished";
+  const success = task.mood === "done";
   const accent = success ? "#22C55E" : "#F4505E";
   return h(
     "div",
@@ -420,9 +420,9 @@ function n8nCard(task: AgentTask, onDetail: () => void, openSettings: () => void
   );
 }
 
-function n8nDetail(task: AgentTask, onBack: () => void): HTMLElement {
+function n8nDetail(task: Pill, onBack: () => void): HTMLElement {
   const lines = steps.get(task.id) ?? [];
-  const success = task.state === "finished";
+  const success = task.mood === "done";
   const accent = success ? "#22C55E" : "#F4505E";
   const detail = lines[1];
   return h(
@@ -483,9 +483,9 @@ export function hasIntegrationData(id: string): boolean {
   }
 }
 
-export function renderIntegrationCard(task: AgentTask, hooks: IntegrationCardHooks): HTMLElement {
+export function renderIntegrationCard(task: Pill, hooks: IntegrationCardHooks): HTMLElement {
   if (task.id === "integration_n8n") {
-    const hasActivity = (steps.get(task.id)?.length ?? 0) > 0 && (task.state === "finished" || task.state === "error");
+    const hasActivity = (steps.get(task.id)?.length ?? 0) > 0 && (task.mood === "done" || task.mood === "error");
     return hooks.detailOpen && hasActivity
       ? n8nDetail(task, hooks.closeDetail)
       : n8nCard(task, hooks.openDetail, hooks.openSettings);

@@ -1,13 +1,16 @@
 // Module contract: types only, plus resolveEnabled. Only `import type` here (Node loads it in tests).
 
-import type { BotEmoteName, BotStateName, IslandMode, ViewLayout } from "./layout";
-import type { PillBadge, Settings } from "./state";
+import type { BotEmoteName, BotStateName, IslandMode, LegacyMoodName, ViewLayout } from "./layout";
+import type { PillAt, PillInput, Settings } from "./state";
 import type { FsmState } from "../island/fsm";
 import type { ViewActions } from "../views/views";
 
 export type Disposer = () => void;
 
-/** Higher wins, tie goes to the most recent. approval 100, question 90, error 80, finished 60, timer 50, voice 40, Claude activity 30, media 20, integrations 10. */
+/** Optional neutral priority bands for status lines and avatar signals (any number works). */
+export const BAND = { URGENT: 90, NOTICE: 60, ACTIVE: 30, AMBIENT: 10 } as const;
+
+/** Higher wins, tie goes to the most recent. Suggested bands: BAND below; who uses which number is in docs/MODULES-CONTRACT.md. */
 export interface StatusLine {
   priority: number;
   text: string;
@@ -18,7 +21,8 @@ export interface StatusLine {
   overGrid?: boolean;
 }
 
-export interface AvatarSignal { state: BotStateName; priority: number; emote?: BotEmoteName; ttlMs?: number }
+/** `state` also takes the old mood names (approval, question, finished, ratelimit) for one version. */
+export interface AvatarSignal { state: BotStateName | LegacyMoodName; priority: number; emote?: BotEmoteName; ttlMs?: number }
 
 export interface ViewHost {
   el: HTMLElement;
@@ -90,8 +94,10 @@ export interface IslandApi {
   interval(fn: () => void, ms: number, opts?: { whenVisible?: boolean }): Disposer;
   status: { set(line: StatusLine | null): void };
   avatar: { publish(sig: AvatarSignal | null): void; emote(e: BotEmoteName): void; morph(v: number): void; gulp(): void; tint(color: string | null): void; bodyColor(): string | null };
-  /** A badge on a pill (task id) this module owns; cleared when the module stops. */
-  pill: { badge(taskId: string, badge: PillBadge | null): void };
+  /** Pills (mini Mochis) this module owns; all removed when it stops. set creates (label + color) or patches. */
+  pills: { set(pill: PillInput, at?: PillAt): void; remove(id: string): void; clear(): void };
+  /** Adds a sound under `name` (url of a WAV); removed when the module stops. */
+  sound: { register(name: string, url: string): Disposer };
   island: {
     open(view: string, opts?: { pinMs?: number }): void; setView(view: string): void; close(): void; wake(): void; hide(): void;
     keepAwake(pred: () => boolean): Disposer; isVisible(): boolean; mode(): IslandMode; fsmState(): FsmState; mouseInside(): boolean; view(): string;
