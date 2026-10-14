@@ -52,6 +52,8 @@ export function startPrimary(api: IslandApi): Disposer {
     if (!forced && !due()) { log(`${src} pick-not-due`); return; }
     const cur = front();
     pick = null;
+    revert?.();
+    revert = null;
     if (explicit(cur)) { log(`${src} cur-explicit ${cur?.id}`); return; }
     applyDefault();
     log(`${src} applied, front=${front()?.id}`);
