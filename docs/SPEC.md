@@ -59,7 +59,7 @@ Common: header with tabs (from the modules that have one) and sound button; card
 | `media` | media | recent screenshots, recordings, dropped files |
 | `timer` | timer | countdown and stopwatch |
 | `upload`, `uploading`, `choose` | upload | drop zone, progress (Mochi is the bar's cursor), "open in Claude Code" |
-| `voice` | voice | transcript review card with **Enviar** |
+| `voice` | voice | editable transcript review card; **Enter** sends, **Esc** cancels, no timer |
 
 A service module adds a pill and a card in `overview` (GitHub also a panel). Layouts (height, Mochi position and size, agent layout `none | grid | pills | column`) are registered per view (`core/layout.ts`); the window height is at most 320.
 
