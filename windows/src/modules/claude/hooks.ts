@@ -726,13 +726,12 @@ export function handleHook(c: Claude, payload: HookPayload) {
         // waits its turn behind its tab, and gets the card next.
         session.news = "alert";
       } else if (focused) {
-        State.isPinned = true;
-        c.alert(questions ? "question" : "approval");
+        c.syncRequest(true);
       } else {
         // Another agent holds the view, so the card would yank it away. The badge
         // is the signal instead — but it has to be on screen for that to mean
         // anything, hence the reveal. We just told the relay a human can act.
-        State.isPinned = true;
+        c.syncRequest(false);
         c.store.setBadge(CLAUDE_ID, "alert");
         c.api.island.wake();
       }

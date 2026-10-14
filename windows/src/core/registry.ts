@@ -6,6 +6,7 @@ import { Bridge, command, onEvent } from "./bridge";
 import { Compact } from "./compact";
 import { Hooks, Services, onMode } from "./hooks";
 import { dropPills, putPill } from "./pills";
+import { Requests } from "./requests";
 import { Sound } from "./sound";
 import { resolveEnabled } from "./moduleApi";
 import type { AvatarSignal, Disposer, IslandApi, IslandHooks, IslandHost, ModuleDef, StatusLine } from "./moduleApi";
@@ -92,7 +93,14 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
       bodyColor: () => host.avatarBodyColor(),
     },
     island: {
-      open: (view, opts) => host.open(view, opts?.pinMs),
+      open: (view) => host.open(view),
+      request(spec) {
+        const r = host.addRequest(id, spec);
+        const cancel = spec.ms != null ? timeout(() => off(), spec.ms) : null;
+        const off: Disposer = () => { cancel?.(); scope.remove(off); r(); };
+        return scope.add(off);
+      },
+      busy: () => Requests.busy(),
       setView: (v) => host.setView(v),
       close: () => host.collapse(),
       wake: () => host.reveal(),
@@ -105,7 +113,6 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
       view: () => State.view,
       note: (t) => host.note(t),
       error: (e) => host.error(e),
-      pendingAlert: () => host.pendingAlert(),
       layoutHint: () => host.layoutHint(),
       redraw: () => host.redraw(),
       overlay: (o) => scope.add(host.addOverlay(o)),

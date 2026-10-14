@@ -215,7 +215,7 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
 
   /** Without the Claude module there is no overview: the GitHub panel is home. */
   function homeView(): HomeRequest | null {
-    return State.modules.claude !== true && owned ? { view: "github", pin: false, priority: 5 } : null;
+    return State.modules.claude !== true && owned ? { view: "github", priority: 5 } : null;
   }
 
   const offs: Disposer[] = [

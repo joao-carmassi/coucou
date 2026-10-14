@@ -1,6 +1,6 @@
 {
-  "stateImports": 15,
-  "stateWrites": 19,
+  "stateImports": 14,
+  "stateWrites": 8,
   "foreignCoreImports": 49,
-  "deadFields": 14
+  "deadFields": 11
 }

@@ -22,7 +22,7 @@ function start(api: IslandApi): Disposer {
     Timer.cancel(); // onChange -> arm -> idle
     Sound.play("finish");
     // A request waiting keeps the island: the sound is enough then.
-    if (!api.island.pendingAlert()) api.island.note("Temporizador concluído");
+    if (!api.island.busy()) api.island.note("Temporizador concluído");
   };
   const arm = () => {
     disarm();

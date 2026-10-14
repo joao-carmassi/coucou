@@ -1,6 +1,7 @@
 // Module contract: types only, plus resolveEnabled. Only `import type` here (Node loads it in tests).
 
 import type { BotEmoteName, BotStateName, IslandMode, ViewLayout } from "./layout";
+import type { RequestSpec } from "./requests";
 import type { PillAt, PillInput, Settings } from "./state";
 import type { FsmState } from "../island/fsm";
 import type { ViewActions } from "../views/views";
@@ -47,7 +48,9 @@ export interface Overlay {
   place?(islandW: number): void;
   leaving?(nextView: string): void;
 }
-export interface HomeRequest { view: string; pin: boolean; priority: number }
+export type { RequestSpec };
+/** Where home is (hover / click on the compact island); to hold the island open on a card use api.island.request. */
+export interface HomeRequest { view: string; priority: number }
 export interface IslandHooks {
   homeView(): HomeRequest | null;
   keepAwake(): boolean;
@@ -62,14 +65,15 @@ export interface IslandHooks {
 /** What Island lends the registry. */
 export interface IslandHost {
   readonly actions: ViewActions;
-  open(view: string, pinMs?: number): void;
+  open(view: string): void;
+  /** The core queue: see api.island.request. `owner` is the module id. */
+  addRequest(owner: string, spec: RequestSpec): Disposer;
   hide(): void;
   collapse(): void;
   reveal(): void;
   setView(view: string): void;
   note(text: string): void;
   error(err: unknown): void;
-  pendingAlert(): boolean;
   mouseInside(): boolean;
   fsmState(): FsmState;
   layoutHint(): void;
@@ -98,9 +102,19 @@ export interface IslandApi {
   /** Adds a sound under `name` (url of a WAV); removed when the module stops. */
   sound: { register(name: string, url: string): Disposer };
   island: {
-    open(view: string, opts?: { pinMs?: number }): void; setView(view: string): void; close(): void; wake(): void; hide(): void;
+    /** Navigation: unfolds the island on `view`. It never pins; to hold the island open use `request`. */
+    open(view: string): void;
+    /**
+     * Asks for the screen. The core keeps one list (highest priority in front, the newest wins a tie; cleaned when this module stops).
+     * A request below the front one is queued: the view does not switch. Disposing the front shows the next one's view (island still open), else the island may auto-close again.
+     * `pin` holds the island open (no auto-close, Esc or click-outside) while it is in front. `ms` disposes it by itself.
+     */
+    request(spec: RequestSpec): Disposer;
+    /** True while any pinned request exists (a note over it would be rude). */
+    busy(): boolean;
+    setView(view: string): void; close(): void; wake(): void; hide(): void;
     keepAwake(pred: () => boolean): Disposer; isVisible(): boolean; mode(): IslandMode; fsmState(): FsmState; mouseInside(): boolean; view(): string;
-    note(text: string): void; error(err: unknown): void; pendingAlert(): boolean; layoutHint(): void; redraw(): void; overlay(o: Overlay): Disposer;
+    note(text: string): void; error(err: unknown): void; layoutHint(): void; redraw(): void; overlay(o: Overlay): Disposer;
   };
   provide<K extends keyof IslandHooks>(hook: K, fn: IslandHooks[K]): Disposer;
   /** Offers a service under a namespaced key ("<module>.<name>"; the types live in that module's api.ts). Removed when this module stops. */

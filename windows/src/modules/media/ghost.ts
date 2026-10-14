@@ -41,7 +41,7 @@ export function armMochiDrop(api: IslandApi, ctl: MediaCtl): Disposer {
         api.avatar.emote("wink");
         Sound.play("attach");
         ctl.highlight(file.name);
-        api.island.open("media", { pinMs: PIN_MS });
+        api.island.request({ view: "media", priority: 20, pin: true, ms: PIN_MS });
       })
       .catch((err) => api.island.error(err));
   }

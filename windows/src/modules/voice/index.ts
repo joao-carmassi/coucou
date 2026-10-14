@@ -4,7 +4,6 @@
 import type { Disposer, IslandApi, ModuleDef } from "../../core/moduleApi";
 import { Bridge } from "../../core/bridge";
 import { VoiceBridge } from "./bridge";
-import { State } from "../../core/state";
 import { buildVoiceView, send, Voice } from "./view";
 
 const reviewing = () => Voice.phase === "review";
@@ -16,14 +15,14 @@ function start(api: IslandApi): Disposer {
     const text = STATUS[Voice.phase];
     api.status.set(text ? { priority: 40, text } : null);
   };
-  // A request card in front keeps the island: the phase is set, the card is not taken over.
+  // One pinned request while the card is up, in every phase (listening, transcribing, review, error). Below another
+  // module's request (a Claude approval) it queues: the phase is set, the card does not take the screen over.
+  let asked: Disposer | null = null;
+  const release = () => { asked?.(); asked = null; };
   const show = () => {
-    const v = api.island.view();
-    if (v === "approval" || v === "question") return;
-    // Pinned in every phase: open() hands the pin to the state machine, which setView alone never did
-    // (an already open card kept its auto-close timer and folded while the transcript was on it).
-    State.isPinned = true;
-    api.island.open("voice");
+    const prev = asked;
+    asked = api.island.request({ view: "voice", priority: 40, pin: true });
+    prev?.();
   };
   // Enter/Esc are captured only while listening or while a transcript is on the card: the listener exists
   // only then (never while parked/hidden) and the window takes focus (Bridge.focusWindow) so the keys reach it while the user typed elsewhere.
@@ -50,9 +49,10 @@ function start(api: IslandApi): Disposer {
   };
   Voice.leave = () => {
     keys(false);
-    State.isPinned = false;
+    release();
     line();
-    api.island.close();
+    // Another module's request now in front keeps the island; otherwise fold it.
+    if (!api.island.busy()) api.island.close();
   };
   // "Aguardar": hide the island, keep the transcript. No timer is left behind; the keys are released
   // (onVisibility) and come back when the island opens on the card again.
@@ -61,21 +61,21 @@ function start(api: IslandApi): Disposer {
     api.onVisibility((mode) => {
       if (!reviewing()) return;
       keys(mode === "expanded");
-      if (mode === "expanded" && api.island.view() !== "voice") api.island.setView("voice");
     }),
     // Hotkey while not recording: bring a waiting transcript back, else start listening.
     api.listen("voice-hotkey", () => {
       if (reviewing()) { keys(false); show(); keys(true); return; }
-      VoiceBridge.voiceStart().catch((e) => { Voice.phase = "error"; Voice.note = String(e).replace(/^Error:\s*/, ""); State.isPinned = true; line(); show(); });
+      VoiceBridge.voiceStart().catch((e) => { Voice.phase = "error"; Voice.note = String(e).replace(/^Error:\s*/, ""); line(); show(); });
     }),
     api.listen<{ state: string; message: string }>("voice-state", ({ state, message }) => {
       if (state === "listening") Voice.phase = "listening";
       else if (state === "transcribing") Voice.phase = "transcribing";
-      else if (state === "error") { Voice.phase = "error"; Voice.note = message; State.isPinned = true; }
+      else if (state === "error") { Voice.phase = "error"; Voice.note = message; }
       else {
         // idle: nothing was heard closes the card; a transcript waiting for a click stays.
         if (Voice.phase === "listening" || Voice.phase === "transcribing") {
           Voice.phase = "none";
+          release();
           line();
           if (api.island.view() === "voice") api.island.close();
         }
@@ -91,13 +91,11 @@ function start(api: IslandApi): Disposer {
     api.listen<{ text: string }>("voice-text", ({ text }) => {
       Voice.text = text;
       Voice.phase = "review";
-      State.isPinned = true;
       keys(true);
       line();
       show();
     }),
-    // The transcript stays reachable (a close or a hover does not lose it) until Enter/Esc.
-    api.provide("homeView", () => (reviewing() ? { view: "voice", pin: true, priority: 40 } : null)),
+    // The transcript stays reachable (a close or a hover does not lose it) until Enter/Esc: its request stays in the core queue.
   ];
   return () => {
     keys(false);

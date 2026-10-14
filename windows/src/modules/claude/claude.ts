@@ -6,7 +6,7 @@ import { CLAUDE_SERVICE, type LaunchFile } from "./api";
 import { Bridge } from "../../core/bridge";
 import { ClaudeBridge } from "./bridge";
 import type { BotStateName } from "../../core/layout";
-import type { Disposer, HomeRequest, IslandApi } from "../../core/moduleApi";
+import type { Disposer, IslandApi } from "../../core/moduleApi";
 import { Sound } from "../../core/sound";
 import { State } from "../../core/state";
 import { activityLine } from "./activity";
@@ -99,10 +99,24 @@ export class Claude {
     this.api.island.open(view);
   }
 
-  /** Pin (or unpin) the island, and tell the state machine: it reads State.isPinned when the island opens. */
-  private pin(on: boolean) {
-    State.isPinned = on;
-    if (this.api.island.mode() === "expanded") this.api.island.open(this.api.island.view());
+  /** The core request of the card in front (approval 100, question 90), pinned. */
+  private asked: { view: string; off: Disposer } | null = null;
+
+  /**
+   * Keeps ONE core request in step with what the session in front waits for; it goes when nothing waits.
+   * `show`: the island opens on the card; otherwise it is only queued (and pinned), the screen is not taken.
+   * The core owns the pin, so another module's request is never touched.
+   */
+  syncRequest(show: boolean) {
+    const { pendingApproval, pendingQuestion } = this.store;
+    const view = pendingApproval ? "approval" : pendingQuestion ? "question" : null;
+    if (view === (this.asked?.view ?? null)) {
+      if (view && show) this.api.island.open(view);
+      return;
+    }
+    const prev = this.asked;
+    this.asked = view ? { view, off: this.api.island.request({ view, priority: view === "approval" ? 100 : 90, pin: true, quiet: !show }) } : null;
+    prev?.off();
   }
 
   /** The clicked pill comes to the front; Claude's pill brings its pending card with it. */
@@ -148,9 +162,9 @@ export class Claude {
     store.setBadge(CLAUDE_ID, next && this.focusId() !== CLAUDE_ID ? "alert" : null);
     store.present();
     if (show) {
-      State.isPinned = next != null;
-      this.api.island.open(next ? (next.question ? "question" : "approval") : State.defaultView());
-    } else this.pin(next != null);
+      this.syncRequest(true);
+      if (!next) this.api.island.open(State.defaultView());
+    } else this.syncRequest(false);
   }
 
   decide(d: "allow" | "deny" | "plan-keep" | "plan-manual" | "plan-auto") {
@@ -212,10 +226,9 @@ export class Claude {
     const session = store.session;
     const waits = session.question != null || session.approval != null;
     if (waits) {
-      State.isPinned = true;
-      this.api.island.open(session.question ? "question" : "approval");
+      this.syncRequest(true);
     } else {
-      this.pin(false);
+      this.syncRequest(false);
       const view = this.api.island.view();
       if (view === "approval" || view === "question") this.api.island.setView(State.defaultView());
     }
@@ -292,16 +305,6 @@ export class Claude {
     this.api.avatar.publish(worn ? { state: s.state, priority: s.approval || s.question ? 100 : 30 } : null);
   }
 
-  /** The card a pending request asks the island to open on; else none (the home tab is the overview). */
-  private home(): HomeRequest | null {
-    const store = this.store;
-    if (this.focusId() === CLAUDE_ID) {
-      if (store.pendingQuestion) return { view: "question", pin: true, priority: 90 };
-      if (store.pendingApproval) return { view: "approval", pin: true, priority: 100 };
-    }
-    return null;
-  }
-
   private awake(): boolean {
     // A session at work keeps the compact island up; one silent for 15 min is presumed dead.
     // So does a request waiting for an answer.
@@ -326,7 +329,6 @@ export class Claude {
       // The idle card's button and the pill's name follow Settings.
       // (after the core has taken the new settings in: its own listener may run second)
       api.listen("settings-changed", () => void api.timeout(() => store.present(), 0)),
-      api.provide("homeView", () => this.home()),
       api.provide("keepAwake", () => this.awake()),
       api.provide("pillOpen", (id) => id === CLAUDE_ID && (this.openClient(), true)),
       api.provide<LaunchFile>(CLAUDE_SERVICE.launchFile, (path, ingest) => this.launchFile(path, ingest)),
@@ -344,7 +346,7 @@ export class Claude {
         const req = (s.approval ?? s.question)?.requestId;
         if (req) void ClaudeBridge.approvalDecline(req);
       }
-      if (store.hasPending()) State.isPinned = false;
+      this.asked = null; // its request goes with the module scope
       // The pills (Claude's and the agents') go with the module: the registry clears them.
       this.pending.clear();
     };

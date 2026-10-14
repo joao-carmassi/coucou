@@ -14,6 +14,7 @@ import { Avatar } from "../core/avatar";
 import { Compact } from "../core/compact";
 import { Hooks, emitMode } from "../core/hooks";
 import type { Disposer, IslandHost, Overlay, TabDef, ViewContext, ViewDef } from "../core/moduleApi";
+import { Requests, type Req, type RequestSpec } from "../core/requests";
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
 import { BotEngine, hexToRGB, type RGB } from "../mochi/engine";
@@ -59,7 +60,6 @@ export class Island implements IslandHost {
   /** Views modules registered, by name (tabOf, keyboard). */
   private viewDefs = new Map<string, ViewDef>();
   private overlays = new Set<Overlay>();
-  private pinTimer: number | null = null;
   private kbFocus = false;
 
   private width = new Tracked(compactWidth(0, 0));
@@ -224,9 +224,10 @@ export class Island implements IslandHost {
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
         case "home": {
-          const r = Hooks.home();
+          const r = Requests.front();
+          if (r) Requests.parked = false; // reopened on a waiting request: it holds the island again
+          this.syncPin();
           this.expand(r?.view ?? State.defaultView());
-          if (r?.pin) State.isPinned = this.fsm.pinned = true;
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
         }
@@ -257,8 +258,8 @@ export class Island implements IslandHost {
     if (mode === "expanded") Sound.play("open");
     if (prev === "expanded") {
       Sound.play("close");
-      State.isPinned = false;
-      this.clearPinTimer();
+      Requests.parked = true;
+      this.syncPin();
       void Bridge.focusWindow(false);
     }
     if (mode !== "expanded") this.engine.resetMorph();
@@ -310,33 +311,47 @@ export class Island implements IslandHost {
 
   collapse() {
     this.botPress = null;
-    State.isPinned = false;
-    this.fsm.pinned = false;
     // Drive the state machine rather than the mode: setting the mode behind its
     // back left it thinking the island was still open, and a click on the compact
     // island then did nothing — the island could never be reopened.
     this.fsm.forcePetit();
   }
 
-  /** Open on this view. Pinned alerts never auto-close; `pinMs` pins for that long. */
-  open(view: IslandViewName, pinMs?: number) {
-    this.fsm.pinned = State.isPinned;
+  /** Navigation: open on this view. Pinning belongs to requests (addRequest). */
+  open(view: IslandViewName) {
     this.fsm.forceHome();
     this.expand(view);
-    if (!pinMs) return;
-    this.clearPinTimer();
-    this.fsm.pinned = true;
-    this.pinTimer = window.setTimeout(() => {
-      this.pinTimer = null;
-      this.fsm.pinned = State.isPinned;
-      if (this.fsm.state === "home" && !this.wasInIsland) this.fsm.mouseLeft();
-      State.notify();
-    }, pinMs);
   }
 
-  private clearPinTimer() {
-    if (this.pinTimer != null) window.clearTimeout(this.pinTimer);
-    this.pinTimer = null;
+  /** The only write of fsm.pinned: the front request's pin. */
+  private syncPin() {
+    this.fsm.pinned = Requests.pinned();
+  }
+
+  addRequest(owner: string, spec: RequestSpec): Disposer {
+    const r = Requests.add(owner, spec);
+    const front = Requests.front() === r;
+    if (front && !spec.quiet) Requests.parked = false;
+    this.syncPin();
+    // Below the front one it waits: the screen is not taken.
+    if (front && !spec.quiet) this.open(r.view);
+    State.notify();
+    return () => this.dropRequest(r);
+  }
+
+  private dropRequest(r: Req) {
+    const wasFront = Requests.front() === r;
+    if (!Requests.remove(r)) return;
+    this.syncPin();
+    const next = Requests.front();
+    if (wasFront && State.mode === "expanded") {
+      if (next) this.setView(next.view);
+      else if (this.fsm.state === "home" && !this.wasInIsland) {
+        this.fsm.mouseLeft(); // unpinned: the auto-close countdown starts
+        this.homeCollapseAt = performance.now() + State.settings.autoCloseInterval * 1000;
+      }
+    }
+    State.notify();
   }
 
   hide() {
@@ -349,10 +364,8 @@ export class Island implements IslandHost {
 
   /** The mouse reaches a hidden island: it just peeks. */
   private mouseEnter() {
-    const r = this.fsm.state === "hidden" ? Hooks.home() : null;
-    if (r?.pin) {
-      this.fsm.pinned = true;
-      this.fsm.forceHome();
+    if (this.fsm.state === "hidden" && Requests.front()?.pin) {
+      this.fsm.forceHome(); // the home transition reopens on the waiting request, pinned
     } else this.fsm.mouseEntered();
   }
 
@@ -1005,10 +1018,6 @@ export class Island implements IslandHost {
     const msg = err instanceof Error ? err.message : String(err);
     void Bridge.log(`ui  error ${msg}`);
     this.showNote(msg);
-  }
-
-  pendingAlert(): boolean {
-    return State.mode === "expanded" && State.isPinned;
   }
 
   /** From the live cursor: wasInIsland is frozen while a module drag holds the pointer (onCursor returns early). */

@@ -54,11 +54,11 @@ test("resolveEnabled: defaults and requirements", () => {
   assert.equal(r.upload, false);
 });
 
-test("Hooks.home(false) ignores pinned requests", () => {
-  const off = Hooks.provide("homeView", () => ({ view: "approval", pin: true, priority: 90 }));
-  assert.equal(Hooks.home()?.view, "approval");
-  assert.equal(Hooks.home(false), null);
-  off();
+test("Hooks.home: the highest priority wins", () => {
+  const offs = [Hooks.provide("homeView", () => ({ view: "a", priority: 5 })), Hooks.provide("homeView", () => ({ view: "b", priority: 9 }))];
+  assert.equal(Hooks.home()?.view, "b");
+  offs.forEach((off) => off());
+  assert.equal(Hooks.home(), null);
 });
 
 test("pill badge: applyBadge reports change only", async () => {
@@ -112,14 +112,14 @@ test("pills: owner stamp, patch, order, owner-only removal, focus fallback", asy
 test("homeOf: request wins, else first tab, else empty", async () => {
   const { homeOf } = await import("../src/core/hooks.ts");
   const tabs = [{ view: "timer" }, { view: "media" }];
-  assert.equal(homeOf({ view: "overview", pin: false, priority: 10 }, tabs), "overview");
+  assert.equal(homeOf({ view: "overview", priority: 10 }, tabs), "overview");
   assert.equal(homeOf(null, tabs), "timer");
   assert.equal(homeOf(null, []), "empty");
 });
 
 test("homeOf: request > tab flagged home > first tab > empty", () => {
   const tabs = [{ view: "a" }, { view: "b", home: true as const }, { view: "c" }];
-  assert.equal(homeOf({ view: "x", pin: false, priority: 1 }, tabs), "x");
+  assert.equal(homeOf({ view: "x", priority: 1 }, tabs), "x");
   assert.equal(homeOf(null, tabs), "b");
   assert.equal(homeOf(null, [{ view: "a" }, { view: "c" }]), "a");
   assert.equal(homeOf(null, []), "empty");

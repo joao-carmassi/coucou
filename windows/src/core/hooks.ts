@@ -40,10 +40,10 @@ export const Hooks = {
   some<K extends keyof IslandHooks>(hook: K, ...args: Parameters<IslandHooks[K]>): boolean {
     return (Hooks.all(hook, ...args) as unknown[]).some(Boolean);
   },
-  /** The home request with the highest priority; `pinned = false` ignores pinned requests. */
-  home(pinned = true): HomeRequest | null {
+  /** The home request with the highest priority. */
+  home(): HomeRequest | null {
     let best: HomeRequest | null = null;
-    for (const r of Hooks.all("homeView")) if (r && (pinned || !r.pin) && (!best || r.priority > best.priority)) best = r;
+    for (const r of Hooks.all("homeView")) if (r && (!best || r.priority > best.priority)) best = r;
     return best;
   },
 };

@@ -15,9 +15,8 @@ const view = (name: string): ViewDef => ({
   },
 });
 
-/** The one line to change when the pin queue lands (today: open with pinMs). */
-export function requestPin(api: IslandApi, view: string, ms: number) {
-  api.island.open(view, { pinMs: ms });
+export function requestPin(api: IslandApi, view: string, ms: number, priority = 10) {
+  return api.island.request({ view, priority, pin: true, ms: ms || undefined });
 }
 
 export const dummyModule: ModuleDef = {

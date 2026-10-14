@@ -119,11 +119,11 @@ export interface ViewContext { actions: ViewActions; onResize(): void; api: Isla
 export interface ViewDef { name: string; layout: ViewLayout; tabOf?: string; lightsHome?: true; keyboard?: boolean; build(ctx: ViewContext): ViewHost }
 export interface TabDef { view: string; title: string; icon(): Element; order: number; home?: true }
 export interface Overlay { el: HTMLElement; active(): boolean; frame(nowMs: number): boolean; cursor?(x:number,y:number):void; place?(islandW:number):void; leaving?(nextView:string):void }
-export interface HomeRequest { view: string; pin: boolean; priority: number }
+export interface HomeRequest { view: string; priority: number }
 export interface IslandHooks { homeView(): HomeRequest | null; keepAwake(): boolean; pillOpen(taskId: string): boolean; avatarClick(): boolean; avatarPull(): void }
 export interface IslandHost { // what Island lends the registry
-  readonly actions: ViewActions; open(view: string, pinMs?: number): void; hide(): void; collapse(): void; reveal(): void;
-  setView(view: string): void; note(text: string): void; error(err: unknown): void; pendingAlert(): boolean; mouseInside(): boolean;
+  readonly actions: ViewActions; open(view: string): void; addRequest(owner: string, spec: RequestSpec): Disposer; hide(): void; collapse(): void; reveal(): void;
+  setView(view: string): void; note(text: string): void; error(err: unknown): void; mouseInside(): boolean;
   fsmState(): FsmState; layoutHint(): void; redraw(): void;
   addView(def: ViewDef, ctx: ViewContext): Disposer; setTabs(tabs: TabDef[]): void; addOverlay(o: Overlay): Disposer;
   avatarEmote(e: BotEmoteName): void; avatarMorph(v: number): void; avatarGulp(): void }
@@ -135,9 +135,9 @@ export interface IslandApi {
   interval(fn: () => void, ms: number, opts?: { whenVisible?: boolean }): Disposer;
   status: { set(line: StatusLine | null): void };
   avatar: { publish(sig: AvatarSignal | null): void; emote(e: BotEmoteName): void; morph(v: number): void; gulp(): void };
-  island: { open(view: string, opts?: { pinMs?: number }): void; setView(view: string): void; close(): void; wake(): void; hide(): void;
+  island: { open(view: string): void; request(spec: { view: string; priority: number; pin?: boolean; ms?: number }): Disposer; busy(): boolean; setView(view: string): void; close(): void; wake(): void; hide(): void;
     keepAwake(pred: () => boolean): Disposer; isVisible(): boolean; mode(): IslandMode; fsmState(): FsmState; mouseInside(): boolean; view(): string;
-    note(text: string): void; error(err: unknown): void; pendingAlert(): boolean; layoutHint(): void; redraw(): void; overlay(o: Overlay): Disposer };
+    note(text: string): void; error(err: unknown): void; layoutHint(): void; redraw(): void; overlay(o: Overlay): Disposer };
   provide<K extends keyof IslandHooks>(hook: K, fn: IslandHooks[K]): Disposer;
   provide<T>(service: `${string}.${string}`, impl: T): Disposer; // services: namespaced key, removed when the module stops
   use<T>(service: `${string}.${string}`): T | undefined;          // first provider; undefined = feature absent
@@ -169,8 +169,8 @@ export function resolveEnabled(catalog: readonly ModuleInfo[], stored: Readonly<
 `core/state.ts`: `modules: Record<string,boolean>`, `Settings.modulesEnabled: Record<string,boolean>` (default `{}`). `core/bridge.ts`: `BootInfo.modules`.
 
 `island/island.ts` (the island becomes the host; hook points, NO module imports):
-- `Island implements IslandHost`; `actions` becomes a field; `open(view, pinMs)` = `forceHome` + `expand(view)` + optional timed pin (the old `mediaPinTimer` pattern from `git show m3-ok:windows/src/island/island.ts`).
-- Home transition: `const r = Hooks.home(); this.expand(r?.view ?? State.defaultView()); if (r?.pin) State.isPinned = this.fsm.pinned = true;`
+- `Island implements IslandHost`; `actions` becomes a field; `open(view)` = `forceHome` + `expand(view)` (navigation, never pins).
+- Home transition: `const r = Requests.front(); this.expand(r?.view ?? State.defaultView());` (a waiting request wins over the home tab).
 - `fsm.keepAwake = () => Hooks.some("keepAwake")`; `compactLine()` = `Compact.resolve(State.otherTasks.length)?.text ?? ""`; `textOverGrid()` = `!!Compact.resolve(...)?.overGrid`.
 - avatar state = `Avatar.state(State.focusTask?.state ?? State.avatarState ?? "idle", State.stateOverride)`; in `syncDom`: `const e = Avatar.takeEmote(); if (e) this.engine.triggerEmote(e);`.
 - `setMode`: call `emitMode(mode, prev)` at the exact place where modules used to hook (before `updateWindowCollapsed`/`animateGeometry`).
@@ -292,6 +292,19 @@ Core events are generic: `hotkey-error {name, error}` (one per registered name; 
 
 Module commands are named `<id>_*` (claude_*, media_*, voice_*, github_*, n8n_*; shared integrations use `integrations_*`). The list lives in `modules::handler!` (modules/mod.rs), which expands to one `tauri::generate_handler!`; lib.rs passes only the core commands: `modules::handler!(boot, save_settings, ...)`. A new module command is added in that macro.
 
+## Pin request queue (M3)
+
+`State.isPinned` is read-only and derived; modules never write it. A module asks for the screen with `api.island.request({ view, priority, pin?, ms?, quiet? })` (returns a Disposer; `core/requests.ts`, pure and DOM-free).
+
+- One list in the core, each request stamped with its owner; all of a module's requests are disposed when it stops (its Scope). Front = highest `priority`, the newest wins a tie.
+- `State.isPinned` = island expanded AND the front request has `pin`. `fsm.pinned` is written in ONE place (`Island.syncPin`). Esc, click-outside and the auto-close countdown only act when nothing is pinned.
+- A new request that is not in front is queued: the view does not switch. A new front opens the island on its view (`quiet: true` queues and pins without opening, for a request that must not yank the view). Disposing the front shows the next request's view while the island is open; with no next one the pin is gone and the auto-close timer starts as usual. Disposing one request never touches another module's.
+- `ms`: the request disposes itself after that long (replaces `open(view, {pinMs})`). `api.island.open(view)` is plain navigation.
+- `api.island.busy()` (replaces `pendingAlert()`): true while any pinned request exists.
+- "Aguardar" / any close: the island folds and the requests stay but are *parked* (they do not pin an unrelated view that opens later). Hovering the hidden island, or the next home transition, reopens on the front request, pinned again.
+- `HomeRequest` has no `pin`: `homeView` only says where home is. Pinning is only through `request`.
+- In use: claude approval 100 / question 90 (one request tracks the card in front, `Claude.syncRequest`), voice 40 (one request across listening, transcribing, review and error), media drop 20 with `ms`. A voice card never takes the screen over an approval; Esc on voice no longer unpins an approval and an approval being answered no longer unpins a voice transcript.
+
 ## Pills, badges, moods, sounds (M5 neutrality)
 
 - **Pill** (`core/state.ts`): `{ id, label, color, mood, emote?, eye?, badge?, owner? }`. A module puts pills in the compact grid / overview row through `api.pills`: `set(pill, at?)` (a new pill needs `label` + `color`; later calls patch fields, `null` clears `emote`/`eye`/`badge`), `remove(id)`, `clear()`. `at`: `"start"`, `{ after: id }` (missing anchor = start), `{ before: id }` (missing anchor = end), default the end. The registry stamps `owner` (a module cannot touch another's pill) and removes all of a module's pills when it stops (focus moves off a removed pill). Modules never write `State.pills`. Data only one module needs (the steps of an agent pill) stays in that module, keyed by pill id.
@@ -336,7 +349,7 @@ Honest limits: (a) Rust code still needs the three edits in `modules/mod.rs`; (b
 
 `neutrality-audit` checks names; these checks look at behaviour. Both are in `windows/`.
 
-- **Headless harness** (`npm run test:harness`, part of `npm run check`): vitest + happy-dom (`vitest.config.ts`, `tests/harness/`). `modules/index` and `modules/catalog` are mocked so the island boots with only `clock` (dev module) and `tests/harness/dummyModule.ts` (2 views, a pill, an overlay, a pin request; no Rust). Canvas, Path2D, `@tauri-apps/api` invoke/listen are stubbed and recorded; timers and rAF are fake. It asserts: greeting ends in compact, a status line shows, a click opens the home tab and the header lists every registered tab, `api.avatar.emote` reaches the engine, hovering the bot 1.9 s triggers `love` and `ensureRunning`, `Registry.apply` with no modules lands on `empty`, zero `console.error`, and no recorded command or event named `claude_`, `github_`, `voice_`, `media_` or `integrations_`. happy-dom does no layout, so geometry is not asserted. When the pin queue lands, adapt `requestPin` in `dummyModule.ts` (one line).
+- **Headless harness** (`npm run test:harness`, part of `npm run check`): vitest + happy-dom (`vitest.config.ts`, `tests/harness/`). `modules/index` and `modules/catalog` are mocked so the island boots with only `clock` (dev module) and `tests/harness/dummyModule.ts` (2 views, a pill, an overlay, a pin request; no Rust). Canvas, Path2D, `@tauri-apps/api` invoke/listen are stubbed and recorded; timers and rAF are fake. It asserts: greeting ends in compact, a status line shows, a click opens the home tab and the header lists every registered tab, `api.avatar.emote` reaches the engine, hovering the bot 1.9 s triggers `love` and `ensureRunning`, `Registry.apply` with no modules lands on `empty`, zero `console.error`, and no recorded command or event named `claude_`, `github_`, `voice_`, `media_` or `integrations_`. happy-dom does no layout, so geometry is not asserted. `tests/harness/requests.test.ts` drives the request queue through the island (two modules, priorities, `ms`, module stop, Aguardar + hover reopen).
 - **Lints** (in `scripts/neutrality-audit.mjs`, WARN: printed, exit 0; `--fail-lints` fails when a count rises above `scripts/neutrality-ratchet.json`; `--write-ratchet` lowers it after a cleanup, counts never go up):
   - *Boundary*: `src/modules/**` must not value-import `State` from `core/state` (`stateImports`), write `State.<field> =` (`stateWrites`), or value-import core other than `core/moduleApi`, `views/dom`, `views/icons`, `kit/*` (`foreignCoreImports`). `import type` is always fine. Offenders are printed per module.
   - *Dead fields*: every field of `Settings`, `AppState`, `ViewLayout` and `IslandApi` must be read in `src/{core,island,views,mochi}` (`deadFields`). `IslandApi` is implemented by the core and read by modules, so its fields count as used when any file except `moduleApi.ts` and `registry.ts` reads them. A field only written, or only read by modules, is listed with how often modules mention it.

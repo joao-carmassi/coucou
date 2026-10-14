@@ -1,6 +1,7 @@
 // App state — the parts the island needs. Core only: modules plug in later.
 
 import { Hooks, homeOf } from "./hooks";
+import { Requests } from "./requests";
 import type { TabDef } from "./moduleApi";
 import type { BotEmoteName, BotStateName, IslandMode, IslandViewName } from "./layout";
 import type { EyeShape } from "../mochi/engine";
@@ -70,7 +71,10 @@ class AppState {
   /** Cursor relative to the island's top-left corner. */
   mouseInIsland = { x: 0, y: 0 };
 
-  isPinned = false;
+  /** Read-only: the front module request pins the island while it is open (core/requests.ts). */
+  get isPinned(): boolean {
+    return this.mode === "expanded" && Requests.pinned();
+  }
   paused = false;
 
   noteMessage: string | null = null;
@@ -112,7 +116,7 @@ class AppState {
 
   /** The home view: what the strongest module asks for (Hooks.home), else the empty card. */
   defaultView(): IslandViewName {
-    return homeOf(Hooks.home(false), this.tabs);
+    return homeOf(Hooks.home(), this.tabs);
   }
 }
 
