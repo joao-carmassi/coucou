@@ -1,0 +1,7 @@
+{
+  "id": "clock",
+  "label": "Relógio",
+  "default": false,
+  "order": 100,
+  "devOnly": true
+}
