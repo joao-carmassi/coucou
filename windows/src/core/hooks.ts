@@ -48,6 +48,11 @@ export const Hooks = {
   },
 };
 
+/** Home: the strongest module request, else the first tab's view (tabs come sorted by catalog order), else the empty card. */
+export function homeOf(home: HomeRequest | null, tabs: { view: string }[]): string {
+  return home?.view ?? tabs[0]?.view ?? "empty";
+}
+
 export function onMode(fn: (mode: IslandMode, prev: IslandMode) => void): Disposer {
   modeFns.add(fn);
   return () => void modeFns.delete(fn);

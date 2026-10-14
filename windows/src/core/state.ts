@@ -1,6 +1,7 @@
 // App state — the parts the island needs. Core only: modules plug in later.
 
-import { Hooks } from "./hooks";
+import { Hooks, homeOf } from "./hooks";
+import type { TabDef } from "./moduleApi";
 import type { BotEmoteName, BotStateName, IslandMode, IslandViewName } from "./layout";
 import type { EyeShape } from "../mochi/engine";
 import { applyBadge, type PillBadge } from "./badge";
@@ -99,9 +100,12 @@ class AppState {
     return this.tasks.filter((t) => t.id !== this.focusTask?.id);
   }
 
+  /** Tabs of the running modules, in order; the home falls back to the first. */
+  tabs: TabDef[] = [];
+
   /** The home view: what the strongest module asks for (Hooks.home), else the empty card. */
   defaultView(): IslandViewName {
-    return Hooks.home(false)?.view ?? "empty";
+    return homeOf(Hooks.home(false), this.tabs);
   }
 }
 

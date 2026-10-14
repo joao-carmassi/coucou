@@ -1033,6 +1033,7 @@ export class Island implements IslandHost {
       host.el.remove();
       this.views.delete(def.name);
       this.viewDefs.delete(def.name);
+      State.tabs = State.tabs.filter((t) => t.view !== def.name); // setTabs comes after the stop
       if (State.view === def.name) {
         if (State.mode === "expanded") this.setView(State.defaultView());
         else State.view = State.defaultView();
@@ -1042,7 +1043,13 @@ export class Island implements IslandHost {
   }
 
   setTabs(tabs: TabDef[]) {
+    State.tabs = tabs;
     this.header.setTabs(tabs);
+    // The empty card was home: a module came on, so move to the new home.
+    if (State.view === "empty" && State.defaultView() !== "empty") {
+      if (State.mode === "expanded") this.setView(State.defaultView());
+      else State.view = State.defaultView();
+    }
     this.redraw();
   }
 

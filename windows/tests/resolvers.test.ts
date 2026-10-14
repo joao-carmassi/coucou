@@ -69,3 +69,11 @@ test("pill badge: applyBadge reports change only", async () => {
   assert.equal(applyBadge(tasks, "zz", "error"), false);
   assert.equal(applyBadge(tasks, "a", null), true);
 });
+
+test("homeOf: request wins, else first tab, else empty", async () => {
+  const { homeOf } = await import("../src/core/hooks.ts");
+  const tabs = [{ view: "timer" }, { view: "media" }];
+  assert.equal(homeOf({ view: "overview", pin: false, priority: 10 }, tabs), "overview");
+  assert.equal(homeOf(null, tabs), "timer");
+  assert.equal(homeOf(null, []), "empty");
+});
