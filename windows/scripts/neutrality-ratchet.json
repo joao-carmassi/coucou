@@ -1,12 +1,6 @@
 {
   "stateImports": 10,
   "stateWrites": 0,
-  "foreignCoreImports": 47,
-  "deadFields": 10,
-  "reasons": {
-    "stateImports": "Read-only observation of what the island shows, no API yet: State.pills / focusPill / otherPills / focusId (claude cards, integrations controller), State.mode / view / modules / defaultView() (claude, integrations, upload), State.mouse / mouseInIsland (media ghost, upload drag zone), State.subscribe / notify (claude, integrations, voice view). Every write and every settings/paused access already goes through the API.",
-    "stateWrites": "Zero is the rule: focus, pause and settings are API-only. A module writing State.<field> fails the audit.",
-    "foreignCoreImports": "Shared plumbing, not module-to-core coupling: core/bridge (Tauri commands/events a module calls through its own bridge.ts), core/sound, core/layout and core/canvas (value helpers), mochi/engine + minibots (avatar drawing), views/{views,palette,format,code} (UI kit, being moved to src/kit by c2). To go down as the kit takes them.",
-    "deadFields": "Settings.screen / autostart / modulesEnabled are read by Rust or the settings window only; the rest are API entries kept for modules that do not exist yet (invoke, pills.clear, sound.register, island.isVisible / layoutHint) or AppState leftovers (lastActivity, effectiveState)."
-  }
+  "foreignCoreImports": 35,
+  "deadFields": 10
 }
