@@ -2,7 +2,7 @@
 // Ported from views/views.ts at m3-ok. Every card works on the module's store, never on State.
 
 import { h, svg, clear, dot, replay } from "../../../kit/dom";
-import { card } from "../../../kit/card";
+import { card, view } from "../../../kit/card";
 import { tile } from "../../../kit/tile";
 import type { ViewContext, ViewHost } from "../../../core/moduleApi";
 import { App } from "../../../kit/app";
@@ -16,7 +16,7 @@ import { ICONS } from "../icons";
 import { COLOR } from "../../../kit/palette";
 import { CARD_AIR_MIN, fittedHeight } from "../fit";
 import { CLAUDE_ID, TURN_DONE, turnSteps, type ClaudeSession, type SessionStep } from "../types";
-import { diffLine, fileKind, plusMinus, readPatch } from "../../../kit/code";
+import { diffBlock, diffLine, fileKind, plusMinus, readPatch } from "../../../kit/code";
 import { markdown } from "./markdown";
 import { sessionName, sessionsChip } from "./session";
 import { hasPreview, stepIcon, stepName, stepPreview } from "./step";
@@ -355,7 +355,7 @@ function buildApproval(c: Claude, ctx: ViewContext): ViewHost {
   const proposed = h("div", { class: "proposed pane-code" });
   const row = h("div", { class: "actions" });
   const lines = stack(116, 16, who, code, proposed, row);
-  const el = h("div", { class: "view" }, card("amber", lines));
+  const el = view(card("amber", lines));
   const air = airy(lines, onResize);
   let rowKey = "";
   let proposedKey = "";
@@ -398,7 +398,7 @@ function buildApproval(c: Claude, ctx: ViewContext): ViewHost {
           proposed.scrollTop = 0;
         } else if (proposal) {
           const kind = fileKind(proposal.path);
-          const diff = h("div", { class: "code-diff" });
+          const diff = diffBlock();
           for (const line of readPatch(proposal.patch)) {
             if (!("hunk" in line)) diff.append(diffLine(line.new ?? line.old, line.sign, line.text, kind));
           }
@@ -482,7 +482,7 @@ function buildQuestion(c: Claude, ctx: ViewContext): ViewHost {
   );
   // The who line runs under the ↗: it keeps clear of it.
   who.style.paddingRight = "14px";
-  const el = h("div", { class: "view" }, card("cyan", lines, jump));
+  const el = view(card("cyan", lines, jump));
 
   /** The request all of this is about: a new one starts from the first question. */
   let request = "";
@@ -683,7 +683,7 @@ function buildError(c: Claude, ctx: ViewContext): ViewHost {
   const facts = h("div", { class: "nfs news-facts" });
   const newsRow = newsActions(c);
   const lines = stack(116, 16, who, title, detail, facts, row, newsRow);
-  const el = h("div", { class: "view" }, card("red", lines));
+  const el = view(card("red", lines));
   const air = airy(lines, onResize);
   return {
     el,
@@ -731,7 +731,7 @@ function buildFinished(c: Claude, ctx: ViewContext): ViewHost {
   const facts = h("div", { class: "nfs news-facts" });
   const newsRow = newsActions(c);
   const lines = stack(116, 16, who, title, facts, row, newsRow);
-  const el = h("div", { class: "view" }, card("green", lines));
+  const el = view(card("green", lines));
   const air = airy(lines, onResize);
   return {
     el,

@@ -4,6 +4,7 @@
 // view is on screen — hidden, the island costs nothing.
 
 import { h } from "../../../kit/dom";
+import { card, view } from "../../../kit/card";
 import { timeAgo } from "../../../kit/format";
 import { type ClaudeProfile, type LiveSession, type ManagedSession, ClaudeBridge } from "../bridge";
 import type { ViewContext, ViewHost } from "../../../core/moduleApi";
@@ -33,12 +34,7 @@ export function buildSessionsView(c: Claude, ctx: ViewContext): ViewHost {
   const chips = h("div", { class: "sess-chips" });
   const newBtn = h("button", { class: "btn secondary sess-newbtn", text: "Nova sessão", onclick: () => void newSession() });
   const list = h("div", { class: "sess-list" });
-  const el = h(
-    "div",
-    { class: "view" },
-    h("div", { class: "card wash chat-card" }, h("div", { class: "chat-body sess-view" }, h("div", { class: "sess-head" }, chips, newBtn), list)),
-  );
-  (el.querySelector(".card") as HTMLElement).style.setProperty("--wash", "rgba(99,102,241,0.5)");
+  const el = view(card({ wash: "indigo", cls: "chat-card" }, h("div", { class: "chat-body sess-view" }, h("div", { class: "sess-head" }, chips, newBtn), list)));
   // A click anywhere else disarms "Excluir?".
   el.addEventListener("click", (e) => {
     if (armed != null && !(e.target as Element).closest(".sess-del")) {
