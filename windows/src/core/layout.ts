@@ -96,7 +96,7 @@ export const VIEW_LAYOUTS: Record<string, ViewLayout> = {
 
 /** Never index VIEW_LAYOUTS directly: a view may be unregistered. */
 export function viewLayout(v: string): ViewLayout {
-  return VIEW_LAYOUTS[v] ?? VIEW_LAYOUTS.overview ?? VIEW_LAYOUTS.empty;
+  return VIEW_LAYOUTS[v] ?? VIEW_LAYOUTS.empty;
 }
 
 export function registerLayout(v: string, layout: ViewLayout): () => void {

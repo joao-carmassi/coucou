@@ -33,12 +33,11 @@ export interface Header extends ViewHost {
   setTabs(tabs: TabDef[]): void;
 }
 
-/** Tabs come from the modules (setTabs); Home is always there. `tabOf` maps a view to the tab it belongs to. */
+/** Tabs come from the modules (setTabs). `tabOf` maps a view to the tab view it lights. */
 export function buildHeader(actions: ViewActions, tabOf: (view: string) => string | undefined): Header {
-  const tabHome = h("button", { class: "tab", title: "Início", onclick: () => go(State.defaultView()) }, svg(ICONS.house, 13));
   const gearBtn = h("button", { title: "Configurações", onclick: () => go("settings") }, svg(ICONS.gear, 14));
   const soundBtn = h("button", { title: "Silenciar", onclick: () => actions.toggleSound() }, svg(ICONS.speakerOn, 14));
-  const tabsEl = h("div", { class: "tabs" }, tabHome);
+  const tabsEl = h("div", { class: "tabs" });
   let tabs: { def: TabDef; btn: HTMLElement }[] = [];
 
   function go(v: IslandViewName) {
@@ -57,16 +56,15 @@ export function buildHeader(actions: ViewActions, tabOf: (view: string) => strin
     el,
     setTabs(defs) {
       tabs = defs.map((def) => {
-        const btn = h("button", { class: "tab", title: def.title, onclick: () => go(def.view) }, def.icon());
+        // The home tab goes where home is now (a pending request's card is not a place to go back to).
+        const btn = h("button", { class: "tab", title: def.title, onclick: () => go(def.home ? State.defaultView() : def.view) }, def.icon());
         return { def, btn };
       });
-      tabsEl.replaceChildren(tabHome, ...tabs.map((t) => t.btn));
+      tabsEl.replaceChildren(...tabs.map((t) => t.btn));
     },
     sync() {
       const v = State.view;
       const own = tabOf(v);
-      tabHome.style.display = State.modules.claude ? "" : "none"; // Home needs the claude module
-      tabHome.classList.toggle("on", v === "overview" || v === "empty" || own === "overview");
       for (const t of tabs) t.btn.classList.toggle("on", v === t.def.view || own === t.def.view);
       gearBtn.classList.toggle("on", v === "settings");
       clear(gearBtn);

@@ -18,7 +18,7 @@ export const media: ModuleDef = {
     layout: { height: PANEL_H, botX: 67, botY: 108, botDiameter: 71, agentMode: "none" },
     build: (ctx) => buildMediaView(mediaOf(ctx.api), ctx),
   }],
-  tab: { view: "media", title: "Mídia", icon: () => svg(ICONS.photo, 13, { stroke: 1.6 }), order: 40 },
+  tabs: [{ view: "media", title: "Mídia", icon: () => svg(ICONS.photo, 13, { stroke: 1.6 }), order: 40 }],
   start(api) {
     const ctl = mediaOf(api);
     const stopCtl = ctl.start();

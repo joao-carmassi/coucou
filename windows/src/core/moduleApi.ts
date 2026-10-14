@@ -31,8 +31,9 @@ export interface ViewHost {
 }
 
 export interface ViewContext { actions: ViewActions; onResize(): void; api: IslandApi }
-export interface ViewDef { name: string; layout: ViewLayout; tabOf?: string; keyboard?: boolean; build(ctx: ViewContext): ViewHost }
-export interface TabDef { view: string; title: string; icon(): Element; order: number }
+export interface ViewDef { name: string; layout: ViewLayout; tabOf?: string; lightsHome?: true; keyboard?: boolean; build(ctx: ViewContext): ViewHost }
+/** `home`: this tab is the home (the header's first stop, and where a view that `lightsHome` highlights). */
+export interface TabDef { view: string; title: string; icon(): Element; order: number; home?: true }
 export interface Overlay {
   el: HTMLElement;
   active(): boolean;
@@ -108,7 +109,7 @@ export interface IslandApi {
 export interface ModuleInfo { id: string; label: string; defaultEnabled: boolean; requires?: string[]; /** Settings heading the module is listed under. */ group?: string }
 export interface ModuleDef extends ModuleInfo {
   views?: ViewDef[];
-  tab?: TabDef;
+  tabs?: TabDef[];
   start(api: IslandApi): Disposer | void;
 }
 

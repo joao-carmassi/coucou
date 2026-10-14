@@ -293,14 +293,14 @@ export class Claude {
     this.api.avatar.publish(worn ? { state: s.state, priority: s.approval || s.question ? 100 : 30 } : null);
   }
 
-  /** The card a pending request asks the island to open on, else the overview. */
+  /** The card a pending request asks the island to open on; else none (the home tab is the overview). */
   private home(): HomeRequest | null {
     const store = this.store;
     if (this.focusId() === CLAUDE_ID) {
       if (store.pendingQuestion) return { view: "question", pin: true, priority: 90 };
       if (store.pendingApproval) return { view: "approval", pin: true, priority: 100 };
     }
-    return { view: "overview", pin: false, priority: 10 };
+    return null;
   }
 
   private awake(): boolean {

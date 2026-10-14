@@ -15,6 +15,8 @@ import { CARDS } from "./views/cards";
 import { buildSession } from "./views/session";
 import { buildSessionsView } from "./views/sessions";
 
+const HOUSE = "M12 3.2 2.8 10.6V21h6.6v-5.4h5.2V21h6.6V10.6L12 3.2z";
+
 const view = (
   name: string,
   layout: ViewDef["layout"],
@@ -45,6 +47,9 @@ export const claude: ModuleDef = {
     view("session", { height: PANEL_H, botX: 67, botY: 108, botDiameter: 71, agentMode: "none" },
       (ctx) => buildSession(claudeOf(ctx.api), ctx), "overview"),
   ],
-  tab: { view: "sessions", title: "Sessões", icon: () => svg(ICONS.bubble, 13), order: 20 },
+  tabs: [
+    { view: "overview", title: "Início", icon: () => svg(HOUSE, 13), order: 0, home: true },
+    { view: "sessions", title: "Sessões", icon: () => svg(ICONS.bubble, 13), order: 20 },
+  ],
   start: (api) => claudeOf(api).start(),
 };

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Compact } from "../src/core/compact.ts";
 import { Avatar } from "../src/core/avatar.ts";
-import { Hooks } from "../src/core/hooks.ts";
+import { Hooks, homeOf } from "../src/core/hooks.ts";
 import { resolveEnabled } from "../src/core/moduleApi.ts";
 import { MODULE_INFO } from "../src/modules/catalog.ts";
 
@@ -75,5 +75,13 @@ test("homeOf: request wins, else first tab, else empty", async () => {
   const tabs = [{ view: "timer" }, { view: "media" }];
   assert.equal(homeOf({ view: "overview", pin: false, priority: 10 }, tabs), "overview");
   assert.equal(homeOf(null, tabs), "timer");
+  assert.equal(homeOf(null, []), "empty");
+});
+
+test("homeOf: request > tab flagged home > first tab > empty", () => {
+  const tabs = [{ view: "a" }, { view: "b", home: true as const }, { view: "c" }];
+  assert.equal(homeOf({ view: "x", pin: false, priority: 1 }, tabs), "x");
+  assert.equal(homeOf(null, tabs), "b");
+  assert.equal(homeOf(null, [{ view: "a" }, { view: "c" }]), "a");
   assert.equal(homeOf(null, []), "empty");
 });

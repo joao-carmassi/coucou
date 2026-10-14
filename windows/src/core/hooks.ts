@@ -48,9 +48,9 @@ export const Hooks = {
   },
 };
 
-/** Home: the strongest module request, else the first tab's view (tabs come sorted by catalog order), else the empty card. */
-export function homeOf(home: HomeRequest | null, tabs: { view: string }[]): string {
-  return home?.view ?? tabs[0]?.view ?? "empty";
+/** Home: the strongest module request, else the tab flagged `home`, else the first tab (tabs come sorted by order), else the empty card. */
+export function homeOf(home: HomeRequest | null, tabs: { view: string; home?: true }[]): string {
+  return home?.view ?? tabs.find((t) => t.home)?.view ?? tabs[0]?.view ?? "empty";
 }
 
 export function onMode(fn: (mode: IslandMode, prev: IslandMode) => void): Disposer {

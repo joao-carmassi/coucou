@@ -173,7 +173,10 @@ export class Island implements IslandHost {
     this.countdown = h("div", { id: "countdown" });
 
 
-    this.header = buildHeader(this.actions, (v) => this.viewDefs.get(v)?.tabOf);
+    this.header = buildHeader(this.actions, (v) => {
+      const d = this.viewDefs.get(v);
+      return d?.tabOf ?? (d?.lightsHome ? State.tabs.find((t) => t.home)?.view : undefined);
+    });
     this.views = buildViews(this.actions);
     this.viewsEl = h("div", { id: "views" });
     for (const v of this.views.values()) this.viewsEl.append(v.el);

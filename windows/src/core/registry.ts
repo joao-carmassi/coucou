@@ -157,7 +157,7 @@ export const Registry = {
       const def = MODULES.find((m) => m.id === id);
       if (def && want[id] && !running.has(id)) start(host, def);
     }
-    host.setTabs([...running.values()].flatMap((r) => (r.def.tab ? [r.def.tab] : [])).sort((a, b) => a.order - b.order));
+    host.setTabs([...running.values()].flatMap((r) => (r.def.tabs ?? [])).sort((a, b) => a.order - b.order));
     host.redraw();
   },
 };
