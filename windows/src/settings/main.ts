@@ -4,13 +4,14 @@
 import "./settings.css";
 import { Bridge, onEvent } from "../core/bridge";
 import { resolveEnabled } from "../core/moduleApi";
+import { moduleSettings } from "../core/moduleSettings";
 import { MODULE_INFO } from "../modules/catalog";
 import { SETTINGS_SECTIONS } from "../modules/settings";
 import { DEFAULT_SETTINGS, State, type Settings } from "../core/state";
 import { h, clear } from "../views/dom";
 
 let settings: Settings = { ...DEFAULT_SETTINGS };
-// Module sections (ModuleDef.settings) read and write the same object through State.settings.
+// ModuleSettings reads State.settings (this same object) and saves patches of its own keys.
 State.settings = settings;
 const put = (s: Settings) => {
   settings = s;
@@ -20,8 +21,10 @@ let version = "";
 
 const root = document.getElementById("settings-root")!;
 
+/** Only the core's own fields: module keys are saved by their sections as patches, and a stale copy here must not undo them. */
 async function save() {
-  await Bridge.saveSettings(settings);
+  const { soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, screen, autostart, modulesEnabled } = settings;
+  await Bridge.saveSettings({ soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, screen, autostart, modulesEnabled });
 }
 
 // ── Reusable bits ─────────────────────────────────────────────────────────────
@@ -137,7 +140,7 @@ function renderSections(effective: Record<string, boolean>) {
       has.dispose?.();
       sections.delete(id);
     } else if (on && !has) {
-      sections.set(id, make());
+      sections.set(id, make(moduleSettings(id, MODULE_INFO.find((m) => m.id === id)?.settingsDefaults)));
     }
   }
   const order = MODULE_INFO.map((m) => m.id);

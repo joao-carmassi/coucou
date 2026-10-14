@@ -4,7 +4,10 @@
     "label": "GitHub",
     "default": false,
     "group": "Integrações",
-    "order": 6
+    "order": 6,
+    "settingsDefaults": {
+      "githubMuted": []
+    }
   },
   {
     "id": "vercel",

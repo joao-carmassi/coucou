@@ -4,7 +4,7 @@
 // `--warn` prints everything and exits 0 (comment hits shown as warnings).
 // Run: npm run neutrality-audit [-- --warn] [-- --verbose]
 //
-// LINTS (behavioural, WARN by default: printed, exit 0; `--fail-lints` makes a regression fail):
+// LINTS (behavioural; FAIL by default when a count is above scripts/neutrality-ratchet.json; `--warn-lints` only prints):
 //   A. boundary: src/modules/** must not import `State` (value import from core/state), write `State.<field> =`, or
 //      value-import core other than core/moduleApi, views/dom, views/icons, kit/* (`import type` is always fine).
 //   B. dead fields: every field of Settings, AppState, ViewLayout and IslandApi must be READ in src/{core,island,views,mochi}
@@ -29,6 +29,7 @@ import { fileURLToPath } from "node:url";
 
 const root = join(fileURLToPath(import.meta.url), "..", "..");
 const fail = !process.argv.includes("--warn");
+const failLints = !process.argv.includes("--warn-lints") && !process.argv.includes("--warn");
 
 const ALLOWLIST = [
   ["src/core/registry.ts", "modules/index", "the only core file that loads the module list"],
@@ -232,7 +233,7 @@ if (process.argv.includes("--write-ratchet")) {
   writeFileSync(ratchetFile, JSON.stringify(next, null, 2) + "\n");
   Object.assign(ratchet, next);
 }
-console.log("\nLINTS (warn; --fail-lints fails on a count above the ratchet)");
+console.log("\nLINTS (fail on a count above the ratchet; --warn-lints only prints)");
 const perModule = (list, label, extra = () => "") => {
   const by = new Map();
   for (const x of list) (by.get(x.m) ?? by.set(x.m, []).get(x.m)).push(`${x.file.replace(/^src\/modules\/[^/]+\//, "")}:${x.line}${extra(x)}`);
@@ -248,6 +249,7 @@ for (const [k, v] of Object.entries(lintCounts)) {
   const state = cap == null ? "no ratchet" : v > cap ? "ABOVE ratchet" : v < cap ? "below ratchet (lower it with --write-ratchet)" : "at ratchet";
   if (cap == null || v > cap) lintBad++;
   console.log(`  ${k.padEnd(20)} ${String(v).padStart(3)} / ${cap ?? "-"}  ${state}`);
+  if (ratchet.reasons?.[k]) console.log(`      why it stays: ${ratchet.reasons[k]}`);
 }
 
 const live = findings.filter((x) => !x.reason);
@@ -263,4 +265,4 @@ for (const x of live) {
 console.log("file".padEnd(40) + "findings  warnings");
 for (const [f, e] of [...per].sort()) console.log(f.padEnd(40) + String(e.f).padStart(8) + String(e.w).padStart(10));
 console.log(`\nTOTAL findings ${bad.length}, warnings ${live.length - bad.length}, allowlisted ${findings.length - live.length}`);
-process.exit((fail && bad.length) || (process.argv.includes("--fail-lints") && lintBad) ? 1 : 0);
+process.exit((fail && bad.length) || (failLints && lintBad) ? 1 : 0);

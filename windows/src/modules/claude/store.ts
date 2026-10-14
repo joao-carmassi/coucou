@@ -9,20 +9,18 @@ import {
   type ApprovalInfo, type ChangedFile, type ClaudeClient, type ClaudeSession, type PillBadge, type QuestionInfo,
 } from "./types";
 
-/** Settings fields the Rust side keeps in `extra`. */
+/** This module's settings keys (manifest settingsDefaults); Rust keeps them in `extra`. */
 export interface ClaudeSettings {
   hooksInstalled: boolean;
   /** A second Claude account: Claude Code's config folder on Windows; empty = the default. */
   claudeConfigDir: string;
   /** What the idle Claude card opens: "" = Visual Studio Code, "terminal" = Claude Code in a terminal. */
   idleOpen: string;
-  wslHooks?: boolean;
-  wslPrompted?: boolean;
   /** Global hotkey that takes the island to the pending alert; "" = none. */
   alertHotkey: string;
 }
 
-export const claudeSettings = (): ClaudeSettings => State.settings as unknown as ClaudeSettings;
+export const claudeSettings = (api: IslandApi): Readonly<ClaudeSettings> => api.settings<ClaudeSettings>();
 
 /** What the Claude pill is called while it follows a session from that app. */
 export const CLIENT_NAMES: Record<ClaudeClient, string> = {
@@ -89,7 +87,7 @@ export class ClaudeStore {
   /** The Claude pill's name: the app of the session it follows. */
   get clientName(): string {
     if (this.session.client) return CLIENT_NAMES[this.session.client];
-    return claudeSettings().idleOpen === "terminal" ? CLIENT_NAMES.terminal : CLIENT_UNKNOWN;
+    return claudeSettings(this.api).idleOpen === "terminal" ? CLIENT_NAMES.terminal : CLIENT_UNKNOWN;
   }
 
   /** The files the session being followed has changed, the last touched first. */

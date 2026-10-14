@@ -353,7 +353,7 @@ function buildOverview(c: Claude, ctx: ViewContext): ViewHost {
         const key = [
           task.id, task.mood, store.agentSteps.get(task.id)?.join("|"), own?.key,
           // The idle Claude card's button follows Settings ("Idle button opens").
-          store.clientName, claudeSettings().hooksInstalled, claudeSettings().idleOpen, store.session.client,
+          store.clientName, claudeSettings(c.api).hooksInstalled, claudeSettings(c.api).idleOpen, store.session.client,
         ].join("~");
         if (key !== cardKey) {
           cardKey = key;
@@ -391,11 +391,11 @@ function buildOverview(c: Claude, ctx: ViewContext): ViewHost {
 /** The Claude card with no session to show: whether the hooks are in, and a way to open Claude. */
 function idleCard(c: Claude, task: Pill): HTMLElement {
   const store = c.store;
-  const configured = claudeSettings().hooksInstalled;
+  const configured = claudeSettings(c.api).hooksInstalled;
   const label = configured ? "Conectado · carregando…" : "Hooks não instalados";
   const statusColor = configured ? "#22C55E" : "#F4505E";
   const desktop = store.session.client === "desktop";
-  const terminal = !desktop && claudeSettings().idleOpen === "terminal";
+  const terminal = !desktop && claudeSettings(c.api).idleOpen === "terminal";
   const actions = h("div", { class: "tile-actions" },
     h("button", {
       class: "link-btn",

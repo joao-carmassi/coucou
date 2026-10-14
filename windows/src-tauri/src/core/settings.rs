@@ -88,6 +88,14 @@ pub fn fill_defaults(catalog: &[crate::core::host::ModuleInfo], s: &mut Settings
     added
 }
 
+/// `current` with the patch's top-level keys replaced; the rest (known fields and `extra`) is untouched.
+/// Err when a value has the wrong type for a known field: nothing is applied then.
+pub fn merge_patch(current: &Settings, patch: serde_json::Map<String, serde_json::Value>) -> Result<Settings, String> {
+    let mut v = serde_json::to_value(current).map_err(|e| e.to_string())?;
+    v.as_object_mut().expect("Settings serializes to an object").extend(patch);
+    serde_json::from_value(v).map_err(|e| e.to_string())
+}
+
 pub fn save(settings: &Settings) -> std::io::Result<()> {
     let dir = config_dir();
     crate::core::platform::ensure_private_dir(&dir)?;
@@ -123,6 +131,31 @@ mod tests {
         std::fs::remove_file(&file).unwrap();
         assert!(load().1, "missing file is a normal first run");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn patch_replaces_only_given_keys_and_keeps_extra() {
+        let cur: Settings = serde_json::from_str(SAMPLE).unwrap();
+        let patch = serde_json::json!({"clockFormat": "12h", "soundVolume": 0.5, "idleOpen": "vscode"});
+        let out = merge_patch(&cur, patch.as_object().unwrap().clone()).unwrap();
+        assert_eq!(out.sound_volume, 0.5);
+        assert_eq!(out.extra["clockFormat"], "12h");
+        assert_eq!(out.extra["idleOpen"], "vscode");
+        // everything else, known and unknown, is as it was
+        assert_eq!(out.auto_close_interval, cur.auto_close_interval);
+        assert_eq!(out.extra["claudeConfigDir"], cur.extra["claudeConfigDir"]);
+        assert_eq!(out.extra["mochiSession"], cur.extra["mochiSession"]);
+        let (mut a, mut b) = (serde_json::to_value(&cur).unwrap(), serde_json::to_value(&out).unwrap());
+        for k in ["soundVolume", "clockFormat", "idleOpen"] { a.as_object_mut().unwrap().remove(k); b.as_object_mut().unwrap().remove(k); }
+        assert_eq!(a, b);
+        assert_eq!(merge_patch(&cur, Default::default()).unwrap().extra, cur.extra, "empty patch is a no-op");
+    }
+
+    #[test]
+    fn patch_with_a_wrong_type_is_refused() {
+        let cur = Settings::default();
+        let patch = serde_json::json!({"soundVolume": "loud"});
+        assert!(merge_patch(&cur, patch.as_object().unwrap().clone()).is_err());
     }
 
     #[test]

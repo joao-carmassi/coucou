@@ -36,7 +36,8 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
 
   let clearTimer: Disposer | null = null;
   /** The pill the news took the front from, to hand it back. */
-  let borrowedFrom: string | null = null;
+  /** Gives the front back to the pill the news took it from (api.pills.focus). */
+  let borrowedFrom: (() => void) | null = null;
   let owned = false;
   let detailOpen = false;
   let alive = true;
@@ -69,7 +70,6 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
       steps.set(id, []);
       void IntegrationsBridge.refreshIntegration(id);
     }
-    if (!State.pills.some((t) => t.id === State.focusId)) State.focusId = State.pills[0]?.id ?? null;
     redraw();
   }
 
@@ -80,9 +80,9 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
   // ── News ───────────────────────────────────────────────────────────────────
 
   function giveBack() {
-    const previous = borrowedFrom;
+    const release = borrowedFrom;
     borrowedFrom = null;
-    if (previous && State.focusId === id && State.pills.some((t) => t.id === previous)) State.focusId = previous;
+    release?.();
   }
 
   /**
@@ -116,7 +116,7 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
   }
 
   function handle(update: IntegrationUpdate) {
-    if (State.paused || update.id !== id || !owned) return;
+    if (api.paused() || update.id !== id || !owned) return;
     const previous = info[update.id];
     // A failed poll carries no data and keeps what was there. GitHub's carries its last good
     // snapshot, so the panel can go on showing it next to the reason it isn't fresh.
@@ -150,8 +150,8 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
         isGithub && State.mode !== "expanded" && State.focusId !== update.id &&
         State.focusId && !(front && WAITING.has(front.mood))
       ) {
-        borrowedFrom ??= State.focusId;
-        State.focusId = update.id;
+        const release = api.pills.focus(update.id);
+        borrowedFrom ??= release; // the first lender wins, as before
         opened = true;
       }
       if (State.focusId !== id) api.pills.set({ id, badge: event.success ? "done" : "error" });
@@ -225,6 +225,8 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
       // Focusing the pill is seeing its news: the badge goes (a repeat is a no-op).
       else if (State.pills.find((t) => t.id === id)?.badge) api.pills.set({ id, badge: null });
     }),
+    // The cards follow Pause (updates are dropped while paused).
+    api.onPause(() => redraw()),
     api.listen<IntegrationUpdate>("integration", handle),
     api.listen("secrets-changed", () => void refreshConfigured()),
     api.provide("pillOpen", openTarget),
@@ -259,7 +261,6 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
       resetGithub();
       rt.api = null;
     }
-    if (!State.pills.some((t) => t.id === State.focusId)) State.focusId = State.pills[0]?.id ?? null;
     State.notify();
   };
 }

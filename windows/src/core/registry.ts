@@ -5,7 +5,8 @@ import { Avatar } from "./avatar";
 import { Bridge, command, onEvent } from "./bridge";
 import { Compact } from "./compact";
 import { Hooks, Services, onMode } from "./hooks";
-import { dropPills, putPill } from "./pills";
+import { moduleSettings } from "./moduleSettings";
+import { dropPills, focusPill, putPill } from "./pills";
 import { Requests } from "./requests";
 import { Sound } from "./sound";
 import { resolveEnabled } from "./moduleApi";
@@ -32,7 +33,11 @@ export class Scope {
   }
 }
 
+/** The pill whose `pillOpen` reaction is running: any module may focus it meanwhile. */
+let opening: string | null = null;
+
 function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
+  const mySettings = moduleSettings(id, MODULE_INFO.find((m) => m.id === id)?.settingsDefaults);
   const timeout = (fn: () => void, ms: number): Disposer => {
     const d: Disposer = () => window.clearTimeout(t);
     const t = window.setTimeout(() => { scope.remove(d); fn(); }, ms);
@@ -56,9 +61,22 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
       },
       remove(pid) { if (dropPills(State, id, pid)) State.notify(); },
       clear() { if (dropPills(State, id)) State.notify(); },
+      focus(pid) {
+        const prev = State.focusId;
+        if (!focusPill(State, id, pid, opening)) return () => {};
+        State.notify();
+        return () => {
+          if (State.focusId !== pid || !prev || !State.pills.some((p) => p.id === prev)) return;
+          State.focusId = prev;
+          State.notify();
+        };
+      },
     },
     sound: { register: (name, url) => scope.add(Sound.register(name, url)) },
-    settings: () => State.settings,
+    settings: <T extends object>() => mySettings.get<T>(),
+    saveSettings: (patch) => mySettings.save(patch),
+    paused: () => State.paused,
+    onPause: (fn) => scope.add(State.onPause(fn)),
     invoke: (cmd, args) => command(cmd, args),
     listen<T>(event: string, fn: (p: T) => void): Disposer {
       let off: (() => void) | null = null;
@@ -121,7 +139,12 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
       scope.add(key.includes(".") ? Services.provide(key, impl) : Hooks.provide(key as keyof IslandHooks, impl as never))) as IslandApi["provide"],
     use: <T>(key: string) => Services.all(key)[0] as T | undefined,
     useAll: <T>(key: string) => Services.all(key) as T[],
-    call: (hook, ...args) => Hooks.first(hook, ...args),
+    call(hook, ...args) {
+      if (hook !== "pillOpen") return Hooks.first(hook, ...args);
+      const was = opening;
+      opening = args[0] as string;
+      try { return Hooks.first(hook, ...args); } finally { opening = was; }
+    },
     onVisibility: (fn) => scope.add(onMode(fn)),
   };
 }

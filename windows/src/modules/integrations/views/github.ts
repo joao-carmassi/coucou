@@ -322,7 +322,7 @@ function liveRun(): DetailScreen | null {
  * run is asked about again on its own. Pausing Coucou means no network at all.
  */
 function watching(): boolean {
-  return State.mode === "expanded" && State.view === "github" && !State.paused;
+  return State.mode === "expanded" && State.view === "github" && !rt.api?.paused();
 }
 
 function armLive() {
@@ -564,7 +564,7 @@ function meta(icon: SVGSVGElement, count: number, onClick?: () => void): HTMLEle
 function newsBell(repo: string): HTMLElement {
   const bell = h("button", { class: "gh-bell" });
   const draw = () => {
-    const quiet = integrationSettings().githubMuted.includes(repo);
+    const quiet = integrationSettings(rt.api!).githubMuted.includes(repo);
     clear(bell);
     bell.append(svg(quiet ? ICONS.bellOff : ICONS.bell, 10, { stroke: 2 }));
     bell.classList.toggle("off", quiet);
@@ -572,10 +572,8 @@ function newsBell(repo: string): HTMLElement {
   };
   bell.addEventListener("click", (e) => {
     e.stopPropagation();
-    const mine = integrationSettings();
-    const muted = mine.githubMuted;
-    mine.githubMuted = muted.includes(repo) ? muted.filter((name) => name !== repo) : [...muted, repo];
-    void Bridge.saveSettings(State.settings);
+    const muted = integrationSettings(rt.api!).githubMuted;
+    void rt.api!.saveSettings({ githubMuted: muted.includes(repo) ? muted.filter((name) => name !== repo) : [...muted, repo] });
     draw();
   });
   draw();

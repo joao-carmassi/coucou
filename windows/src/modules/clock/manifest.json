@@ -3,5 +3,8 @@
   "label": "Relógio",
   "default": false,
   "order": 100,
-  "devOnly": true
+  "devOnly": true,
+  "settingsDefaults": {
+    "clockFormat": "24h"
+  }
 }

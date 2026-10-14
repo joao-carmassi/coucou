@@ -28,9 +28,7 @@ async function main() {
 
   /** Pause has to reach Rust too, or the pollers keep calling out. */
   const setPaused = (on: boolean) => {
-    if (State.paused === on) return;
-    State.paused = on;
-    void Bridge.setPaused(on);
+    if (State.setPaused(on)) void Bridge.setPaused(on);
   };
 
   await onEvent<string>("tray", (what) => {

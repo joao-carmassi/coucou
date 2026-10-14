@@ -60,6 +60,7 @@ class AppState {
 
   /** Mini Mochis shown in the compact grid; empty until a module adds some. */
   pills: Pill[] = [];
+  /** The pill in front. Modules read it and ask through api.pills.focus; core/pills.ts is the only writer. */
   focusId: string | null = null;
 
   /** What the avatar wears while nothing else decides: set it and `notify()`. */
@@ -75,7 +76,25 @@ class AppState {
   get isPinned(): boolean {
     return this.mode === "expanded" && Requests.pinned();
   }
-  paused = false;
+  /** Read-only to modules (api.paused / api.onPause); main.ts flips it through setPaused. */
+  private _paused = false;
+  private pauseListeners = new Set<(paused: boolean) => void>();
+  get paused(): boolean {
+    return this._paused;
+  }
+  /** True when the value changed (listeners have run). */
+  setPaused(on: boolean): boolean {
+    if (this._paused === on) return false;
+    this._paused = on;
+    for (const fn of [...this.pauseListeners]) {
+      try { fn(on); } catch (err) { console.error("[coucou] onPause failed", err); }
+    }
+    return true;
+  }
+  onPause(fn: (paused: boolean) => void): () => void {
+    this.pauseListeners.add(fn);
+    return () => void this.pauseListeners.delete(fn);
+  }
 
   noteMessage: string | null = null;
 

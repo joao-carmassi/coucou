@@ -142,19 +142,19 @@ export class Island implements IslandHost {
       toggleSound: () => {
         State.settings.soundEnabled = !State.settings.soundEnabled;
         Sound.setEnabled(State.settings.soundEnabled);
-        void Bridge.saveSettings(State.settings);
+        void Bridge.saveSettings({ soundEnabled: State.settings.soundEnabled });
         State.notify();
       },
       setVolume: (v) => {
         State.settings.soundVolume = v;
         Sound.setVolume(v);
-        void Bridge.saveSettings(State.settings);
+        void Bridge.saveSettings({ soundVolume: v });
         State.notify();
       },
       setAutoClose: (s) => {
         State.settings.autoCloseInterval = s;
         this.fsm.homeToPetitDelay = s;
-        void Bridge.saveSettings(State.settings);
+        void Bridge.saveSettings({ autoCloseInterval: s });
         State.notify();
       },
       openSettingsWindow: () => void Bridge.openSettingsWindow(),

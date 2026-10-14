@@ -11,7 +11,6 @@
 
 import { ClaudeBridge } from "./bridge";
 import { Sound } from "../../core/sound";
-import { State } from "../../core/state";
 import {
   CLAUDE_ID, PLAN_TOOL, QUESTION_TOOL, SESSION_UNNAMED, TURN_DONE, newSession, newStep,
   type ChangedFile, type ClaudeClient, type ClaudeSession, type Question, type StepKind, type StepResult,
@@ -536,7 +535,7 @@ export function handleHook(c: Claude, payload: HookPayload) {
   // Route to the right pill. Valid coucou_agent → dynamic "agent_<name>" pill.
   // "claude" is reserved; absent or invalid → Claude Code, as before.
   const agent = validateAgent(payload.coucou_agent);
-  if (agent && !State.paused) return handleAgent(c, payload, agent);
+  if (agent && !c.api.paused()) return handleAgent(c, payload, agent);
 
   // A session that ended must be forgotten even while paused, or it stays "working".
   if (payload.hook_event_name === "SessionEnd") {
@@ -547,7 +546,7 @@ export function handleHook(c: Claude, payload: HookPayload) {
   }
 
   // Paused, or a session nobody is sitting in front of: the island does not look.
-  if (State.paused || isAutomated(payload)) {
+  if (c.api.paused() || isAutomated(payload)) {
     // Silence here used to cost Claude Code nearly two minutes: the relay waited
     // for a decision from an island that had already decided not to look. Say so,
     // and the terminal takes the question immediately.

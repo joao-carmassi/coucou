@@ -35,3 +35,14 @@ export const dummyModule: ModuleDef = {
     return () => { off(); dummyProbe.api = null; };
   },
 } as ModuleDef;
+
+/** A second module with a pill of its own: the owner checks (focus, patches) need someone else. */
+export const otherProbe: { api: IslandApi | null } = { api: null };
+export const otherModule: ModuleDef = {
+  id: "other",
+  start(api) {
+    otherProbe.api = api;
+    api.pills.set({ id: "other-pill", label: "Other", color: "#ffaa88" });
+    return () => { otherProbe.api = null; };
+  },
+} as ModuleDef;

@@ -10,6 +10,8 @@ export interface Manifest {
   group?: string;
   /** Start order and settings order; a requirement must come before its dependents. */
   order: number;
+  /** The module's keys in settings.json with their defaults; new modules prefix them with their id. */
+  settingsDefaults?: Record<string, unknown>;
   /** Only in debug builds (dev); release catalogs leave it out. */
   devOnly?: boolean;
 }
@@ -19,7 +21,7 @@ export function buildCatalog(files: readonly (Manifest | readonly Manifest[])[],
     .flat()
     .filter((m) => dev || !m.devOnly)
     .sort((a, b) => a.order - b.order || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-    .map((m) => ({ id: m.id, label: m.label, defaultEnabled: m.default, requires: m.requires, group: m.group }));
+    .map((m) => ({ id: m.id, label: m.label, defaultEnabled: m.default, requires: m.requires, group: m.group, settingsDefaults: m.settingsDefaults }));
 }
 
 /** Every exported value that looks like a ModuleDef, from the modules' index.ts namespaces. */

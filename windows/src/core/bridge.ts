@@ -33,7 +33,8 @@ export interface BootInfo {
 export const Bridge = {
   boot: () => command<BootInfo>("boot"),
 
-  saveSettings: (settings: Settings) => command<void>("save_settings", { settings }),
+  /** Rust merges these top-level keys onto the stored settings: keys not given are never touched. */
+  saveSettings: (patch: Partial<Settings> | Record<string, unknown>) => command<void>("save_settings", { patch }),
 
   /** Shrink the window down to the invisible wake strip (hidden) or back to full. */
   setCollapsed: (collapsed: boolean) => command<void>("set_collapsed", { collapsed }),

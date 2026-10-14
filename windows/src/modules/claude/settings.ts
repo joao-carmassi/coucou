@@ -3,20 +3,17 @@
 // module is on (modules/settings.ts). Everything that writes to disk is confirmed here: the
 // exact diff is shown, the file is backed up, and a file that changed in between is refused.
 //
-// The settings window keeps one Settings object in State.settings (settings/main.ts), so a
-// field changed here travels with the window's own saves.
+// Fields are saved as patches (ModuleSettings.save): only the key changed travels.
 
-import { Bridge } from "../../core/bridge";
+import type { ModuleSettings } from "../../core/moduleSettings";
 import "./settings.css";
 import { type HookPreview, type HookStatus, type WslStatus, ClaudeBridge } from "./bridge";
-import { State } from "../../core/state";
 import { h, clear } from "../../views/dom";
-import { claudeSettings } from "./store";
+import type { ClaudeSettings } from "./store";
 
 /** main.ts fires this on `window` every time the settings window comes up (WSL is slow, so only then). */
 export const SETTINGS_SHOWN = "coucou:settings-shown";
 
-const save = () => Bridge.saveSettings(State.settings);
 
 /** Runs `fn` every time the window comes up, until `signal` aborts (the section is removed). */
 function onShown(signal: AbortSignal, fn: () => void) {
@@ -40,17 +37,16 @@ function renderDiff(text: string): HTMLElement {
 }
 
 /** A second Claude account: where Claude Code on Windows keeps its sign-in and sessions. */
-function accountRow(): HTMLElement {
+function accountRow(ms: ModuleSettings): HTMLElement {
   const field = h("input", {
     type: "text",
-    value: claudeSettings().claudeConfigDir ?? "",
+    value: ms.get<ClaudeSettings>().claudeConfigDir,
     placeholder: "~/.claude",
     style: "flex:1 1 auto;min-width:0",
     spellcheck: "false",
   }) as HTMLInputElement;
   field.addEventListener("change", () => {
-    claudeSettings().claudeConfigDir = field.value.trim();
-    void save();
+    void ms.save({ claudeConfigDir: field.value.trim() });
   });
   return h("div", { class: "row" },
     h("label", { text: "Pasta da conta" }),
@@ -60,7 +56,7 @@ function accountRow(): HTMLElement {
 }
 
 /** What the idle Claude card opens when no session is going. */
-function idleOpenRow(cli: string | null): HTMLElement {
+function idleOpenRow(ms: ModuleSettings, cli: string | null): HTMLElement {
   const select = h("select", {}) as HTMLSelectElement;
   select.append(
     h("option", { value: "", text: "Visual Studio Code" }),
@@ -69,10 +65,9 @@ function idleOpenRow(cli: string | null): HTMLElement {
   const term = select.options[1];
   term.disabled = !cli;
   if (!cli) term.title = "O Claude Code não está instalado no Windows.";
-  select.value = claudeSettings().idleOpen === "terminal" && cli ? "terminal" : "";
+  select.value = ms.get<ClaudeSettings>().idleOpen === "terminal" && cli ? "terminal" : "";
   select.addEventListener("change", () => {
-    claudeSettings().idleOpen = select.value;
-    void save();
+    void ms.save({ idleOpen: select.value });
   });
   return h("div", { class: "row" },
     h("label", { text: "Botão em repouso abre" }),
@@ -82,13 +77,12 @@ function idleOpenRow(cli: string | null): HTMLElement {
 }
 
 /** Global hotkey that takes the island to the card waiting for an answer. */
-function alertHotkeyRow(): HTMLElement {
+function alertHotkeyRow(ms: ModuleSettings): HTMLElement {
   const input = h("input", {
-    type: "text", value: claudeSettings().alertHotkey ?? "", spellcheck: "false", placeholder: "ex.: Ctrl+Alt+A",
+    type: "text", value: ms.get<ClaudeSettings>().alertHotkey, spellcheck: "false", placeholder: "ex.: Ctrl+Alt+A",
   }) as HTMLInputElement;
   input.addEventListener("change", () => {
-    claudeSettings().alertHotkey = input.value.trim();
-    void save();
+    void ms.save({ alertHotkey: input.value.trim() });
   });
   return h("div", { class: "row" },
     h("label", { text: "Atalho \"ir ao alerta\"" }),
@@ -169,7 +163,7 @@ async function previewFlow(body: HTMLElement, install: boolean, ops: FlowOps) {
 
 const NO_STATUS: HookStatus = { installed: false, settingsPath: "", hookPath: "", hookReady: false, claudeCli: null };
 
-function hooksSection(status: HookStatus, signal: AbortSignal): HTMLElement {
+function hooksSection(ms: ModuleSettings, status: HookStatus, signal: AbortSignal): HTMLElement {
   const body = h("div", { style: "display:flex;flex-direction:column;gap:12px" });
   const section = h(
     "section",
@@ -205,9 +199,9 @@ function hooksSection(status: HookStatus, signal: AbortSignal): HTMLElement {
         h("span", { class: "path", text: status.hookPath }),
         statusDot(status.hookReady),
       ),
-      accountRow(),
-      idleOpenRow(status.claudeCli),
-      alertHotkeyRow(),
+      accountRow(ms),
+      idleOpenRow(ms, status.claudeCli),
+      alertHotkeyRow(ms),
     );
 
     if (!status.hookReady) {
@@ -388,11 +382,11 @@ function wslSection(status: HookStatus, signal: AbortSignal): HTMLElement {
 }
 
 /** The module's section: hooks, then WSL. */
-export function claudeSettingsSection(): { el: HTMLElement; dispose(): void } {
+export function claudeSettingsSection(ms: ModuleSettings): { el: HTMLElement; dispose(): void } {
   const ac = new AbortController();
   // Shared by both sections: the hooks one refreshes it, the WSL one reads it when it draws.
   const status: HookStatus = { ...NO_STATUS };
-  const el = h("div", { style: "display:flex;flex-direction:column;gap:22px" }, hooksSection(status, ac.signal), wslSection(status, ac.signal));
+  const el = h("div", { style: "display:flex;flex-direction:column;gap:22px" }, hooksSection(ms, status, ac.signal), wslSection(status, ac.signal));
   return { el, dispose: () => ac.abort() };
 }
 

@@ -3,5 +3,11 @@
   "label": "Claude Code",
   "default": true,
   "group": "Claude",
-  "order": 1
+  "order": 1,
+  "settingsDefaults": {
+    "hooksInstalled": false,
+    "claudeConfigDir": "",
+    "idleOpen": "",
+    "alertHotkey": ""
+  }
 }

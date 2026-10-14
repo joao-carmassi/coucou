@@ -21,6 +21,8 @@ export function putPill(s: PillStore, owner: string, p: PillPatch, at?: PillAt):
     return changed;
   }
   if (patch.label === undefined || patch.color === undefined) return false;
+  // The first pill ever put in front; from then on only api.pills.focus and removal move it.
+  if (!s.focusId) s.focusId = p.id;
   s.pills.splice(pillIndex(s.pills, at), 0, { id: p.id, label: patch.label, color: patch.color, mood: patch.mood ?? "idle", emote: patch.emote, eye: patch.eye, badge: patch.badge, owner });
   return true;
 }
@@ -31,6 +33,17 @@ export function dropPills(s: PillStore, owner: string, id?: string): boolean {
   if (!gone.length) return false;
   s.pills = s.pills.filter((x) => !gone.includes(x.id));
   if (s.focusId && gone.includes(s.focusId)) s.focusId = s.pills[0]?.id ?? null;
+  return true;
+}
+
+/**
+ * Puts `owner`'s pill in front. `opening`: the pill whose pillOpen reaction is running, which any module may focus.
+ * A pill that is missing or another module's is refused. True when the front changed.
+ */
+export function focusPill(s: PillStore, owner: string, id: string, opening?: string | null): boolean {
+  const p = s.pills.find((x) => x.id === id);
+  if (!p || (p.owner !== owner && id !== opening) || s.focusId === id) return false;
+  s.focusId = id;
   return true;
 }
 

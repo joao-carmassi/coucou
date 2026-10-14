@@ -2,7 +2,8 @@
 
 import type { BotEmoteName, BotStateName, IslandMode, ViewLayout } from "./layout";
 import type { RequestSpec } from "./requests";
-import type { PillAt, PillInput, Settings } from "./state";
+import type { ModuleSettings } from "./moduleSettings";
+import type { PillAt, PillInput } from "./state";
 import type { FsmState } from "../island/fsm";
 import type { ViewActions } from "../views/views";
 
@@ -90,15 +91,33 @@ export interface IslandHost {
 
 export interface IslandApi {
   readonly id: string;
-  settings(): Settings;
+  /**
+   * A read-only snapshot of this module's own settings: the keys of its manifest `settingsDefaults`, missing ones filled
+   * from the defaults. Read it again to see saves; State.settings is not for modules.
+   */
+  settings<T extends object = Record<string, unknown>>(): Readonly<T>;
+  /**
+   * Saves only the given keys (they must be in this module's `settingsDefaults`; others throw). The core merges them onto the
+   * stored settings, so the settings window or another module saving other keys never undoes this. `settings()` has them at once.
+   */
+  saveSettings(patch: Record<string, unknown>): Promise<void>;
+  /** The tray's Pause is on: pollers and alerts should stay quiet. */
+  paused(): boolean;
+  /** Fires with the new value every time Pause flips. */
+  onPause(fn: (paused: boolean) => void): Disposer;
   invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null>;
   listen<T>(event: string, fn: (payload: T) => void): Disposer;
   timeout(fn: () => void, ms: number): Disposer;
   interval(fn: () => void, ms: number, opts?: { whenVisible?: boolean }): Disposer;
   status: { set(line: StatusLine | null): void };
   avatar: { publish(sig: AvatarSignal | null): void; emote(e: BotEmoteName): void; morph(v: number): void; gulp(): void; tint(color: string | null): void; bodyColor(): string | null };
-  /** Pills (mini Mochis) this module owns; all removed when it stops. set creates (label + color) or patches. */
-  pills: { set(pill: PillInput, at?: PillAt): void; remove(id: string): void; clear(): void };
+  /**
+   * Pills (mini Mochis) this module owns; all removed when it stops. set creates (label + color) or patches.
+   * `focus` puts one of its pills in front (the pill being opened, during a `pillOpen` reaction, is allowed too); another
+   * module's pill is refused. The first pill is focused by the core, and when the front pill goes the core moves focus to
+   * the first one left. The returned function gives the front back to the pill it took it from, if it still holds it.
+   */
+  pills: { set(pill: PillInput, at?: PillAt): void; remove(id: string): void; clear(): void; focus(id: string): Disposer };
   /** Adds a sound under `name` (url of a WAV); removed when the module stops. */
   sound: { register(name: string, url: string): Disposer };
   island: {
@@ -127,7 +146,13 @@ export interface IslandApi {
   onVisibility(fn: (mode: IslandMode, prev: IslandMode) => void): Disposer;
 }
 
-export interface ModuleInfo { id: string; label: string; defaultEnabled: boolean; requires?: string[]; /** Settings heading the module is listed under. */ group?: string }
+export interface ModuleInfo {
+  id: string; label: string; defaultEnabled: boolean; requires?: string[];
+  /** Settings heading the module is listed under. */
+  group?: string;
+  /** The module's keys in the flat settings.json, with their defaults (manifest.json). New keys start with the module id. */
+  settingsDefaults?: Record<string, unknown>;
+}
 /** Behaviour only: label, default, requirements and group live in the module's manifest.json. */
 export interface ModuleDef {
   id: string;
@@ -143,4 +168,4 @@ export function resolveEnabled(catalog: readonly ModuleInfo[], stored: Readonly<
 }
 
 /** A module's section of the settings window; it exists only while the module is on. */
-export type SettingsSection = () => { el: HTMLElement; dispose?(): void };
+export type SettingsSection = (settings: ModuleSettings) => { el: HTMLElement; dispose?(): void };

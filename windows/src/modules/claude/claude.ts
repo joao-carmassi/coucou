@@ -55,8 +55,7 @@ export class Claude {
   // ── Pill and third-party agents ───────────────────────────────────────────
 
   setFocus(id: string) {
-    if (!State.pills.some((t) => t.id === id)) return;
-    State.focusId = id;
+    this.api.pills.focus(id);
     this.store.badges.delete(id);
     this.store.changed();
   }
@@ -66,7 +65,6 @@ export class Claude {
     // Right after the Claude pill, so it is among the first four.
     this.api.pills.set({ id, label: name, color, mood: "idle" }, { after: CLAUDE_ID });
     this.store.agentSteps.set(id, []);
-    if (!State.focusId) State.focusId = id;
     this.store.changed();
   }
 
@@ -88,7 +86,6 @@ export class Claude {
     this.api.pills.remove(id);
     this.store.agentSteps.delete(id);
     this.store.badges.delete(id);
-    if (!State.focusId) State.focusId = CLAUDE_ID;
     this.store.changed();
   }
 
@@ -316,7 +313,6 @@ export class Claude {
   start(): Disposer {
     const { api, store } = this;
     api.pills.set({ id: CLAUDE_ID, label: store.clientName, color: CLAUDE_COLOR, mood: "idle" }, "start");
-    if (!State.focusId) State.focusId = CLAUDE_ID;
 
     const offs: Disposer[] = [
       store.subscribe(() => {

@@ -1,16 +1,13 @@
 // The Voz section of the settings window (rendered only while the module is on).
 // The speech model is downloaded only on the button; the microphone opens only on the hotkey.
 
-import { Bridge, onEvent } from "../../core/bridge";
+import { onEvent } from "../../core/bridge";
 import { VoiceBridge } from "./bridge";
-import { State } from "../../core/state";
+import type { ModuleSettings } from "../../core/moduleSettings";
 import { h } from "../../views/dom";
 
-const DEFAULT_HOTKEY = "Ctrl+Alt+V";
-/** Rust keeps the hotkey in `extra`: absent = the default, "" = off. */
-const cfg = () => State.settings as unknown as { voiceHotkey?: string };
-
-export function voiceSettingsSection(): { el: HTMLElement; dispose(): void } {
+/** Rust keeps the hotkey in `extra`: absent = the default (settingsDefaults), "" = off. */
+export function voiceSettingsSection(ms: ModuleSettings): { el: HTMLElement; dispose(): void } {
   const status = h("span", { class: "hint" });
   const err = h("div", { class: "notice warn", style: "display:none" });
   const dl = h("button", { class: "btn secondary", text: "Baixar modelo (~20 MB)" }) as HTMLButtonElement;
@@ -37,12 +34,11 @@ export function voiceSettingsSection(): { el: HTMLElement; dispose(): void } {
     void refresh();
   });
   const input = h("input", {
-    type: "text", value: cfg().voiceHotkey ?? DEFAULT_HOTKEY, spellcheck: "false", placeholder: "ex.: Ctrl+Alt+V",
+    type: "text", value: ms.get<{ voiceHotkey: string }>().voiceHotkey, spellcheck: "false", placeholder: "ex.: Ctrl+Alt+V",
   }) as HTMLInputElement;
   input.addEventListener("change", () => {
-    cfg().voiceHotkey = input.value.trim();
     // Rust tries the new combo on save; the verdict comes back as `hotkey-error`.
-    void Bridge.saveSettings(State.settings).then(() => setTimeout(() => void refresh(), 300));
+    void ms.save({ voiceHotkey: input.value.trim() }).then(() => setTimeout(() => void refresh(), 300));
   });
 
   const offs = [

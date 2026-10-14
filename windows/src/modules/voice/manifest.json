@@ -6,5 +6,8 @@
     "claude"
   ],
   "group": "Claude",
-  "order": 5
+  "order": 5,
+  "settingsDefaults": {
+    "voiceHotkey": "Ctrl+Alt+V"
+  }
 }

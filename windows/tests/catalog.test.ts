@@ -24,3 +24,9 @@ test("collectDefs: keeps module-looking exports only", () => {
   const def = { id: "x", start() {} };
   assert.deepEqual(collectDefs([{ def, n: 3, s: "a", f() {} }]), [def]);
 });
+
+test("manifests: settingsDefaults keys start with the module id (old flat keys keep their names)", () => {
+  const LEGACY = new Set(["hooksInstalled", "idleOpen", "alertHotkey"]); // claude's, shipped before the rule
+  for (const m of manifests.flat())
+    for (const k of Object.keys(m.settingsDefaults ?? {})) assert.ok(k.startsWith(m.id) || LEGACY.has(k), `${m.id}: ${k}`);
+});

@@ -19,11 +19,7 @@ export interface IntegrationInfo {
 
 /** The settings fields this module owns; they travel in the flat settings.json (`extra` in Rust). */
 export interface IntegrationSettings { githubMuted: string[] }
-export const integrationSettings = (): IntegrationSettings => {
-  const s = State.settings as unknown as Partial<IntegrationSettings>;
-  s.githubMuted ??= [];
-  return s as IntegrationSettings;
-};
+export const integrationSettings = (api: IslandApi): Readonly<IntegrationSettings> => api.settings<IntegrationSettings>();
 
 export const info: Record<string, IntegrationInfo> = {};
 /** The last words of a pill: [label, detail] of its news, for the n8n card. */

@@ -141,7 +141,7 @@ function start(api: IslandApi): Disposer {
 
   function onDrag(e: DragPayload) {
     if (e.type !== "over") void Bridge.log(`drag ${e.type} ${e.paths?.length ?? 0} file(s)`);
-    if (State.paused) return;
+    if (api.paused()) return;
     switch (e.type) {
       case "enter":
       case "over":
