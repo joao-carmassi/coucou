@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { card, view } from "../../src/kit/card";
 import { diffBlock, diffHunk, plusMinus } from "../../src/kit/code";
 import { dot, h, svg } from "../../src/kit/dom";
-import { homeBody, homeLayout, setSolo } from "../../src/kit/home";
+import { homeBody, homeLayout, setSlim, setSolo } from "../../src/kit/home";
 import { ago, empty, fileRowOf, fileStatus, right, rowIcon, rowOf, rowTitle, rowWhere } from "../../src/kit/list";
 import { PANE_MOTION, paneAside, paneBadge, paneCode, paneCodeLead, paneEdge, paneHead, paneIcon, paneList, paneMain, paneSub, paneTab } from "../../src/kit/panel";
 import { tileActions, tileCard, tileHead, tileStatus } from "../../src/kit/tile";
@@ -99,13 +99,24 @@ describe("kit atoms = module literals", () => {
     expect(el.className).toBe("view home solo");
     setSolo(el, false);
     expect(el.className).toBe("view home");
+    setSlim(el, true);
+    expect(el.className).toBe("view home slim");
+    setSlim(el, false);
+    expect(el.className).toBe("view home");
   });
 
-  it("home.css is the pre-rename text with .overview -> .home and nothing else", () => {
+  it("home.css is the pre-rename text with .overview -> .home, plus the slim block", () => {
     // 9ffc7d4 = the commit before the rename
     const before = execSync("git show 9ffc7d4:windows/src/kit/home.css", { cwd: here, encoding: "utf8" });
     const now = readFileSync(join(here, "../../src/kit/home.css"), "utf8");
     const lf = (s: string) => s.replace(/\r\n/g, "\n");
-    expect(lf(now)).toBe(lf(before).replace(/\.overview/g, ".home").replace(/`overview`/g, "`home`"));
+    const slim = [
+      ".home.slim > .left {", "  flex: 1 1 auto;", "  width: auto;", "  min-width: 0;", "}",
+      ".home.slim > .right {", "  flex: 0 0 150px;", "}", "",
+    ].join("\n");
+    expect(lf(now)).toContain(slim);
+    // the two header lines the slim change added (the .slim line and the kit-owned names list)
+    const rest = lf(now).replace(slim, "").replace(/ \*   \.home\.slim .*\n/, "").replace("`solo`, `slim` are", "`solo` are");
+    expect(rest).toBe(lf(before).replace(/\.overview/g, ".home").replace(/`overview`/g, "`home`"));
   });
 });

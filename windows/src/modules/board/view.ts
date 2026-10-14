@@ -6,7 +6,7 @@ import type { Pill } from "../../core/state";
 import { askPill } from "../../kit/ask";
 import { clear, h, svg } from "../../kit/dom";
 import { card } from "../../kit/card";
-import { homeBody, homeLayout, setSolo } from "../../kit/home";
+import { homeBody, homeLayout, setSlim, setSolo } from "../../kit/home";
 import { ICONS } from "../../kit/icons";
 import { tile } from "../../kit/tile";
 import type { BoardCard, BoardCardOf, BoardFocus, BoardPillOf } from "./api";
@@ -130,9 +130,11 @@ export function buildBoard(ctx: ViewContext): ViewHost {
       left.classList.toggle("opens", !!shown?.open);
       left.title = shown?.open ? (shown.hint ?? "") : "";
 
-      const others = api.pills.others().slice(0, 4);
-      // Nothing else active: the left card takes the full width.
+      const others = api.pills.others().slice(0, 6);
+      // Nothing else active: the left card takes the full width. Few others: a narrow right column, one per row.
       setSolo(el, others.length === 0);
+      setSlim(el, others.length > 0 && others.length <= 3);
+      pills.dataset.cols = others.length > 3 ? "2" : "1";
       const nextPills = others.map((t) => { const look = askLook(t.id); return `${t.id}:${look?.badge ?? t.badge ?? ""}:${look?.label ?? t.label}`; }).join("|");
       if (nextPills !== pillKey) {
         pillKey = nextPills;
