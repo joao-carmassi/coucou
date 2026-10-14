@@ -3,7 +3,7 @@
 
 import { svg } from "../../kit/dom";
 import "./media.css";
-import { PANEL_H } from "../../core/layout";
+import { PANEL_H } from "../../core/moduleApi";
 import type { ModuleDef } from "../../core/moduleApi";
 import { armMochiDrop } from "./ghost";
 import { ICONS } from "./icons";

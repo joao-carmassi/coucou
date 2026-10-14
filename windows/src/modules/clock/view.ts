@@ -1,5 +1,5 @@
 import { h } from "../../kit/dom";
-import { card } from "../../views/views";
+import { card } from "../../kit/card";
 import type { ViewHost } from "../../core/moduleApi";
 
 /** The Relógio tab. `sync` runs whenever the view is on screen: that is what arms the clock. */

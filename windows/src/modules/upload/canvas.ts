@@ -5,7 +5,7 @@
 // the file being sucked in. The island's own Mochi is hidden for the duration,
 // exactly as on macOS, because this canvas draws its own.
 
-import { wipe } from "../../core/canvas";
+import { wipe } from "../../kit/canvas";
 import { Up } from "./state";
 import {
   USC, eIn, eInOut, eOut, lerp, progressAt,

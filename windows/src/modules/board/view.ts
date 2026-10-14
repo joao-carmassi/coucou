@@ -3,8 +3,6 @@
 
 import type { ViewContext, ViewHost } from "../../core/moduleApi";
 import type { Pill } from "../../core/state";
-import { State } from "../../core/state";
-import { createMiniBot, pruneMiniBots } from "../../mochi/minibots";
 import { askPill } from "../../kit/ask";
 import { clear, dot, h, svg } from "../../kit/dom";
 import { ICONS } from "../../kit/icons";
@@ -44,7 +42,7 @@ export function buildBoard(ctx: ViewContext): ViewHost {
       class: "icon-btn jump",
       title: "Abrir",
       onclick: () => {
-        const id = State.focusPill?.id;
+        const id = api.pills.front()?.id;
         if (id) api.call("pillOpen", id);
       },
     },
@@ -79,7 +77,7 @@ export function buildBoard(ctx: ViewContext): ViewHost {
 
   function buildPill(task: Pill): HTMLElement {
     const look = askLook(task.id);
-    const canvas = createMiniBot(task, 24);
+    const canvas = api.mochi.mini(task, 24);
     const pill = h(
       "div",
       { class: "pill", onclick: () => focus(task.id) },
@@ -118,7 +116,7 @@ export function buildBoard(ctx: ViewContext): ViewHost {
       return room ? BOARD_H + room : undefined;
     },
     sync() {
-      const task = State.focusPill;
+      const task = api.pills.front();
       const next = task ? (askCard(task.id) ?? plainCard(task)) : null;
       const key = next ? `${task!.id}~${next.key}` : "";
       if (key !== cardKey || (!shown && !next && !leftBody.firstChild)) {
@@ -138,7 +136,7 @@ export function buildBoard(ctx: ViewContext): ViewHost {
       left.classList.toggle("opens", !!shown?.open);
       left.title = shown?.open ? (shown.hint ?? "") : "";
 
-      const others = State.otherPills.slice(0, 4);
+      const others = api.pills.others().slice(0, 4);
       // Nothing else active: the left card takes the full width.
       el.classList.toggle("solo", others.length === 0);
       const nextPills = others.map((t) => { const look = askLook(t.id); return `${t.id}:${look?.badge ?? t.badge ?? ""}:${look?.label ?? t.label}`; }).join("|");
@@ -146,7 +144,6 @@ export function buildBoard(ctx: ViewContext): ViewHost {
         pillKey = nextPills;
         clear(pills);
         for (const t of others) pills.append(buildPill(t));
-        pruneMiniBots();
       }
     },
   };

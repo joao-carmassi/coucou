@@ -1,4 +1,4 @@
-import { commandOrThrow } from "../../core/bridge";
+import { commandOrThrow } from "../../kit/tauri";
 
 
 /** A file copied into the inbox. */
