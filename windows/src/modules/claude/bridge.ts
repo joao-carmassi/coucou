@@ -33,12 +33,8 @@ export const ClaudeBridge = {
     command<void>("claude_approval_answer", { requestId, answers }),
   resumeInTerminal: (id: string, cwd: string | null) =>
     commandOrThrow<void>("claude_resume_in_terminal", { id, cwd }),
-  /** Copies a file into the inbox (the only place a session may attach from). */
-  ingestClaudeFile: (path: string) => commandOrThrow<ClaudeInboxFile>("claude_ingest_file", { path }),
-
 };
 
-export interface ClaudeInboxFile { name: string; path: string; size: number }
 
 export interface HookStatus {
   installed: boolean;

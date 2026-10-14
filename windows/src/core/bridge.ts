@@ -62,6 +62,9 @@ export const Bridge = {
   /** Writes to %LOCALAPPDATA%\Coucou\coucou.log, next to the Rust lines. */
   log: (message: string) => command<void>("log_line", { message }),
 
+  /** Copies a file into the inbox (sweeps old ones, emits `inbox-added`); rejects with the reason. */
+  inboxIngest: (path: string) => commandOrThrow<{ name: string; path: string; size: number }>("inbox_ingest", { path }),
+
   /** Tray → Pause. */
   setPaused: (paused: boolean) => command<void>("set_paused", { paused }),
 };
