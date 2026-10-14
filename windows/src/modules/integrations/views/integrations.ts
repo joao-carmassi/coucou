@@ -10,12 +10,13 @@ import { COLOR } from "../../../kit/palette";
 import { timeAgo } from "../../../kit/format";
 import type { Pill } from "../../../core/moduleApi";
 import { App } from "../../../kit/app";
-import { tile } from "../../../kit/tile";
+import { tile, tileActions, tileCard, tileHead, tileStatus } from "../../../kit/tile";
+import { ago as agoOf, empty } from "../../../kit/list";
 import { type GithubActivityKind, type GithubData, type GithubTarget, IntegrationsBridge } from "../bridge";
 import { GITHUB, PROVIDERS, info, steps } from "../store";
 
 function header(color: string, name: string, kind: string, extra?: Node): HTMLElement {
-  const row = h("div", { class: "tile-head" }, dot(color, 7), h("b", { text: name }), h("span", { text: kind }));
+  const row = tileHead({ dot: color, title: name, sub: kind });
   if (extra) row.append(extra);
   return row;
 }
@@ -94,7 +95,7 @@ function vercelCard(onDetail: () => void): HTMLElement {
   deployments.slice(0, 3).forEach((d, i) => {
     const accent = d.state === "READY" ? "#22C55E" : "#F4505E";
     const name = h("span", { class: "int-name", text: String(d.projectName ?? "") });
-    const ago = h("span", { class: "pane-ago", text: timeAgo(d.createdAt) });
+    const ago = agoOf(timeAgo(d.createdAt));
     if (i === 0) {
       const more = h(
         "button",
@@ -106,7 +107,7 @@ function vercelCard(onDetail: () => void): HTMLElement {
       rows.append(listRow(accent, false, name, ago));
     }
   });
-  return h("div", { class: "tile-card" }, header("#7C5CFF", "Vercel", "Deploys"), rows);
+  return tileCard(undefined, header("#7C5CFF", "Vercel", "Deploys"), rows);
 }
 
 function vercelDetail(onBack: () => void): HTMLElement {
@@ -129,9 +130,8 @@ function vercelDetail(onBack: () => void): HTMLElement {
       }),
     );
   }
-  return h(
-    "div",
-    { class: "tile-card detail" },
+  return tileCard(
+    "detail",
     h(
       "div",
       { class: "int-detail-head" },
@@ -161,12 +161,12 @@ function resendCard(): HTMLElement {
     const short = to.split("@")[0];
     const cells: Node[] = [
       h("span", { class: "int-name", text: short }),
-      h("span", { class: "pane-ago", text: timeAgo(e.createdAt) }),
+      agoOf(timeAgo(e.createdAt)),
     ];
     if (i === 0 && e.subject) cells.push(h("span", { class: "int-sub", text: String(e.subject) }));
     rows.append(listRow(accent, i === 0, ...cells));
   });
-  return h("div", { class: "tile-card" }, header("#22C55E", "Resend", "E-mails", extra), rows);
+  return tileCard(undefined, header("#22C55E", "Resend", "E-mails", extra), rows);
 }
 
 // ── GitHub ────────────────────────────────────────────────────────────────────
@@ -282,19 +282,19 @@ function githubCard(onPanel: (open?: GithubOpening) => void): HTMLElement {
         where.fact
           ? h("span", { class: "int-amount", style: `color:${style.color}`, text: where.text })
           : h("span", { class: "int-where", text: where.text }),
-        h("span", { class: "pane-ago", text: timeAgo(a.at) }),
+        agoOf(timeAgo(a.at)),
       ),
     );
   }
-  if (d.activity.length === 0) rows.append(h("div", { class: "pane-empty", text: "Nada nos últimos 30 dias" }));
+  if (d.activity.length === 0) rows.append(empty("Nada nos últimos 30 dias"));
 
   const stars = c && d.totalStars > 0
     ? h("span", { class: "int-total", title: "Estrelas em todos os seus repositórios" },
         h("i", { class: "int-star" }, svg(ICONS.star, 9)), h("span", { text: compact(d.totalStars) }))
     : undefined;
-  const card = h("div", { class: "tile-card" }, header(COLOR.red, "GitHub", `@${d.login}`, stars));
+  const card = tileCard(undefined, header(COLOR.red, "GitHub", `@${d.login}`, stars));
   // What's shown is the last good answer; say why it isn't fresher.
-  if (error) card.append(h("div", { class: "tile-status" }, dot(COLOR.red, 5), h("span", { text: error })));
+  if (error) card.append(tileStatus(dot(COLOR.red, 5), h("span", { text: error })));
   card.append(figure, rows);
   return card;
 }
@@ -320,13 +320,12 @@ function stripeCard(): HTMLElement {
           style: "color:#22c55e",
           text: `+${(Number(p.amount ?? 0) / 100).toFixed(2)}`,
         }),
-        h("span", { class: "pane-ago", text: timeAgo(p.createdAt) }),
+        agoOf(timeAgo(p.createdAt)),
       ),
     );
   }
-  return h(
-    "div",
-    { class: "tile-card" },
+  return tileCard(
+    undefined,
     header("#0570DE", "Stripe", "Pagamentos"),
     h("div", { class: "int-balance" }, h("span", { text: balance }), h("i", { text: currency })),
     rows,
@@ -351,11 +350,11 @@ function notionCard(): HTMLElement {
           ? h("span", { class: "int-emoji", text: String(p.emoji) })
           : h("i", { class: "int-emoji" }, svg(ICONS.doc, 9)),
         h("span", { class: "int-name", text: String(p.title ?? "Sem título") }),
-        h("span", { class: "pane-ago", text: timeAgo(p.lastEditedAt) }),
+        agoOf(timeAgo(p.lastEditedAt)),
       ),
     );
   }
-  return h("div", { class: "tile-card" }, header("#E8E8E8", "Notion", "Recentes"), rows);
+  return tileCard(undefined, header("#E8E8E8", "Notion", "Recentes"), rows);
 }
 
 // ── Cal.com ───────────────────────────────────────────────────────────────────
@@ -366,7 +365,7 @@ function calcomCard(): HTMLElement {
     .sort((a, b) => new Date(String(a.start)).getTime() - new Date(String(b.start)).getTime());
   const rows = h("div", { class: "int-rows tight" });
   if (bookings.length === 0) {
-    rows.append(h("div", { class: "pane-empty", text: "Nenhuma chamada agendada" }));
+    rows.append(empty("Nenhuma chamada agendada"));
   }
   for (const b of bookings.slice(0, 3)) {
     const when = new Date(String(b.start));
@@ -382,7 +381,7 @@ function calcomCard(): HTMLElement {
       ),
     );
   }
-  return h("div", { class: "tile-card" }, header("#C9956A", "Cal.com", "Agenda"), rows);
+  return tileCard(undefined, header("#C9956A", "Cal.com", "Agenda"), rows);
 }
 
 // ── n8n ───────────────────────────────────────────────────────────────────────
@@ -393,13 +392,10 @@ function n8nCard(task: Pill, onDetail: () => void, openSettings: () => void): HT
   if (!hasActivity) return idleCard(task, openSettings);
   const success = task.mood === "done";
   const accent = success ? "#22C55E" : "#F4505E";
-  return h(
-    "div",
-    { class: "tile-card" },
+  return tileCard(
+    undefined,
     header("#F29B38", "n8n", "Workflow"),
-    h(
-      "div",
-      { class: "tile-actions" },
+    tileActions(
       h(
         "button",
         {
@@ -420,9 +416,8 @@ function n8nDetail(task: Pill, onBack: () => void): HTMLElement {
   const success = task.mood === "done";
   const accent = success ? "#22C55E" : "#F4505E";
   const detail = lines[1];
-  return h(
-    "div",
-    { class: "tile-card detail" },
+  return tileCard(
+    "detail",
     h(
       "div",
       { class: "int-detail-head" },
@@ -437,10 +432,7 @@ function n8nDetail(task: Pill, onBack: () => void): HTMLElement {
     ),
     detail
       ? h("pre", { class: "int-detail-text", text: detail })
-      : h("div", {
-          class: "tile-status",
-          text: success ? "Concluído com sucesso." : "Sem detalhes do erro.",
-        }),
+      : tileStatus(success ? "Concluído com sucesso." : "Sem detalhes do erro."),
   );
 }
 
