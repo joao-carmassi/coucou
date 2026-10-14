@@ -3,7 +3,7 @@
 // Port of the integrations part of settings/main.ts at m3-ok. The window renders it only while
 // the module is on (modules/settings.ts).
 
-import { Bridge } from "../../core/bridge";
+import { App } from "../../kit/app";
 import "./settings.css";
 import { type GithubAccount, IntegrationsBridge } from "./bridge";
 import { h, clear } from "../../kit/dom";
@@ -106,7 +106,7 @@ function githubSetup(present: Record<string, boolean>): Setup {
   });
 
   const newToken = h("button", {
-    class: "link", text: "token fine-grained", onclick: () => void Bridge.openUrl(GITHUB_NEW_TOKEN_URL),
+    class: "link", text: "token fine-grained", onclick: () => void App.openUrl(GITHUB_NEW_TOKEN_URL),
   });
 
   show(present[GITHUB_KEY] ?? false);

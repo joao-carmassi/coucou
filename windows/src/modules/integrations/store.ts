@@ -3,7 +3,6 @@
 
 import type { Disposer, IslandApi } from "../../core/moduleApi";
 import type { IntegrationNews } from "./bridge";
-import { State } from "../../core/state";
 
 export { GITHUB, PROVIDERS, providerOf, type Provider } from "./providers";
 
@@ -29,7 +28,6 @@ export const steps = new Map<string, string[]>();
 export const rt: { api: IslandApi | null } = { api: null };
 
 export const redraw = () => {
-  State.notify();
   rt.api?.island.redraw();
 };
 

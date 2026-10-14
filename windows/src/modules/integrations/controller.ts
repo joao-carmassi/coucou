@@ -2,12 +2,10 @@
 // Port of integrations.ts and the openTarget/followNews parts of island.ts at m3-ok.
 // Polls are on the Rust side; this only listens (`integration`, `secrets-changed`).
 
-import { Bridge } from "../../core/bridge";
+import { App } from "../../kit/app";
 import { type GithubData, type IntegrationUpdate, IntegrationsBridge } from "./bridge";
 import type { Disposer, HomeRequest, IslandApi } from "../../core/moduleApi";
 import type { BoardCard, BoardFocus, BoardNews } from "../board/api";
-import { Sound } from "../../core/sound";
-import { State } from "../../core/state";
 import { GITHUB, PROVIDERS, cleanups, info, rt, steps, type IntegrationInfo, type Provider } from "./store";
 import { pillPresent } from "./providers";
 import { renderIntegrationCard, githubData, type GithubOpening, type IntegrationCardHooks } from "./views/integrations";
@@ -43,7 +41,6 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
   let alive = true;
 
   const redraw = () => {
-    State.notify();
     api.island.redraw();
   };
 
@@ -63,7 +60,7 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
       owned = true;
       const order = PROVIDERS.map((x) => x.id);
       // In catalog order, after Claude's pill and the agents.
-      const next = State.pills.find((t) => order.indexOf(t.id) > order.indexOf(id));
+      const next = api.pills.all().find((t) => order.indexOf(t.id) > order.indexOf(id));
       api.pills.set({ id, label: def.name, color: def.color, mood: "idle" }, next ? { before: next.id } : undefined);
       info[id] ??= empty(true);
       info[id].configured = true;
@@ -96,19 +93,19 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
     api.pills.set({ id, badge: null });
     if (stay) borrowedFrom = null;
     else giveBack();
-    const task = State.pills.find((t) => t.id === id);
+    const task = api.pills.get(id);
     if (task && (task.mood === "done" || task.mood === "error")) {
       api.pills.set({ id, mood: "idle" });
       steps.set(id, []);
     }
-    State.notify();
+    api.island.redraw();
   }
 
   /** Straight to what the news is about: from its card, from the panel's line, or from a click on Mochi. */
   function followNews(): boolean {
     const news = info[id]?.news;
     if (!news) return false;
-    Sound.play("blip");
+    api.sound.play("blip");
     enterGithubPanel(news.open);
     settle(true);
     api.island.setView("github");
@@ -133,32 +130,32 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
     if (isGithub && hasData) {
       const repos = (update.data as Partial<GithubData>).repos ?? [];
       const going = repos.some((r) => r.build?.state === "running");
-      const task = State.pills.find((t) => t.id === update.id);
+      const task = api.pills.get(update.id);
       if (task && going && task.mood === "idle") api.pills.set({ id: update.id, mood: "working" });
       else if (task && !going && task.mood === "working") api.pills.set({ id: update.id, mood: "idle" });
     }
 
     const event = update.event;
-    const task = event ? State.pills.find((t) => t.id === update.id) : null;
+    const task = event ? api.pills.get(update.id) : null;
     if (event && task) {
       api.pills.set({ id: update.id, mood: event.success ? "done" : "error" });
       steps.set(update.id, event.detail ? [event.label, event.detail] : [event.label]);
       // Only while the island is away or folded: open, it is showing something the user is reading.
-      const front = State.focusPill;
+      const front = api.pills.front();
       let opened = false;
       if (
-        isGithub && State.mode !== "expanded" && State.focusId !== update.id &&
-        State.focusId && !(front && WAITING.has(front.mood))
+        isGithub && api.island.mode() !== "expanded" && front?.id !== update.id &&
+        front && !(front && WAITING.has(front.mood))
       ) {
         const release = api.pills.focus(update.id);
         borrowedFrom ??= release; // the first lender wins, as before
         opened = true;
       }
-      if (State.focusId !== id) api.pills.set({ id, badge: event.success ? "done" : "error" });
+      if (api.pills.front()?.id !== id) api.pills.set({ id, badge: event.success ? "done" : "error" });
       // A run the panel was showing when it ended has been played there already.
       const about = event.open?.target;
       const heard = about?.kind === "run" && sawRunEnd(about.id);
-      if (!heard) Sound.play(event.success ? "finish" : "error");
+      if (!heard) api.sound.play(event.success ? "finish" : "error");
       // Show the compact island so the news is seen, but never steal the screen for a successful
       // deploy. News that speaks up unfolds the island on its card instead; it folds back on its own.
       if (opened) api.island.open(event.success ? "finished" : "error");
@@ -176,18 +173,18 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
     get detailOpen() { return detailOpen; },
     openDetail() { detailOpen = true; redraw(); },
     closeDetail() { detailOpen = false; redraw(); },
-    openSettings: () => void Bridge.openSettingsWindow(),
+    openSettings: () => void App.openSettingsWindow(),
     // The card's figure asks for the panel as a whole: while the pill has news, that leads to it.
     openPanel(open?: GithubOpening) {
       if (!open && followNews()) return;
-      Sound.play("blip");
+      api.sound.play("blip");
       enterGithubPanel(open);
       api.island.setView("github");
     },
   };
 
   function boardCard(taskId: string): BoardCard | null {
-    const task = State.pills.find((t) => t.id === taskId);
+    const task = api.pills.get(taskId);
     if (taskId !== id || !task || !owned) return null;
     const own = info[id];
     const key = [id, detailOpen, task.mood, steps.get(id)?.join("|"), own?.loaded, own?.error, own?.configured, JSON.stringify(own?.data ?? {})].join("~");
@@ -208,8 +205,8 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
   function openTarget(taskId: string): boolean {
     if (taskId !== id || !owned) return false;
     if (id === "integration_n8n") void IntegrationsBridge.openN8n();
-    else if (isGithub && githubData()) void Bridge.openUrl(githubData()!.profileUrl);
-    else if (def.url) void Bridge.openUrl(def.url);
+    else if (isGithub && githubData()) void App.openUrl(githubData()!.profileUrl);
+    else if (def.url) void App.openUrl(def.url);
     return true;
   }
 
@@ -220,10 +217,10 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
 
   const offs: Disposer[] = [
     // The open detail closes when the pill leaves the front.
-    State.subscribe(() => {
-      if (State.focusId !== id) detailOpen = false;
+    api.island.onChange(() => {
+      if (api.pills.front()?.id !== id) detailOpen = false;
       // Focusing the pill is seeing its news: the badge goes (a repeat is a no-op).
-      else if (State.pills.find((t) => t.id === id)?.badge) api.pills.set({ id, badge: null });
+      else if (api.pills.get(id)?.badge) api.pills.set({ id, badge: null });
     }),
     // The cards follow Pause (updates are dropped while paused).
     api.onPause(() => redraw()),
@@ -240,8 +237,8 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
       api.provide("avatarClick", followNews),
       api.provide("homeView", homeView),
       // The panel's own look for Mochi (a run going) lasts while the panel is on screen.
-      State.subscribe(() => {
-        if (State.mode !== "expanded" || State.view !== "github") api.avatar.publish(null);
+      api.island.onChange(() => {
+        if (api.island.mode() !== "expanded" || api.island.view() !== "github") api.avatar.publish(null);
       }),
     );
   }
@@ -263,6 +260,6 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
       resetGithub();
       rt.api = null;
     }
-    State.notify();
+    api.island.redraw();
   };
 }
