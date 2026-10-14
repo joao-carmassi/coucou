@@ -78,8 +78,8 @@ function standing(session: ClaudeSession): { color: string; words: string } {
   if (session.question) return { color: COLOR.cyan, words: "está perguntando" };
   if (session.approval) return { color: COLOR.amber, words: "precisa de permissão" };
   if (session.news === "error" || session.state === "error") return { color: COLOR.red, words: "parou com um erro" };
-  if (session.news === "finished" || session.state === "finished") return { color: COLOR.green, words: "terminou" };
-  if (session.state === "question") return { color: COLOR.cyan, words: "está esperando você" };
+  if (session.news === "done" || session.state === "done") return { color: COLOR.green, words: "terminou" };
+  if (session.state === "ask") return { color: COLOR.cyan, words: "está esperando você" };
   if (session.state === "idle" || session.state === "sleeping") return { color: COLOR.grey, words: "em repouso" };
   return { color: botGlowColor(session.state), words: "trabalhando" };
 }
@@ -463,7 +463,7 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
   return {
     el,
     sync() {
-      const task = State.tasks.find((t) => t.id === CLAUDE_ID) ?? null;
+      const task = State.pills.find((t) => t.id === CLAUDE_ID) ?? null;
       const session = store.session;
       const files = store.sessionFiles;
 
@@ -476,12 +476,12 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
 
       // The column: whose session, where it runs, and its last steps.
       const shown = session.steps.filter((s) => !NOT_A_STEP.has(s.kind)).slice(-STEPS_SHOWN);
-      const nextSteps = [task?.name, session.title, ...shown.map((s) => `${s.tool}:${s.state}:${s.at}`)].join("~");
+      const nextSteps = [task?.label, session.title, ...shown.map((s) => `${s.tool}:${s.state}:${s.at}`)].join("~");
       if (nextSteps !== stepsKey) {
         stepsKey = nextSteps;
         // The conversation by its title, and under it the project it works in;
         // untitled, the project is its name.
-        const project = task?.name ?? UNNAMED;
+        const project = task?.label ?? UNNAMED;
         name.textContent = session.title ?? project;
         name.title = session.title ?? "";
         nameSub.textContent = session.title ? project : UNNAMED;

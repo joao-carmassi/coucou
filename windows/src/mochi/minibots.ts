@@ -4,7 +4,7 @@
 import { BOT_STATES, BotEngine, hexToRGB } from "./engine";
 import type { BotStateName } from "../core/layout";
 import { wipe } from "../core/canvas";
-import type { AgentTask } from "../core/state";
+import type { Pill } from "../core/state";
 
 interface MiniBot {
   canvas: HTMLCanvasElement;
@@ -24,14 +24,14 @@ const live = new Map<HTMLCanvasElement, MiniBot>();
  * `.frame(width: 22)`. Sizing the canvas itself to `bodySize` would shrink the
  * whole drawing to 60 %, which is what used to happen.
  */
-export function createMiniBot(task: AgentTask, bodySize: number): HTMLElement {
+export function createMiniBot(task: Pill, bodySize: number): HTMLElement {
   const { slot, engine } = mount(bodySize, task.id);
   engine.bodyColor = hexToRGB(task.color);
-  engine.setState(task.state, true);
+  engine.setState(task.mood, true);
   if (task.emote) engine.setPermanentEmote(task.emote);
-  if (task.miniEye) {
-    engine.permanentEye = task.miniEye;
-    engine.eyeOverride = task.miniEye;
+  if (task.eye) {
+    engine.permanentEye = task.eye;
+    engine.eyeOverride = task.eye;
     engine.eyeOverrideUntil = Number.POSITIVE_INFINITY;
   }
   return slot;
@@ -101,11 +101,11 @@ export function pruneMiniBots() {
   }
 }
 
-export function syncMiniBotStates(tasks: AgentTask[]) {
+export function syncMiniBotStates(tasks: Pill[]) {
   for (const mb of live.values()) {
     const task = tasks.find((t) => t.id === mb.taskId);
     if (!task) continue;
-    mb.engine.setState(task.state);
+    mb.engine.setState(task.mood);
     mb.engine.bodyColor = hexToRGB(task.color);
   }
 }

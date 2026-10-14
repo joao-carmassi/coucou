@@ -25,6 +25,6 @@ export function activityLine(s: ClaudeSession | undefined): string {
   }
   if (s.state === "thinking") return "pensando";
   if (s.state === "working") return "trabalhando";
-  if (s.state === "finished") return "pronto";
+  if (s.state === "done") return "pronto";
   return "";
 }

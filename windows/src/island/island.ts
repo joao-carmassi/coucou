@@ -388,7 +388,7 @@ export class Island implements IslandHost {
     // A view that knows how tall its content is has the last word.
     const fitted = this.views?.get(State.view)?.height ?? null;
     const line = this.compactLine();
-    const others = this.textOverGrid() ? 0 : State.otherTasks.length;
+    const others = this.textOverGrid() ? 0 : State.otherPills.length;
     const cw = compactWidth(others, line ? this.textWidth(line) : 0);
     const { w, h } = islandSize(State.mode, State.view, fitted, cw);
     const r = State.mode === "expanded" ? EXPANDED_CORNER : ROUNDED_CORNER;
@@ -397,12 +397,12 @@ export class Island implements IslandHost {
 
   /** The one-line status the compact island says: the strongest module line. */
   private compactLine(): string {
-    return Compact.resolve(State.otherTasks.length)?.text ?? "";
+    return Compact.resolve(State.otherPills.length)?.text ?? "";
   }
 
   /** The line takes the place of the mini grid (timer). */
   private textOverGrid(): boolean {
-    return !!Compact.resolve(State.otherTasks.length)?.overGrid;
+    return !!Compact.resolve(State.otherPills.length)?.overGrid;
   }
 
   /** New word rises from below while the old one leaves upward; instant if nothing was showing. */
@@ -867,13 +867,13 @@ export class Island implements IslandHost {
 
   /** What the avatar wears: override > strongest module signal > focused task > idle. */
   private effState() {
-    return Avatar.state(State.focusTask?.state ?? State.avatarState ?? "idle", State.stateOverride);
+    return Avatar.state(State.focusPill?.mood ?? State.avatarState ?? "idle", State.stateOverride);
   }
 
   /** The colour Mochi should be: his focused pill colour, else his own cream. */
   private targetBodyColor(): RGB | null {
     if (this.tintRequest) return this.tintRequest;
-    const focus = State.focusTask;
+    const focus = State.focusPill;
     return focus ? hexToRGB(focus.color) : null;
   }
 
@@ -956,7 +956,7 @@ export class Island implements IslandHost {
     const showGrid = State.mode === "compact" && !this.textOverGrid();
     this.miniGrid.style.opacity = showGrid ? "1" : "0";
     if (showGrid) {
-      const others = State.otherTasks.slice(0, 4);
+      const others = State.otherPills.slice(0, 4);
       const key = others.map((t) => t.id).join("|");
       if (this.miniGrid.dataset.key !== key) {
         this.miniGrid.dataset.key = key;
@@ -991,7 +991,7 @@ export class Island implements IslandHost {
       }
     }
 
-    syncMiniBotStates(State.tasks);
+    syncMiniBotStates(State.pills);
     this.engine.setState(this.effState());
   }
 

@@ -173,7 +173,7 @@ function clientOf(payload: HookPayload): ClaudeClient {
 const waits = (session: ClaudeSession) => session.approval != null || session.question != null;
 
 /** No turn under way, and nothing asked: the session is where its last turn left it. */
-const AT_REST: ReadonlySet<string> = new Set(["idle", "finished", "error", "sleeping"]);
+const AT_REST: ReadonlySet<string> = new Set(["idle", "done", "error", "sleeping"]);
 const resting = (session: ClaudeSession) => AT_REST.has(session.state) && !waits(session);
 
 /** The session an event comes from, told what the event says of it. A new one gets a place. */
@@ -321,7 +321,7 @@ function dropPending(c: Claude, session: ClaudeSession) {
   session.approval = null;
   session.question = null;
   session.state = "working";
-  if (session.news === "approval") session.news = null;
+  if (session.news === "alert") session.news = null;
   if (session.id === c.store.frontId) c.afterRequest(onCard(c));
 }
 
@@ -479,22 +479,22 @@ function handleAgent(c: Claude, payload: HookPayload, agent: string) {
       const message = payload.message ?? "";
       const lower = message.toLowerCase();
       if (lower.includes("rate limit") || lower.includes("limite d")) {
-        c.updateTask(agentId, "ratelimit");
-        Sound.play("rate");
+        c.updateTask(agentId, "waiting");
+        Sound.play("wait");
       } else if (message.endsWith("?")) {
-        c.updateTask(agentId, "question");
+        c.updateTask(agentId, "ask");
         c.appendStep(agentId, message);
       }
       break;
     }
 
     case "Stop":
-      c.updateTask(agentId, "finished");
+      c.updateTask(agentId, "done");
       if (payload.message) c.appendStep(agentId, payload.message.slice(0, LINE_CHARS));
       Sound.play("finish");
       if (focused) alert("finished");
       else {
-        c.store.setBadge(agentId, "finished");
+        c.store.setBadge(agentId, "done");
         if (c.api.island.mode() === "hidden") c.api.island.wake();
       }
       c.api.timeout(() => c.removeAgent(agentId), FINISHED_MS);
@@ -580,8 +580,8 @@ export function handleHook(c: Claude, payload: HookPayload) {
    * on its tab when it is behind, a badge on the pill when Claude's is not
    * the one in front.
    */
-  const tell = (what: "finished" | "error") => {
-    if (focused) return surface(what, true);
+  const tell = (what: "done" | "error") => {
+    if (focused) return surface(what === "done" ? "finished" : "error", true);
     if (!front) session.news = what;
     if (c.focusId() !== CLAUDE_ID) c.store.setBadge(CLAUDE_ID, what);
     // The sound already played: a hidden island has to show up too (it folds back on its own),
@@ -638,10 +638,10 @@ export function handleHook(c: Claude, payload: HookPayload) {
       const message = payload.message ?? "";
       const lower = message.toLowerCase();
       if (lower.includes("rate limit") || lower.includes("limite d")) {
-        session.state = "ratelimit";
-        Sound.play("rate");
+        session.state = "waiting";
+        Sound.play("wait");
       } else if (message.endsWith("?")) {
-        session.state = "question";
+        session.state = "ask";
         say(session, message);
       }
       if (message) log(session, newStep("Notification", "note", message));
@@ -655,13 +655,13 @@ export function handleHook(c: Claude, payload: HookPayload) {
       }
       closeSteps(session, payload.last_message ?? null);
       session.agentsRunning = session.agentsLaunched = 0;
-      session.state = "finished";
+      session.state = "done";
       if (payload.message) say(session, payload.message.slice(0, LINE_CHARS));
       Sound.play("finish");
-      tell("finished");
+      tell("done");
       c.api.timeout(() => {
         // Still where its turn left it: back to rest. Its tab keeps its mark.
-        if (session.state === "finished") session.state = "idle";
+        if (session.state === "done") session.state = "idle";
         if (session.id === c.store.frontId) c.store.setBadge(CLAUDE_ID, null);
         c.store.present();
       }, FINISHED_MS);
@@ -719,12 +719,12 @@ export function handleHook(c: Claude, payload: HookPayload) {
       // The relay's short ack window closes in 800 ms; everything below this
       // line is synchronous, so the card really is up by the time it lands.
       if (requestId) void ClaudeBridge.approvalAck(requestId);
-      session.state = questions ? "question" : "approval";
-      Sound.play(questions ? "question" : "approval");
+      session.state = questions ? "ask" : "alert";
+      Sound.play(questions ? "ask" : "alert");
       if (!front) {
         // The session in front is waiting for an answer of its own: this one
         // waits its turn behind its tab, and gets the card next.
-        session.news = "approval";
+        session.news = "alert";
       } else if (focused) {
         State.isPinned = true;
         c.alert(questions ? "question" : "approval");
@@ -733,7 +733,7 @@ export function handleHook(c: Claude, payload: HookPayload) {
         // is the signal instead — but it has to be on screen for that to mean
         // anything, hence the reveal. We just told the relay a human can act.
         State.isPinned = true;
-        c.store.setBadge(CLAUDE_ID, "approval");
+        c.store.setBadge(CLAUDE_ID, "alert");
         c.api.island.wake();
       }
       c.pending.set(session.id, c.api.timeout(() => {

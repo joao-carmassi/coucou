@@ -7,7 +7,7 @@ import { type GithubData, type IntegrationUpdate, IntegrationsBridge } from "./b
 import type { Disposer, HomeRequest, IslandApi } from "../../core/moduleApi";
 import { CLAUDE_SERVICE, type TaskCard, type TaskNews } from "../claude/api";
 import { Sound } from "../../core/sound";
-import { State, type AgentTask } from "../../core/state";
+import { State } from "../../core/state";
 import { GITHUB, PROVIDERS, cleanups, info, rt, steps, type IntegrationInfo, type Provider } from "./store";
 import { pillPresent } from "./providers";
 import { renderIntegrationCard, githubData, type GithubOpening, type IntegrationCardHooks } from "./views/integrations";
@@ -21,7 +21,7 @@ const SETTLE_MS = 60_000;
  */
 const NEWS_MS = 5 * 60_000;
 /** States that are waiting for the user: nothing takes the front from those. */
-const WAITING = new Set(["approval", "question"]);
+const WAITING = new Set(["alert", "ask"]);
 
 const empty = (configured: boolean): IntegrationInfo => ({ data: {}, error: null, loaded: false, configured });
 
@@ -55,22 +55,21 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
     if (!want && owned) {
       owned = false;
       settle(true);
-      State.tasks = State.tasks.filter((t) => t.id !== id);
+      api.pills.remove(id);
       delete info[id];
       steps.delete(id);
     } else if (want && !owned) {
       owned = true;
       const order = PROVIDERS.map((x) => x.id);
       // In catalog order, after Claude's pill and the agents.
-      const at = State.tasks.findIndex((t) => order.indexOf(t.id) > order.indexOf(id));
-      const task: AgentTask = { id, name: def.name, color: def.color, state: "idle" };
-      State.tasks.splice(at < 0 ? State.tasks.length : at, 0, task);
+      const next = State.pills.find((t) => order.indexOf(t.id) > order.indexOf(id));
+      api.pills.set({ id, label: def.name, color: def.color, mood: "idle" }, next ? { before: next.id } : undefined);
       info[id] ??= empty(true);
       info[id].configured = true;
       steps.set(id, []);
       void IntegrationsBridge.refreshIntegration(id);
     }
-    if (!State.tasks.some((t) => t.id === State.focusId)) State.focusId = State.tasks[0]?.id ?? null;
+    if (!State.pills.some((t) => t.id === State.focusId)) State.focusId = State.pills[0]?.id ?? null;
     redraw();
   }
 
@@ -83,7 +82,7 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
   function giveBack() {
     const previous = borrowedFrom;
     borrowedFrom = null;
-    if (previous && State.focusId === id && State.tasks.some((t) => t.id === previous)) State.focusId = previous;
+    if (previous && State.focusId === id && State.pills.some((t) => t.id === previous)) State.focusId = previous;
   }
 
   /**
@@ -94,12 +93,12 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
     clearTimer?.();
     clearTimer = null;
     if (info[id]) info[id].news = null;
-    api.pill.badge(id, null);
+    api.pills.set({ id, badge: null });
     if (stay) borrowedFrom = null;
     else giveBack();
-    const task = State.tasks.find((t) => t.id === id);
-    if (task && (task.state === "finished" || task.state === "error")) {
-      task.state = "idle";
+    const task = State.pills.find((t) => t.id === id);
+    if (task && (task.mood === "done" || task.mood === "error")) {
+      api.pills.set({ id, mood: "idle" });
       steps.set(id, []);
     }
     State.notify();
@@ -134,28 +133,28 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
     if (isGithub && hasData) {
       const repos = (update.data as Partial<GithubData>).repos ?? [];
       const going = repos.some((r) => r.build?.state === "running");
-      const task = State.tasks.find((t) => t.id === update.id);
-      if (task && going && task.state === "idle") task.state = "working";
-      else if (task && !going && task.state === "working") task.state = "idle";
+      const task = State.pills.find((t) => t.id === update.id);
+      if (task && going && task.mood === "idle") api.pills.set({ id: update.id, mood: "working" });
+      else if (task && !going && task.mood === "working") api.pills.set({ id: update.id, mood: "idle" });
     }
 
     const event = update.event;
-    const task = event ? State.tasks.find((t) => t.id === update.id) : null;
+    const task = event ? State.pills.find((t) => t.id === update.id) : null;
     if (event && task) {
-      task.state = event.success ? "finished" : "error";
+      api.pills.set({ id: update.id, mood: event.success ? "done" : "error" });
       steps.set(update.id, event.detail ? [event.label, event.detail] : [event.label]);
       // Only while the island is away or folded: open, it is showing something the user is reading.
-      const front = State.focusTask;
+      const front = State.focusPill;
       let opened = false;
       if (
         isGithub && State.mode !== "expanded" && State.focusId !== update.id &&
-        State.focusId && !(front && WAITING.has(front.state))
+        State.focusId && !(front && WAITING.has(front.mood))
       ) {
         borrowedFrom ??= State.focusId;
         State.focusId = update.id;
         opened = true;
       }
-      if (State.focusId !== id) api.pill.badge(id, event.success ? "finished" : "error");
+      if (State.focusId !== id) api.pills.set({ id, badge: event.success ? "done" : "error" });
       // A run the panel was showing when it ended has been played there already.
       const about = event.open?.target;
       const heard = about?.kind === "run" && sawRunEnd(about.id);
@@ -188,10 +187,10 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
   };
 
   function taskCard(taskId: string): TaskCard | null {
-    const task = State.tasks.find((t) => t.id === taskId);
+    const task = State.pills.find((t) => t.id === taskId);
     if (taskId !== id || !task || !owned) return null;
     const own = info[id];
-    const key = [id, detailOpen, task.state, steps.get(id)?.join("|"), own?.loaded, own?.error, own?.configured, JSON.stringify(own?.data ?? {})].join("~");
+    const key = [id, detailOpen, task.mood, steps.get(id)?.join("|"), own?.loaded, own?.error, own?.configured, JSON.stringify(own?.data ?? {})].join("~");
     return { key, build: () => renderIntegrationCard(task, cardHooks) };
   }
 
@@ -224,7 +223,7 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
     State.subscribe(() => {
       if (State.focusId !== id) detailOpen = false;
       // Focusing the pill is seeing its news: the badge goes (a repeat is a no-op).
-      else if (State.tasks.find((t) => t.id === id)?.pillBadge) api.pill.badge(id, null);
+      else if (State.pills.find((t) => t.id === id)?.badge) api.pills.set({ id, badge: null });
     }),
     api.listen<IntegrationUpdate>("integration", handle),
     api.listen("secrets-changed", () => void refreshConfigured()),
@@ -248,7 +247,7 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
     alive = false;
     for (const off of offs.reverse()) off();
     giveBack();
-    State.tasks = State.tasks.filter((t) => t.id !== id);
+    api.pills.remove(id);
     owned = false;
     delete info[id];
     steps.delete(id);
@@ -260,7 +259,7 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
       resetGithub();
       rt.api = null;
     }
-    if (!State.tasks.some((t) => t.id === State.focusId)) State.focusId = State.tasks[0]?.id ?? null;
+    if (!State.pills.some((t) => t.id === State.focusId)) State.focusId = State.pills[0]?.id ?? null;
     State.notify();
   };
 }

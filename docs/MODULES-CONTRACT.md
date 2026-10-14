@@ -110,10 +110,10 @@ import type { Settings } from "./state";
 import type { FsmState } from "../island/fsm";
 import type { ViewActions } from "../views/views";
 export type Disposer = () => void;
-/** Higher wins, tie goes to the most recent. approval 100, question 90, error 80, finished 60, timer 50, voice 40, Claude activity 30, media 20, integrations 10. */
+/** Higher wins, tie goes to the most recent. Optional neutral bands: BAND = { URGENT: 90, NOTICE: 60, ACTIVE: 30, AMBIENT: 10 }. */
 export interface StatusLine { priority: number; text: string; icon?: string; ttlMs?: number; urgent?: boolean;
   /** Shown beside other pills in place of the mini grid (the timer). Default: only when no other pill. */ overGrid?: boolean }
-export interface AvatarSignal { state: BotStateName; priority: number; emote?: BotEmoteName; ttlMs?: number }
+export interface AvatarSignal { state: BotStateName | LegacyMoodName; /* old names accepted for one version */ priority: number; emote?: BotEmoteName; ttlMs?: number }
 export interface ViewHost { el: HTMLElement; sync(): void; focus?(): void; tick?(nowMs: number): void; readonly height?: number }
 export interface ViewContext { actions: ViewActions; onResize(): void; api: IslandApi }
 export interface ViewDef { name: string; layout: ViewLayout; tabOf?: string; lightsHome?: true; keyboard?: boolean; build(ctx: ViewContext): ViewHost }
@@ -291,3 +291,23 @@ Services are module-to-module and invisible to the core: `api.provide("<module>.
 Core events are generic: `hotkey-error {name, error}` (one per registered name; "" = fine) and `inbox-added` (path of a file that came onto the island).
 
 Module commands are named `<id>_*` (claude_*, media_*, voice_*, github_*, n8n_*; shared integrations use `integrations_*`). The list lives in `modules::handler!` (modules/mod.rs), which expands to one `tauri::generate_handler!`; lib.rs passes only the core commands: `modules::handler!(boot, save_settings, ...)`. A new module command is added in that macro.
+
+## Pills, badges, moods, sounds (M5 neutrality)
+
+- **Pill** (`core/state.ts`): `{ id, label, color, mood, emote?, eye?, badge?, owner? }`. A module puts pills in the compact grid / overview row through `api.pills`: `set(pill, at?)` (a new pill needs `label` + `color`; later calls patch fields, `null` clears `emote`/`eye`/`badge`), `remove(id)`, `clear()`. `at`: `"start"`, `{ after: id }` (missing anchor = start), `{ before: id }` (missing anchor = end), default the end. The registry stamps `owner` (a module cannot touch another's pill) and removes all of a module's pills when it stops (focus moves off a removed pill). Modules never write `State.pills`. Data only one module needs (the steps of an agent pill) stays in that module, keyed by pill id.
+- **Badge**: `"alert" | "done" | "error"` (`core/badge.ts`). Old names `approval`->`alert`, `finished`->`done` are accepted by `api.pills.set` for one version (`badgeName()`).
+- **Mood** (`BotStateName`): `idle working thinking searching alert ask error done waiting sleeping dizzy`. Old `approval`->`alert`, `question`->`ask`, `finished`->`done`, `ratelimit`->`waiting` (`MOOD_ALIAS`/`moodName()` in `core/layout.ts`) are accepted for one version by `api.avatar.publish` and `api.pills.set`. Emote names are unchanged. View names (`approval`, `question`, `finished`) are Claude's own views, not moods.
+- **Sounds**: neutral names `alert ask wait` play the WAVs `approval question rate` (map in `core/sound.ts`); the old names still play. `api.sound.register(name, url)` adds a module's own WAV (removed when the module stops).
+- **Status priority**: the core only says "higher wins, tie goes to the most recent" (+ optional `BAND`). Numbers the shipped modules use today:
+
+| Priority | Who |
+|---|---|
+| 100 | claude: approval pending |
+| 90 | claude: question pending |
+| 80 | error |
+| 60 | finished (claude "pronto") |
+| 50 | timer |
+| 40 | voice |
+| 30 | claude activity |
+| 20 | media |
+| 10 | integrations |

@@ -5,12 +5,18 @@
 
 export const SOUND_NAMES = [
   "peek", "open", "close", "hover", "blip", "slap", "annoyed", "dizzy", "greet",
-  "work", "finish", "error", "approval", "question", "approve", "gulp", "tick",
+  "work", "finish", "error", "alert", "ask", "approve", "gulp", "tick",
   "send", "love", "pop", "proud", "wink", "yawn", "attach", "think", "search",
-  "rate", "sleep",
+  "wait", "sleep",
 ] as const;
 
 export type SoundName = (typeof SOUND_NAMES)[number];
+
+/** Neutral name -> WAV file, where they differ (the shipped files keep their old names). */
+const FILE: Readonly<Record<string, string>> = { alert: "approval", ask: "question", wait: "rate" };
+/** Old names, accepted for one version. */
+export const SOUND_ALIAS: Readonly<Record<string, string>> = { approval: "alert", question: "ask", rate: "wait" };
+export const soundName = (n: string) => SOUND_ALIAS[n] ?? n;
 
 class SoundEngine {
   enabled = true;
@@ -22,6 +28,26 @@ class SoundEngine {
   private loading: Promise<void> | null = null;
   private idleTimer: number | null = null;
   private loaded = false;
+  private extra = new Map<string, string>();
+
+  private async load(name: string, url: string) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return;
+      this.buffers.set(name, await ctx.decodeAudioData(await res.arrayBuffer()));
+    } catch {
+      /* a missing sound must never break the island */
+    }
+  }
+
+  /** A module's own sound (a WAV url). Loaded with the rest, or at once if the engine is already up. */
+  register(name: string, url: string): () => void {
+    this.extra.set(name, url);
+    if (this.loaded) void this.load(name, url);
+    return () => { this.extra.delete(name); this.buffers.delete(name); };
+  }
 
   /** Creates the context and decodes every WAV. Safe to call more than once. */
   preload(): Promise<void> {
@@ -35,18 +61,10 @@ class SoundEngine {
       master.gain.value = this.volume;
       master.connect(ctx.destination);
       this.master = master;
-      await Promise.all(
-        SOUND_NAMES.map(async (name) => {
-          try {
-            const res = await fetch(`/sounds/${name}.wav`);
-            if (!res.ok) return;
-            const buf = await ctx.decodeAudioData(await res.arrayBuffer());
-            this.buffers.set(name, buf);
-          } catch {
-            /* a missing sound must never break the island */
-          }
-        }),
-      );
+      await Promise.all([
+        ...SOUND_NAMES.map((name) => this.load(name, `/sounds/${FILE[name] ?? name}.wav`)),
+        ...[...this.extra].map(([name, url]) => this.load(name, url)),
+      ]);
       this.loaded = true;
       this.idle();
     })();
@@ -89,8 +107,9 @@ class SoundEngine {
     else void this.ctx?.suspend();
   }
 
-  play(name: SoundName | string) {
+  play(raw: SoundName | string) {
     if (!this.enabled) return;
+    const name = soundName(raw);
     const ctx = this.ctx;
     const master = this.master;
     const buf = this.buffers.get(name);

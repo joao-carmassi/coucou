@@ -63,11 +63,57 @@ test("Hooks.home(false) ignores pinned requests", () => {
 
 test("pill badge: applyBadge reports change only", async () => {
   const { applyBadge } = await import("../src/core/badge.ts");
-  const tasks = [{ id: "a", name: "a", color: "#000", state: "idle" as const }];
-  assert.equal(applyBadge(tasks, "a", "error"), true);
-  assert.equal(applyBadge(tasks, "a", "error"), false);
-  assert.equal(applyBadge(tasks, "zz", "error"), false);
-  assert.equal(applyBadge(tasks, "a", null), true);
+  const pills = [{ id: "a", label: "a", color: "#000", mood: "idle" as const }];
+  assert.equal(applyBadge(pills, "a", "error"), true);
+  assert.equal(applyBadge(pills, "a", "error"), false);
+  assert.equal(applyBadge(pills, "zz", "error"), false);
+  assert.equal(applyBadge(pills, "a", null), true);
+});
+
+test("badge mapping: old names map to neutral ones", async () => {
+  const { badgeName } = await import("../src/core/badge.ts");
+  assert.equal(badgeName("approval"), "alert");
+  assert.equal(badgeName("finished"), "done");
+  assert.equal(badgeName("error"), "error");
+  assert.equal(badgeName("done"), "done");
+  assert.equal(badgeName(null), null);
+});
+
+test("mood alias map: old names map to neutral ones, new ones pass", async () => {
+  const { moodName } = await import("../src/core/layout.ts");
+  assert.deepEqual(
+    ["approval", "question", "finished", "ratelimit"].map(moodName),
+    ["alert", "ask", "done", "waiting"],
+  );
+  for (const m of ["idle", "working", "alert", "ask", "done", "waiting", "error"]) assert.equal(moodName(m), m);
+});
+
+test("sound alias: old names map to neutral ones", async () => {
+  const { soundName, SOUND_NAMES } = await import("../src/core/sound.ts");
+  assert.deepEqual(["approval", "question", "rate", "blip"].map(soundName), ["alert", "ask", "wait", "blip"]);
+  for (const n of ["alert", "ask", "wait", "attach"]) assert.ok((SOUND_NAMES as readonly string[]).includes(n));
+});
+
+test("pills: owner stamp, patch, order, owner-only removal, focus fallback", async () => {
+  const { putPill, dropPills } = await import("../src/core/pills.ts");
+  const s = { pills: [] as import("../src/core/state.ts").Pill[], focusId: null as string | null };
+  assert.equal(putPill(s, "m", { id: "x", mood: "idle" }), false); // new pill needs label + color
+  assert.equal(putPill(s, "m", { id: "b", label: "B", color: "#111" }), true);
+  assert.equal(putPill(s, "m", { id: "a", label: "A", color: "#222" }, "start"), true);
+  assert.equal(putPill(s, "m", { id: "c", label: "C", color: "#333" }, { after: "a" }), true);
+  assert.equal(putPill(s, "m", { id: "d", label: "D", color: "#444" }, { before: "b" }), true);
+  assert.deepEqual(s.pills.map((p) => p.id), ["a", "c", "d", "b"]);
+  assert.equal(s.pills[0].owner, "m");
+  assert.equal(putPill(s, "m", { id: "a", mood: "done", badge: "alert" }), true);
+  assert.equal(putPill(s, "m", { id: "a", mood: "done" }), false); // no change
+  assert.equal(putPill(s, "other", { id: "a", mood: "error" }), false); // not its pill
+  assert.equal(dropPills(s, "other"), false);
+  s.focusId = "a";
+  assert.equal(dropPills(s, "m", "a"), true);
+  assert.equal(s.focusId, "c");
+  assert.equal(dropPills(s, "m"), true);
+  assert.deepEqual(s.pills, []);
+  assert.equal(s.focusId, null);
 });
 
 test("homeOf: request wins, else first tab, else empty", async () => {

@@ -74,11 +74,11 @@ const C = {
   working: [0.231, 0.62, 1] as RGB,
   thinking: [0.545, 0.361, 0.965] as RGB,
   searching: [0.388, 0.396, 0.949] as RGB,
-  approval: [0.961, 0.647, 0.141] as RGB,
-  question: [0.133, 0.827, 0.933] as RGB,
+  alert: [0.961, 0.647, 0.141] as RGB,
+  ask: [0.133, 0.827, 0.933] as RGB,
   error: [0.957, 0.314, 0.369] as RGB,
-  finished: [0.204, 0.831, 0.6] as RGB,
-  ratelimit: [0.984, 0.573, 0.235] as RGB,
+  done: [0.204, 0.831, 0.6] as RGB,
+  waiting: [0.984, 0.573, 0.235] as RGB,
   sleeping: [0.58, 0.635, 0.722] as RGB,
   dizzy: [0.957, 0.447, 0.714] as RGB,
 };
@@ -93,19 +93,19 @@ export const BOT_STATES: Record<BotStateName, BotStateCfg> = {
   working: { ...base, color: C.working, tint: 0.72, eye: "pill", badge: { kind: "dots", color: C.working } },
   thinking: { ...base, color: C.thinking, tint: 0.72, eye: "pill", badge: { kind: "dots", color: C.thinking }, look: [0.55, 0.55] },
   searching: { ...base, color: C.searching, tint: 0.72, eye: "pill", badge: { kind: "dots", color: C.searching }, scans: true },
-  approval: { ...base, color: C.approval, tint: 0.78, eye: "wide", badge: { kind: "bang", color: C.approval }, bounces: true },
-  question: { ...base, color: C.question, tint: 0.75, eye: "pill", badge: { kind: "question", color: C.question }, tilt: 0.17 },
+  alert: { ...base, color: C.alert, tint: 0.78, eye: "wide", badge: { kind: "bang", color: C.alert }, bounces: true },
+  ask: { ...base, color: C.ask, tint: 0.75, eye: "pill", badge: { kind: "question", color: C.ask }, tilt: 0.17 },
   error: { ...base, color: C.error, tint: 0.78, eye: "flat", badge: { kind: "dot", color: C.error } },
-  finished: { ...base, color: C.finished, tint: 0.35, eye: "happy", badge: { kind: "dot", color: C.finished } },
-  ratelimit: { ...base, color: C.ratelimit, tint: 0.72, eye: "tired", badge: { kind: "dot", color: C.ratelimit }, sweat: true },
+  done: { ...base, color: C.done, tint: 0.35, eye: "happy", badge: { kind: "dot", color: C.done } },
+  waiting: { ...base, color: C.waiting, tint: 0.72, eye: "tired", badge: { kind: "dot", color: C.waiting }, sweat: true },
   sleeping: { ...base, color: C.sleeping, tint: 0.32, eye: "closed", badge: null, breathes: true, zz: true },
   dizzy: { ...base, color: C.dizzy, tint: 0.7, eye: "spiral", badge: null },
 };
 
 /** State → sound, as in BotStateCfg.sound. */
 export const STATE_SOUND: Partial<Record<BotStateName, string>> = {
-  working: "work", thinking: "think", searching: "search", approval: "approval",
-  question: "question", error: "error", finished: "finish", ratelimit: "rate",
+  working: "work", thinking: "think", searching: "search", alert: "alert",
+  ask: "ask", error: "error", done: "finish", waiting: "wait",
   sleeping: "sleep", dizzy: "dizzy",
 };
 
@@ -233,7 +233,7 @@ export class BotEngine {
     this.setBadge(this.cfg.badge);
 
     switch (next) {
-      case "finished":
+      case "done":
         this.doRoll(950, 1);
         setTimeout(() => this.emit("spark", 5), 500);
         break;
@@ -243,16 +243,16 @@ export class BotEngine {
           [0.05, 70, Ease.inOut], [0, 90, Ease.out],
         ]);
         break;
-      case "approval":
+      case "alert":
         this.anim("oy", [[-0.2, 150, Ease.out], [0, 300, Ease.back]]);
         break;
       case "dizzy":
         this.doRoll(1300, 2);
         break;
-      case "question":
+      case "ask":
         this.blink();
         break;
-      case "ratelimit":
+      case "waiting":
         this.emit("sweat", 1);
         break;
       default:

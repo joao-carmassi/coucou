@@ -37,15 +37,17 @@ export function claudeOf(api: IslandApi): Claude {
 }
 
 export class Claude {
-  readonly store = new ClaudeStore();
+  readonly store: ClaudeStore;
   /** Per session: the timer that gives up on its request (see PENDING_MS in hooks.ts). */
   readonly pending = new Map<string, Disposer>();
 
-  constructor(readonly api: IslandApi) {}
+  constructor(readonly api: IslandApi) {
+    this.store = new ClaudeStore(api);
+  }
 
   /** The pill in front. */
   focusId(): string | null {
-    return State.focusTask?.id ?? null;
+    return State.focusPill?.id ?? null;
   }
 
   private redraw = () => this.api.island.redraw();
@@ -53,26 +55,23 @@ export class Claude {
   // ── Pill and third-party agents ───────────────────────────────────────────
 
   setFocus(id: string) {
-    if (!State.tasks.some((t) => t.id === id)) return;
+    if (!State.pills.some((t) => t.id === id)) return;
     State.focusId = id;
     this.store.badges.delete(id);
     this.store.changed();
   }
 
   upsertAgent(id: string, name: string, color: string) {
-    if (State.tasks.some((t) => t.id === id)) return;
+    if (State.pills.some((t) => t.id === id)) return;
     // Right after the Claude pill, so it is among the first four.
-    const at = State.tasks.findIndex((t) => t.id === CLAUDE_ID) + 1;
-    State.tasks.splice(at, 0, { id, name, color, state: "idle" });
+    this.api.pills.set({ id, label: name, color, mood: "idle" }, { after: CLAUDE_ID });
     this.store.agentSteps.set(id, []);
     if (!State.focusId) State.focusId = id;
     this.store.changed();
   }
 
   updateTask(id: string, state: BotStateName) {
-    const t = State.tasks.find((x) => x.id === id);
-    if (!t) return;
-    t.state = state;
+    this.api.pills.set({ id, mood: state });
     this.store.changed();
   }
 
@@ -85,12 +84,11 @@ export class Claude {
   }
 
   removeAgent(id: string) {
-    const idx = State.tasks.findIndex((t) => t.id === id);
-    if (idx < 0) return;
-    State.tasks.splice(idx, 1);
+    if (!State.pills.some((t) => t.id === id)) return;
+    this.api.pills.remove(id);
     this.store.agentSteps.delete(id);
     this.store.badges.delete(id);
-    if (State.focusId === id) State.focusId = State.tasks[0]?.id ?? CLAUDE_ID;
+    if (!State.focusId) State.focusId = CLAUDE_ID;
     this.store.changed();
   }
 
@@ -147,7 +145,7 @@ export class Claude {
     const store = this.store;
     const next = store.pendingApproval || store.pendingQuestion ? store.session : store.waiting[0];
     if (next) store.bringForward(next.id);
-    store.setBadge(CLAUDE_ID, next && this.focusId() !== CLAUDE_ID ? "approval" : null);
+    store.setBadge(CLAUDE_ID, next && this.focusId() !== CLAUDE_ID ? "alert" : null);
     store.present();
     if (show) {
       State.isPinned = next != null;
@@ -314,7 +312,7 @@ export class Claude {
 
   start(): Disposer {
     const { api, store } = this;
-    State.tasks.unshift({ id: CLAUDE_ID, name: store.clientName, color: CLAUDE_COLOR, state: "idle" });
+    api.pills.set({ id: CLAUDE_ID, label: store.clientName, color: CLAUDE_COLOR, mood: "idle" }, "start");
     if (!State.focusId) State.focusId = CLAUDE_ID;
 
     const offs: Disposer[] = [
@@ -347,10 +345,7 @@ export class Claude {
         if (req) void ClaudeBridge.approvalDecline(req);
       }
       if (store.hasPending()) State.isPinned = false;
-      State.tasks = State.tasks.filter((t) => t.id !== CLAUDE_ID && !store.agentSteps.has(t.id));
-      if (State.focusId === CLAUDE_ID || (State.focusId && store.agentSteps.has(State.focusId))) {
-        State.focusId = State.tasks[0]?.id ?? null;
-      }
+      // The pills (Claude's and the agents') go with the module: the registry clears them.
       this.pending.clear();
     };
   }

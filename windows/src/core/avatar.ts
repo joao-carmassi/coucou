@@ -3,18 +3,20 @@
 import type { BotEmoteName, BotStateName } from "./layout";
 import type { AvatarSignal } from "./moduleApi";
 
-interface Entry { sig: AvatarSignal; at: number; seq: number }
+/** An AvatarSignal whose mood is already a current name (the registry maps the old ones). */
+export type Signal = Omit<AvatarSignal, "state"> & { state: BotStateName };
+interface Entry { sig: Signal; at: number; seq: number }
 
 const signals = new Map<string, Entry>();
 let seq = 0;
 let emote: BotEmoteName | null = null;
 
-const same = (a: AvatarSignal, b: AvatarSignal) =>
+const same = (a: Signal, b: Signal) =>
   a.state === b.state && a.priority === b.priority && a.emote === b.emote && a.ttlMs === b.ttlMs;
 
 export const Avatar = {
   /** True when the signal changed. Never notifies State: the caller redraws. */
-  publish(owner: string, sig: AvatarSignal | null, now = performance.now()): boolean {
+  publish(owner: string, sig: Signal | null, now = performance.now()): boolean {
     const prev = signals.get(owner);
     if (!sig) return signals.delete(owner);
     signals.set(owner, { sig, at: now, seq: ++seq });

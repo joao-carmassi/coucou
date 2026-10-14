@@ -2,6 +2,7 @@
 // core/state.ts (m3-ok). Nothing here is global: one store per module start.
 
 import type { ManagedSession } from "./bridge";
+import type { IslandApi } from "../../core/moduleApi";
 import { State } from "../../core/state";
 import {
   CLAUDE_ID, newSession,
@@ -33,6 +34,8 @@ export const CLIENT_NAMES: Record<ClaudeClient, string> = {
 export const CLIENT_UNKNOWN = "VS Code";
 
 export class ClaudeStore {
+  constructor(private readonly api: IslandApi) {}
+
   /** Every session the island knows of, in the order they were first heard. */
   sessions: ClaudeSession[] = [];
   /** The session in front; empty when there is none. */
@@ -45,7 +48,7 @@ export class ClaudeStore {
   managedSessions: ManagedSession[] = [];
   /** Badges on the pills of the overview, by task id. */
   badges = new Map<string, PillBadge>();
-  /** The last lines of the third-party agents' pills (AgentTask has no steps of its own). */
+  /** The last lines of the third-party agents' pills (Pill has no steps of its own). */
   agentSteps = new Map<string, string[]>();
 
   private listeners = new Set<() => void>();
@@ -96,7 +99,7 @@ export class ClaudeStore {
 
   /** The Claude pill, when the module has put it among the tasks. */
   get pill() {
-    return State.tasks.find((t) => t.id === CLAUDE_ID) ?? null;
+    return State.pills.find((t) => t.id === CLAUDE_ID) ?? null;
   }
 
   /**
@@ -105,7 +108,7 @@ export class ClaudeStore {
    */
   bringForward(id: string) {
     const from = this.session;
-    if (from.id && from.id !== id && (from.approval || from.question)) from.news = "approval";
+    if (from.id && from.id !== id && (from.approval || from.question)) from.news = "alert";
     this.frontId = id;
     this.session.news = null;
     this.present();
@@ -113,11 +116,9 @@ export class ClaudeStore {
 
   /** The Claude pill wears the session in front: its project, its state. */
   present() {
-    const t = this.pill;
-    if (t) {
+    if (this.pill) {
       const s = this.session;
-      t.name = s.id ? s.project : this.clientName;
-      t.state = s.state;
+      this.api.pills.set({ id: CLAUDE_ID, label: s.id ? s.project : this.clientName, mood: s.state });
     }
     this.changed();
   }
