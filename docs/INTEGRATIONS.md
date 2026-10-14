@@ -77,7 +77,7 @@ One module per service: `github`, `vercel`, `stripe`, `n8n`, `resend`, `calcom`,
 
 GitHub also has a panel (activity, projects, pull requests, runs, threads) and news cards (broken build, merged pull request, new pull request on your project). Details and the token permissions: `windows/README.md`.
 
-Service results can decorate Claude cards through the `taskCard`, `taskNews` and `avatar.tint` hooks, so `claude` never imports a service module.
+Each service answers for its own pill through the board's `board.card`, `board.news` and `board.focus` services (and `avatar.tint`), so neither the board nor `claude` imports a service module and the cards show without `claude`.
 
 ### Adding a service
 

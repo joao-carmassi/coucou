@@ -1,7 +1,7 @@
 // One module per service (github, vercel, stripe, n8n, resend, calcom, notion). Plain objects:
 // nothing runs at import; heavy views are built in ViewDef.build. Polls are in Rust (events
-// `integration`, `secrets-changed`). Cards show in the Claude overview through the `taskCard` /
-// `taskNews` hooks, each answering only for its own pill id.
+// `integration`, `secrets-changed`). Cards show in the board's home through the `board.card` /
+// `board.news` services, each answering only for its own pill id.
 
 import { PANEL_H } from "../../core/layout";
 import "./integrations.css";

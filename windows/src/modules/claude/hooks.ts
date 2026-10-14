@@ -564,10 +564,10 @@ export function handleHook(c: Claude, payload: HookPayload) {
   const cwd = payload.cwd ?? "";
 
   /** Alerts force the island open; work events only reveal the compact island. */
-  const surface = (view: IslandViewName, isAlert: boolean) => {
+  const surface = (view: IslandViewName | null) => {
     if (c.api.island.mode() === "expanded") {
-      if (isAlert) c.api.island.setView(view);
-    } else if (isAlert) {
+      if (view) c.api.island.setView(view);
+    } else if (view) {
       c.alert(view);
     } else if (c.api.island.mode() === "hidden") {
       c.api.island.wake();
@@ -580,7 +580,7 @@ export function handleHook(c: Claude, payload: HookPayload) {
    * the one in front.
    */
   const tell = (what: "done" | "error") => {
-    if (focused) return surface(what === "done" ? "finished" : "error", true);
+    if (focused) return surface(what === "done" ? "finished" : "error");
     if (!front) session.news = what;
     if (c.focusId() !== CLAUDE_ID) c.store.setBadge(CLAUDE_ID, what);
     // The sound already played: a hidden island has to show up too (it folds back on its own),
@@ -590,7 +590,7 @@ export function handleHook(c: Claude, payload: HookPayload) {
 
   switch (name) {
     case "SessionStart":
-      surface("overview", false);
+      surface(null);
       Sound.play("work");
       break;
 
@@ -606,7 +606,7 @@ export function handleHook(c: Claude, payload: HookPayload) {
         log(session, newStep("Prompt", "prompt", asked));
         say(session, asked.slice(0, LINE_CHARS));
       }
-      surface("overview", false);
+      surface(null);
       break;
     }
 
@@ -615,7 +615,7 @@ export function handleHook(c: Claude, payload: HookPayload) {
       const tool = payload.tool_name ?? "Tool";
       startStep(session, tool, payload.tool_input ?? {}, cwd);
       say(session, stepLabel(tool, payload.tool_input ?? {}));
-      surface("overview", false);
+      surface(null);
       break;
     }
 

@@ -90,7 +90,7 @@ mod tests {
         let (changed, s) = run(r#"{"autostart":true,"model":"x","activeIntegrations":[],"voiceEnabled":true}"#);
         assert!(changed);
         let on: Vec<_> = s.modules_enabled.iter().filter(|(_, v)| **v).map(|(k, _)| k.as_str()).collect();
-        assert_eq!(on, ["claude", "media", "upload", "voice"]);
+        assert_eq!(on, ["board", "claude", "media", "upload", "voice"]);
         assert_eq!(s.extra["model"], "x", "unknown keys survive");
         let (changed, _) = run(&serde_json::to_string(&s).unwrap());
         assert!(!changed, "a migrated file is stable");

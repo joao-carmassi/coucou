@@ -73,11 +73,6 @@
   white-space: nowrap;
 }
 
-/* A session at work is its card: the whole of it opens the session panel. */
-.card.opens:hover {
-  background: color-mix(in srgb, var(--card), #fff 2.5%);
-}
-
 .who .diff-pm.count {
   font-size: 10.5px;
 }

@@ -1,4 +1,4 @@
-// The Claude cards: overview (the session at a glance), approval, question, error, finished.
+// The Claude cards: the session's board card (the session at a glance), approval, question, error, finished.
 // Ported from views/views.ts at m3-ok. Every card works on the module's store, never on State.
 
 import { h, svg, clear, dot, replay } from "../../../kit/dom";
@@ -7,11 +7,11 @@ import type { ViewContext, ViewHost } from "../../../core/moduleApi";
 import { Bridge } from "../../../core/bridge";
 import { ClaudeBridge } from "../bridge";
 import { State } from "../../../core/state";
-import { createMiniBot, pruneMiniBots } from "../../../mochi/minibots";
 import type { Pill } from "../../../core/state";
 import { hasTarget, type Claude } from "../claude";
 import { claudeSettings } from "../store";
-import { CLAUDE_SERVICE, askPill, type TaskCardOf, type TaskNewsOf } from "../api";
+import { askPill } from "../../../kit/ask";
+import type { BoardCardOf, BoardNewsOf } from "../../board/api";
 import { ICONS } from "../icons";
 import { COLOR } from "../../../kit/palette";
 import { CARD_AIR_MIN, fittedHeight } from "../fit";
@@ -23,10 +23,8 @@ import { hasPreview, stepIcon, stepName, stepPreview } from "./step";
 
 /** Lines of a step's preview the overview has room for. */
 const NOW_LINES = 3;
-/** The overview layout's height (see index.ts). */
-const OVERVIEW_H = 160;
 /**
- * A session's card holds a line more than the overview was cut for — the
+ * A session's card holds a line more than the board's layout was cut for — the
  * step, then three lines of what it did: the island is this much taller for
  * it, so the card keeps the same air under its last line as above its first.
  */
@@ -126,7 +124,7 @@ function newsActions(c: Claude): HTMLElement {
 }
 
 /**
- * What a pill's news (hook `taskNews`) puts on a result card: who and what kind of news, the news
+ * What a pill's news (service `board.news`) puts on a result card: who and what kind of news, the news
  * itself, the facts that go with it. Returns false, and leaves the card to its session, when the
  * front pill has none; `hidden` are the parts of the session's version.
  */
@@ -134,7 +132,7 @@ function tellNews(
   c: Claude, task: Pill | null, who: HTMLElement, title: HTMLElement, facts: HTMLElement,
   hidden: HTMLElement[], newsRow: HTMLElement,
 ): boolean {
-  const news = task ? askPill(c.api.useAll<TaskNewsOf>(CLAUDE_SERVICE.taskNews), task.id) : undefined;
+  const news = task ? askPill(c.api.useAll<BoardNewsOf>("board.news"), task.id) : undefined;
   for (const el of hidden) el.style.display = news ? "none" : "";
   newsRow.style.display = news ? "" : "none";
   facts.style.display = news ? "" : "none";
@@ -216,58 +214,26 @@ function otherCard(c: Claude, task: Pill): HTMLElement {
   );
 }
 
-function buildOverview(c: Claude, ctx: ViewContext): ViewHost {
-  const { actions, onResize } = ctx;
+/**
+ * The board's left card for the pills Claude owns (service `board.card`): the session at a glance for
+ * Claude's pill, its idle card with no session, the last words of a third-party agent. The session
+ * card keeps one DOM across redraws; `sync` updates it. Everything else is drawn by the pill's owner.
+ */
+function boardCardOf(c: Claude): BoardCardOf {
   const store = c.store;
   const who = h("div", { class: "who" });
   // What the session is doing: the step, and under it a look at what it did.
   const nowLine = h("div", { class: "now-line" });
   const nowBox = h("div", { class: "now-box" });
   // With several sessions followed: how many, and the way to the list of them.
+  let blip = () => {};
   const sessionsBtn = sessionsChip(store, () => {
-    actions.blip();
+    blip();
     c.openSessions();
   });
   const sessionBody = h("div", { class: "card-body sess-card" }, who, nowLine, nowBox);
-  const leftBody = h("div", { class: "left-body" });
-  const jump = h(
-    "button",
-    {
-      class: "icon-btn jump",
-      title: "Abrir",
-      onclick: () => {
-        const id = State.focusPill?.id;
-        if (id === CLAUDE_ID) c.openClient();
-        else if (id) c.api.call("pillOpen", id);
-      },
-    },
-    svg(ICONS.arrowUpRight, 8),
-  );
-  const left = card(null, leftBody, jump);
-  // A session is its card: a click anywhere on it opens the session panel —
-  // the file being written, the steps, the changes. The ↗ stays the way out
-  // to where the session runs.
-  left.addEventListener("click", (e) => {
-    if (mode !== "session" || (e.target as Element).closest("button")) return;
-    actions.blip();
-    c.openSession();
-  });
-  const pills = h("div", { class: "pills" });
-  const right = card(null, pills);
-
-  const el = h("div", { class: "view overview" },
-    h("div", { class: "left" }, left),
-    h("div", { class: "right" }, right),
-  );
-
-  let pillIds = "";
-  let lastFocus: string | null = null;
-  let mode: "session" | "card" | null = null;
-  let cardKey = "";
   let lineKey = "";
   let boxKey = "";
-  /** The mode the island's height was last asked for. */
-  let sized: "session" | "card" | null = null;
 
   /** The session's two lines, redrawn only when what they show has changed. */
   function syncNow(session: ClaudeSession) {
@@ -303,88 +269,52 @@ function buildOverview(c: Claude, ctx: ViewContext): ViewHost {
     if (nowBox.firstElementChild) replay(nowBox.firstElementChild as HTMLElement, "now-in");
   }
 
-  return {
-    el,
-    get height() {
-      return mode === "session" ? OVERVIEW_H + SESSION_CARD_ROOM : undefined;
-    },
-    sync() {
-      const task = State.focusPill;
-      if (task?.id !== lastFocus) {
-        lastFocus = task?.id ?? null;
-        cardKey = "";
-        mode = null;
-      }
+  function syncSession(task: Pill, session: ClaudeSession) {
+    clear(who);
+    who.append(
+      dot(task.color, 7),
+      // A conversation that has a title goes by it, as it does in Claude
+      // Code, with its project after; untitled, the project is its name.
+      h("span", { class: "name", text: session.title ?? task.label, title: session.title ?? "" }),
+      h("span", { class: "tool", text: session.title ? task.label : "Claude Code" }),
+    );
+    sessionsBtn.sync();
+    who.append(sessionsBtn.el);
+    // What the session has written so far: the lines added and removed —
+    // when the chip is not there: the title keeps the room, and the panel has them.
+    const files = store.sessions.length > 1 ? [] : store.sessionFiles;
+    if (files.length > 0) {
+      const size = plusMinus(files.reduce((n, f) => n + f.additions, 0), files.reduce((n, f) => n + f.deletions, 0));
+      size.classList.add("count");
+      size.title = files.length === 1 ? "1 arquivo alterado" : `${files.length} arquivos alterados`;
+      who.append(size);
+    }
+    syncNow(session);
+  }
 
-      // The Claude pill with a session to show has the session's card; every
-      // other pill shows its own.
-      const session = task?.id === CLAUDE_ID && store.session.id ? store.session : null;
-
-      if (task && session) {
-        if (mode !== "session") {
-          clear(leftBody);
-          leftBody.append(sessionBody);
-          mode = "session";
-          cardKey = "";
-        }
-        clear(who);
-        who.append(
-          dot(task.color, 7),
-          // A conversation that has a title goes by it, as it does in Claude
-          // Code, with its project after; untitled, the project is its name.
-          h("span", { class: "name", text: session.title ?? task.label, title: session.title ?? "" }),
-          h("span", { class: "tool", text: session.title ? task.label : "Claude Code" }),
-        );
-        sessionsBtn.sync();
-        who.append(sessionsBtn.el);
-        // What the session has written so far: the lines added and removed —
-        // when the chip is not there: the title keeps the room, and the panel has them.
-        const files = store.sessions.length > 1 ? [] : store.sessionFiles;
-        if (files.length > 0) {
-          const size = plusMinus(files.reduce((n, f) => n + f.additions, 0), files.reduce((n, f) => n + f.deletions, 0));
-          size.classList.add("count");
-          size.title = files.length === 1 ? "1 arquivo alterado" : `${files.length} arquivos alterados`;
-          who.append(size);
-        }
-        syncNow(session);
-      } else if (task) {
-        // A card a module drew for its own pill (integrations); it says when it must be redrawn.
-        const own = askPill(c.api.useAll<TaskCardOf>(CLAUDE_SERVICE.taskCard), task.id);
-        const key = [
-          task.id, task.mood, store.agentSteps.get(task.id)?.join("|"), own?.key,
-          // The idle Claude card's button follows Settings ("Idle button opens").
-          store.clientName, claudeSettings(c.api).hooksInstalled, claudeSettings(c.api).idleOpen, store.session.client,
-        ].join("~");
-        if (key !== cardKey) {
-          cardKey = key;
-          mode = "card";
-          clear(leftBody);
-          leftBody.append(own ? own.build() : task.id === CLAUDE_ID ? idleCard(c, task) : otherCard(c, task));
-        }
-      }
-
-      jump.style.display = !hasTarget(task?.id) ? "none" : "";
-      if (mode !== sized) {
-        sized = mode;
-        onResize();
-      }
-
-      left.classList.toggle("opens", mode === "session");
-      // "Abrir" is the ↗'s, to where the session runs: the card leads to its panel.
-      left.title = mode === "session" ? "Ver a sessão" : "";
-
-      const others = State.otherPills.slice(0, 4);
-      // Nothing else active: the left card takes the full width.
-      el.classList.toggle("solo", others.length === 0);
-      // The Claude pill's name changes with Settings too, not only with a session.
-      const pillKey = others.map((t) => `${t.id}:${store.badges.get(t.id) ?? t.badge ?? ""}`).join("|") + `|${store.clientName}`;
-      if (pillKey !== pillIds) {
-        pillIds = pillKey;
-        clear(pills);
-        for (const t of others) pills.append(buildPill(c, t));
-        pruneMiniBots();
-      }
-    },
+  return (taskId) => {
+    const task = State.pills.find((t) => t.id === taskId);
+    if (!task) return null;
+    // The Claude pill with a session to show has the session's card.
+    if (taskId === CLAUDE_ID && store.session.id) {
+      return {
+        key: "session",
+        build: (actions) => ((blip = () => actions.blip()), sessionBody),
+        sync: () => syncSession(task, store.session),
+        open: () => c.openSession(),
+        hint: "Ver a sessão",
+        room: SESSION_CARD_ROOM,
+        target: true,
+      };
+    }
+    const steps = store.agentSteps.get(taskId);
+    if (taskId !== CLAUDE_ID && !steps) return null;
+    const key = [
+      task.id, task.mood, steps?.join("|"),
+      // The idle Claude card's button follows Settings ("Idle button opens").
+      store.clientName, claudeSettings(c.api).hooksInstalled, claudeSettings(c.api).idleOpen, store.session.client,
+    ].join("~");
+    return { key, build: () => (taskId === CLAUDE_ID ? idleCard(c, task) : otherCard(c, task)), target: taskId === CLAUDE_ID };
   };
 }
 
@@ -422,49 +352,6 @@ function idleCard(c: Claude, task: Pill): HTMLElement {
     h("div", { class: "tile-status" }, dot(statusColor, 5), h("span", { text: label })),
     actions,
   );
-}
-
-function buildPill(c: Claude, task: Pill): HTMLElement {
-  const label = task.id === CLAUDE_ID ? c.store.clientName : task.label;
-  const canvas = createMiniBot(task, 24);
-  const pill = h(
-    "div",
-    { class: "pill", onclick: () => c.focusPill(task.id) },
-    canvas,
-    h("span", { class: "lbl", text: label }),
-  );
-  pill.style.borderColor = `${task.color}24`;
-  pill.addEventListener("mouseenter", () => {
-    pill.style.background = `${task.color}2e`;
-    pill.style.borderColor = `${task.color}8c`;
-    pill.style.boxShadow = `0 2px 10px ${task.color}59`;
-    (pill.querySelector(".lbl") as HTMLElement).style.color = lighten(task.color, 0.3);
-  });
-  pill.addEventListener("mouseleave", () => {
-    pill.style.background = "";
-    pill.style.borderColor = `${task.color}24`;
-    pill.style.boxShadow = "";
-    (pill.querySelector(".lbl") as HTMLElement).style.color = "";
-  });
-
-  const badgeKind = c.store.badges.get(task.id) ?? task.badge;
-  if (badgeKind) {
-    const colors = { alert: "#F5A524", done: "#22C55E", error: "#F4505E" } as const;
-    const icons = { alert: ICONS.bang, done: ICONS.check, error: ICONS.xmark } as const;
-    const inner = h("i", { style: `background:${colors[badgeKind]}` }, svg(icons[badgeKind], 6, { stroke: badgeKind === "done" ? 3 : 0 }));
-    const badge = h("div", { class: "pill-badge" }, inner);
-    badge.style.boxShadow = `0 0 4px ${colors[badgeKind]}99`;
-    pill.append(badge);
-  }
-  return pill;
-}
-
-function lighten(hex: string, amount: number): string {
-  const v = parseInt(hex.replace("#", ""), 16);
-  const c = [(v >> 16) & 255, (v >> 8) & 255, v & 255].map((x) =>
-    Math.min(255, Math.round(x + amount * 255)),
-  );
-  return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
 
 // ── Approval ──────────────────────────────────────────────────────────────────
@@ -889,4 +776,4 @@ function buildFinished(c: Claude, ctx: ViewContext): ViewHost {
 }
 
 /** The views of the card family, laid out as in docs/SPEC.md. */
-export const CARDS = { buildOverview, buildApproval, buildQuestion, buildError, buildFinished };
+export const CARDS = { boardCardOf, buildApproval, buildQuestion, buildError, buildFinished };

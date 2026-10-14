@@ -45,6 +45,11 @@ export class Claude {
     this.store = new ClaudeStore(api);
   }
 
+  /** Claude's pill and the third-party agents it follows are its own; the board asks it about them. */
+  owns(id: string): boolean {
+    return id === CLAUDE_ID || this.store.agentSteps.has(id);
+  }
+
   /** The pill in front. */
   focusId(): string | null {
     return State.focusPill?.id ?? null;
@@ -116,10 +121,9 @@ export class Claude {
     prev?.off();
   }
 
-  /** The clicked pill comes to the front; Claude's pill brings its pending card with it. */
+  /** A pill of the board's list was clicked (the board plays the blip): it comes to the front; Claude's pill brings its pending card with it. */
   focusPill(id: string) {
     this.setFocus(id);
-    Sound.play("blip");
     // A request that came in while another pill had the front only left a
     // badge: bringing Claude's pill forward is asking for its card.
     if (id !== CLAUDE_ID) return;

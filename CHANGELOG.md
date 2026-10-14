@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- **Board module** (`board`, default on, TS only): owns the Início tab and the `overview` view. It asks the module that owns each pill for its card (`board.card`, `board.news`, `board.pill`, `board.focus`, typed in `modules/board/api.ts`), so pills of any module have a surface without `claude`. Claude provides its own pill's session card; integrations their own. `claude.taskCard`/`claude.taskNews` are gone. With only the board on, Início shows the pill list or an empty note.
+- Clicking a pill in the Início list focuses it through its owner (`board.focus`).
+- GitHub's home fallback now depends on the board being absent, not on `claude`.
+- Pin request queue (`api.island.request`), `api.pills.focus`, `api.paused`/`onPause`, `api.settings`/`saveSettings` (typed per-module settings), shared UI kit in `src/kit`.
+- Board stylesheet split out of claude's (same rules, new sheet order); `.jump` and `.icon-btn` moved to the shared sheet.
+- `neutrality-audit --write-ratchet` keeps the `reasons` block of the ratchet file.
+
 ## 0.3.1
 
 - The core no longer carries module content: module icons, GitHub/Claude CSS and the diff kit moved to the modules or became generic (`pane-*`, `diff-*`).

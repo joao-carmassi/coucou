@@ -182,4 +182,19 @@ mod tests {
         assert!(s.module_on("timer", false));
         assert!(!s.module_on("claude", true));
     }
+
+    #[test]
+    fn board_is_filled_on_for_an_older_settings_file() {
+        // A settings.json from before the board existed: the choices stay, the board comes on, nothing else moves.
+        let old = r#"{"soundVolume":0.3,"modulesEnabled":{"claude":false,"media":true,"github":true},"idleOpen":"vscode"}"#;
+        let mut s: Settings = serde_json::from_str(old).unwrap();
+        assert!(fill_defaults(crate::modules::CATALOG, &mut s));
+        assert!(s.module_on("board", false), "board defaults on");
+        assert!(!s.module_on("claude", true) && s.module_on("github", false), "the user's choices stay");
+        let back = serde_json::to_value(&s).unwrap();
+        assert_eq!(back["idleOpen"], "vscode");
+        assert_eq!(back["modulesEnabled"]["board"], true);
+        let again: Settings = serde_json::from_value(back).unwrap();
+        assert_eq!(again.modules_enabled, s.modules_enabled);
+    }
 }
