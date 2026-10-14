@@ -7,7 +7,7 @@ import { Bridge } from "../../core/bridge";
 import "./settings.css";
 import { type GithubAccount, IntegrationsBridge } from "./bridge";
 import { h, clear } from "../../views/dom";
-import { GITHUB, type Provider } from "./providers";
+import { GITHUB, PROVIDERS, moduleIdOf, type Provider } from "./providers";
 
 /** Green for what is in place, red for what is missing. */
 const statusColor = (ok: boolean) => (ok ? "var(--green)" : "var(--red)");
@@ -205,3 +205,5 @@ function fieldRow(field: Provider["fields"][number], present: Record<string, boo
   });
   return h("div", { class: "row" }, h("label", { style: "min-width:104px", text: field.label }), input, saveBtn, dotEl);
 }
+
+export const settingsSections = Object.fromEntries(PROVIDERS.map((p) => [moduleIdOf(p), () => providerSettingsSection(p)]));

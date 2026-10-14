@@ -26,8 +26,6 @@ const view = (
 
 export const claude: ModuleDef = {
   id: "claude",
-  label: "Claude Code",
-  defaultEnabled: true,
   views: [
     view("overview", { height: 160, botX: 68, botY: null, botDiameter: 58, agentMode: "pills" },
       (ctx) => CARDS.buildOverview(claudeOf(ctx.api), ctx)),

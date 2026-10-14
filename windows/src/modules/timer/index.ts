@@ -49,8 +49,6 @@ function start(api: IslandApi): Disposer {
 
 export const timerModule: ModuleDef = {
   id: "timer",
-  label: "Timer",
-  defaultEnabled: false,
   views: [{
     name: "timer",
     layout: { height: 160, botX: 54, botY: null, botDiameter: 46, agentMode: "none" },

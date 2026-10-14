@@ -5,7 +5,7 @@
 //
 // Rules:
 //   1. TS import path containing `/modules/` (core/registry.ts and settings/main.ts may import modules/settings + catalog).
-//   2. Module id / label / group (derived from src/modules/* folders and the catalog) as a whole word in code
+//   2. Module id / label / group (derived from src/modules/* folders and their manifest.json) as a whole word in code
 //      (comment-only hits are counted as warnings: rule "... (comment)").
 //   3. Concept denylist (approval, session, overview, ...) in code (comment-only: warning).
 //   4. Rust: `modules::` outside CATALOG/registry/handler lines; events emitted by core must be generic;
@@ -41,11 +41,12 @@ const files = (dir, ext) => {
 const rel = (p) => relative(root, p).split(sep).join("/");
 const allowed = (file, line) => ALLOWLIST.find(([f, s]) => file.endsWith(f) && line.includes(s));
 
-// Names: folder ids + ids/labels/groups from the catalog.
+// Names: folder ids + ids/labels/groups from the manifests.
 const names = new Set(readdirSync(join(root, "src/modules")).filter((n) => statSync(join(root, "src/modules", n)).isDirectory()));
-const cat = join(root, "src/modules/catalog.ts");
-if (existsSync(cat)) {
-  for (const m of readFileSync(cat, "utf8").matchAll(/\b(?:id|label|group):\s*"([^"]+)"/g)) names.add(m[1]);
+for (const n of [...names]) {
+  const f = join(root, "src/modules", n, "manifest.json");
+  if (!existsSync(f)) continue;
+  for (const m of [JSON.parse(readFileSync(f, "utf8"))].flat()) for (const k of ["id", "label", "group"]) if (m[k]) names.add(m[k]);
 }
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const wordRe = (list) => new RegExp(`(?<![\\p{L}\\p{N}_])(${[...list].map(esc).join("|")})(?![\\p{L}\\p{N}_])`, "iu");

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PROVIDERS, moduleIdOf, pillPresent } from "../src/modules/integrations/providers.ts";
 import { resolveEnabled } from "../src/core/moduleApi.ts";
-import { MODULE_INFO } from "../src/modules/catalog.ts";
+import { MODULE_INFO } from "./catalog.ts";
 
 const ids = PROVIDERS.map(moduleIdOf);
 

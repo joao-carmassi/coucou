@@ -109,9 +109,6 @@ function start(api: IslandApi): Disposer {
 
 export const voiceModule: ModuleDef = {
   id: "voice",
-  label: "Voz",
-  defaultEnabled: false,
-  requires: ["claude"],
   views: [{
     name: "voice",
     layout: { height: 160, botX: 60, botY: null, botDiameter: 50, agentMode: "column" },

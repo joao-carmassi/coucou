@@ -11,8 +11,6 @@ import { buildMediaView, mediaOf } from "./view";
 
 export const media: ModuleDef = {
   id: "media",
-  label: "Mídia",
-  defaultEnabled: true,
   views: [{
     name: "media",
     layout: { height: PANEL_H, botX: 67, botY: 108, botDiameter: 71, agentMode: "none" },

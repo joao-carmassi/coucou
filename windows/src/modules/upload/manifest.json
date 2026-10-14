@@ -1,0 +1,10 @@
+{
+  "id": "upload",
+  "label": "Soltar arquivo",
+  "default": true,
+  "requires": [
+    "claude"
+  ],
+  "group": "Claude",
+  "order": 4
+}

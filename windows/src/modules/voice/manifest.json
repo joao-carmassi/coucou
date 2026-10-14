@@ -1,0 +1,10 @@
+{
+  "id": "voice",
+  "label": "Voz",
+  "default": false,
+  "requires": [
+    "claude"
+  ],
+  "group": "Claude",
+  "order": 5
+}

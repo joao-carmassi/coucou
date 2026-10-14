@@ -190,7 +190,7 @@ npx tsc --noEmit && npm run build && node --test tests/resolvers.test.ts
 cd src-tauri && cargo check && cargo test
 grep -rn "from \"\.\./modules" src/island                       # empty
 grep -rnE "\.\./modules" src/core | grep -v registry.ts        # empty
-diff <(grep -o 'id: "[a-z]*"' src-tauri/src/modules/mod.rs) <(grep -o 'id: "[a-z]*"' src/modules/catalog.ts)
+# catalog: one source, src/modules/*/manifest.json (cargo test catalog_matches_manifests, tests/catalog.test.ts)
 ```
 Runtime: with an empty `MODULES` the app behaves as the core-only build; the Settings window lists six toggles; flipping them writes `modulesEnabled` and the log prints nothing for modules that have no implementation yet.
 
@@ -257,8 +257,8 @@ After M1 (bridge split) the comment-only warnings dropped 99 -> 56 (findings unc
 
 - `src/style/index.ts` imports only the shared sheets (ui, core, overview, settings). Every module imports its own sheets from its `index.ts` (claude: base, chat, panel, claude; upload; integrations (in `provider.ts`); media; timer).
 - `src/main.ts` imports `./style` before anything that reaches `modules/index`, so module sheets land AFTER the shared ones (needed for ties such as `.sess-newbtn` vs `.btn`).
-- Inter-module order = the import order in `modules/index.ts` (claude, upload, integrations, media, timer, voice), NOT the catalog order. Sheets that were interleaved before (upload between claude chat and panel; integrations between claude panel and claude.css) now follow all claude sheets; checked: no tie between rules that can hit the same element.
-- The settings window must never import a module `index.ts` (it would pull the island CSS: `html,body{overflow:hidden}`). It loads `src/modules/settings.ts` (`SETTINGS_SECTIONS`, keyed by module id); each module's `settings.css` is imported from its `settings.ts`. `ModuleDef.settings` was removed.
+- Inter-module order = the glob order of `modules/index.ts` (M8: alphabetical by folder: claude, integrations, media, timer, upload, voice), NOT the catalog order. M8 moved only the upload sheet (after integrations/media/timer); the single selector pair that crosses (`#island.upload-on #bot-canvas` vs `#island.ghost-on #bot-canvas`) has identical declarations, so the cascade is unchanged. Sheets that were interleaved before (upload between claude chat and panel; integrations between claude panel and claude.css) now follow all claude sheets; checked: no tie between rules that can hit the same element.
+- The settings window must never import a module `index.ts` (it would pull the island CSS: `html,body{overflow:hidden}`). It loads `src/modules/settings.ts` (`SETTINGS_SECTIONS`, glob of each folder's `settings.ts` export `settingsSections: Record<moduleId, SettingsSection>`); each module's `settings.css` is imported from its `settings.ts`. `ModuleDef.settings` was removed.
 
 ## Hooks and services (M3/M4)
 
@@ -311,3 +311,16 @@ Module commands are named `<id>_*` (claude_*, media_*, voice_*, github_*, n8n_*;
 | 30 | claude activity |
 | 20 | media |
 | 10 | integrations |
+
+## How to add a module (M8)
+
+Goal: a module is one folder, `src/modules/<id>/`. Nothing in `core/`, `island/`, `settings/` or `lib.rs` changes.
+
+1. `manifest.json`: `{ "id", "label", "default", "requires"?, "group"?, "order", "devOnly"? }` (an array when a folder holds several modules, as `integrations/`). `order` is start order and settings order (a requirement needs a lower `order`; ties break by id). `devOnly: true` = debug builds only (TS: `import.meta.env.DEV`; Rust: `#[cfg(debug_assertions)]` in the generated catalog), so release catalogs and `settings.json` never list it.
+2. `index.ts`: exports a `ModuleDef` (`{ id, views?, tabs?, start(api) }`). `modules/index.ts` finds it by `import.meta.glob("./*/index.ts")` and takes every export that has `id` and a `start` function. Import the module's own CSS here. Use only `core/moduleApi` types and what `api` gives; never import another module (share through `api.provide` / `api.use`).
+3. Optional `settings.ts`: `export const settingsSections = { <id>: () => ({ el, dispose? }) }`; the settings window renders it while the module is on. Settings values live in the flat `settings.json` (unknown keys travel in `extra`); use a key prefixed with the module id.
+4. Optional Rust side, only if the module needs native code: `pub mod x;` + one entry in `registry()` + its commands in `handler!` (all in `src-tauri/src/modules/mod.rs`). A catalog id with no `Module` is fine: the host treats it as on/off by setting, with no start/stop.
+
+Catalog: `build.rs` generates Rust `CATALOG` from the manifests; TS builds `MODULE_INFO` from the same files. Node tests cannot use `import.meta.glob`: `modules/resolve.ts` (`buildCatalog`, `collectDefs`) is pure and `tests/catalog.ts` feeds it manifests read from disk.
+
+Honest limits: (a) Rust code still needs the three edits in `modules/mod.rs`; (b) glob order is alphabetical by folder, so module CSS must not rely on cascade order between modules; (c) `devOnly` modules' JS is still in the release bundle (never started, not in the catalog); (d) `order` must be unique in practice for a stable start order across modules written by different people.

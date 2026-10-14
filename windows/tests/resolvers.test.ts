@@ -4,7 +4,7 @@ import { Compact } from "../src/core/compact.ts";
 import { Avatar } from "../src/core/avatar.ts";
 import { Hooks, Services, homeOf } from "../src/core/hooks.ts";
 import { resolveEnabled } from "../src/core/moduleApi.ts";
-import { MODULE_INFO } from "../src/modules/catalog.ts";
+import { MODULE_INFO } from "./catalog.ts";
 
 const clearCompact = () => ["a", "b", "c"].forEach((o) => Compact.set(o, null));
 

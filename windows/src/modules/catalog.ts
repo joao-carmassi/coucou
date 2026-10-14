@@ -1,17 +1,5 @@
-// Same ids, order, defaults and requirements as src-tauri/src/modules/mod.rs CATALOG.
-import type { ModuleInfo } from "../core/moduleApi";
+// The catalog: derived from modules/<folder>/manifest.json (Rust builds the same one in build.rs).
+// Loads only the manifests, so the settings window can use it without any module code.
+import { buildCatalog, type Manifest } from "./resolve";
 
-export const MODULE_INFO: ModuleInfo[] = [
-  { id: "claude", label: "Claude Code", defaultEnabled: true, group: "Claude" },
-  { id: "media", label: "Mídia", defaultEnabled: true },
-  { id: "timer", label: "Timer", defaultEnabled: false },
-  { id: "upload", label: "Soltar arquivo", defaultEnabled: true, requires: ["claude"], group: "Claude" },
-  { id: "voice", label: "Voz", defaultEnabled: false, requires: ["claude"], group: "Claude" },
-  { id: "github", label: "GitHub", defaultEnabled: false, group: "Integrações" },
-  { id: "vercel", label: "Vercel", defaultEnabled: false, group: "Integrações" },
-  { id: "stripe", label: "Stripe", defaultEnabled: false, group: "Integrações" },
-  { id: "n8n", label: "n8n", defaultEnabled: false, group: "Integrações" },
-  { id: "resend", label: "Resend", defaultEnabled: false, group: "Integrações" },
-  { id: "calcom", label: "Cal.com", defaultEnabled: false, group: "Integrações" },
-  { id: "notion", label: "Notion", defaultEnabled: false, group: "Integrações" },
-];
+export const MODULE_INFO = buildCatalog(Object.values(import.meta.glob<Manifest | Manifest[]>("./*/manifest.json", { eager: true, import: "default" })), import.meta.env.DEV);

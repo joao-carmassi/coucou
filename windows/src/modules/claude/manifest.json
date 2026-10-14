@@ -1,0 +1,7 @@
+{
+  "id": "claude",
+  "label": "Claude Code",
+  "default": true,
+  "group": "Claude",
+  "order": 1
+}

@@ -395,3 +395,5 @@ export function claudeSettingsSection(): { el: HTMLElement; dispose(): void } {
   const el = h("div", { style: "display:flex;flex-direction:column;gap:22px" }, hooksSection(status, ac.signal), wslSection(status, ac.signal));
   return { el, dispose: () => ac.abort() };
 }
+
+export const settingsSections = { claude: claudeSettingsSection };

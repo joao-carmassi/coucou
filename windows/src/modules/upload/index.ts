@@ -198,9 +198,6 @@ function start(api: IslandApi): Disposer {
 
 export const uploadModule: ModuleDef = {
   id: "upload",
-  label: "Soltar arquivo",
-  defaultEnabled: true,
-  requires: ["claude"],
   views: [
     { name: "upload", layout: { height: 176, botX: 140, botY: 104, botDiameter: 62, agentMode: "column" }, build: () => buildUpload() },
     // botY 103 = bar top (42 + 58) + 3, so the dot rides the bar.

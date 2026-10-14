@@ -64,3 +64,5 @@ export function voiceSettingsSection(): { el: HTMLElement; dispose(): void } {
   );
   return { el, dispose: () => offs.forEach((o) => void o.then((off) => off())) };
 }
+
+export const settingsSections = { voice: voiceSettingsSection };

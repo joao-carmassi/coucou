@@ -14,9 +14,6 @@ export function providerModule(def: Provider): ModuleDef {
   const github = moduleIdOf(def) === "github";
   return {
     id: moduleIdOf(def),
-    label: def.name,
-    defaultEnabled: false,
-    group: "Integrações",
     ...(github && {
       views: [{
         name: "github",

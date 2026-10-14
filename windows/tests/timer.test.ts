@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { TimerClock } from "../src/modules/timer/timer.ts";
 import { resolveEnabled } from "../src/core/moduleApi.ts";
-import { MODULE_INFO } from "../src/modules/catalog.ts";
+import { MODULE_INFO } from "./catalog.ts";
 
 test("countdown: idle -> ready -> running -> paused -> running -> done", () => {
   let t = 1_000;

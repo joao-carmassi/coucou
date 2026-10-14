@@ -1,0 +1,51 @@
+[
+  {
+    "id": "github",
+    "label": "GitHub",
+    "default": false,
+    "group": "Integrações",
+    "order": 6
+  },
+  {
+    "id": "vercel",
+    "label": "Vercel",
+    "default": false,
+    "group": "Integrações",
+    "order": 7
+  },
+  {
+    "id": "stripe",
+    "label": "Stripe",
+    "default": false,
+    "group": "Integrações",
+    "order": 8
+  },
+  {
+    "id": "n8n",
+    "label": "n8n",
+    "default": false,
+    "group": "Integrações",
+    "order": 9
+  },
+  {
+    "id": "resend",
+    "label": "Resend",
+    "default": false,
+    "group": "Integrações",
+    "order": 10
+  },
+  {
+    "id": "calcom",
+    "label": "Cal.com",
+    "default": false,
+    "group": "Integrações",
+    "order": 11
+  },
+  {
+    "id": "notion",
+    "label": "Notion",
+    "default": false,
+    "group": "Integrações",
+    "order": 12
+  }
+]

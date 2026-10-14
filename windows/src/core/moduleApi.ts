@@ -115,7 +115,9 @@ export interface IslandApi {
 }
 
 export interface ModuleInfo { id: string; label: string; defaultEnabled: boolean; requires?: string[]; /** Settings heading the module is listed under. */ group?: string }
-export interface ModuleDef extends ModuleInfo {
+/** Behaviour only: label, default, requirements and group live in the module's manifest.json. */
+export interface ModuleDef {
+  id: string;
   views?: ViewDef[];
   tabs?: TabDef[];
   start(api: IslandApi): Disposer | void;
@@ -126,3 +128,6 @@ export function resolveEnabled(catalog: readonly ModuleInfo[], stored: Readonly<
   for (const m of catalog) out[m.id] = (stored[m.id] ?? m.defaultEnabled) && (m.requires ?? []).every((r) => out[r] === true);
   return out;
 }
+
+/** A module's section of the settings window; it exists only while the module is on. */
+export type SettingsSection = () => { el: HTMLElement; dispose?(): void };
