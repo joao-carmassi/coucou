@@ -3,6 +3,7 @@
 
 import { h, svg, clear, dot, replay } from "../../../kit/dom";
 import { card } from "../../../kit/card";
+import { tile } from "../../../kit/tile";
 import type { ViewContext, ViewHost } from "../../../core/moduleApi";
 import { App } from "../../../kit/app";
 import { ClaudeBridge } from "../bridge";
@@ -207,10 +208,7 @@ function airy(lines: HTMLElement, onResize: () => void): { fit(): void; readonly
 /** Third-party agents and the integrations other modules add: their pill's last words. */
 function otherCard(c: Claude, task: Pill): HTMLElement {
   const steps = c.store.agentSteps.get(task.id);
-  return h("div", { class: "tile-card" },
-    h("div", { class: "tile-head" }, dot(task.color, 7), h("b", { text: task.label }), h("span", { text: steps ? "Agente" : "Integração" })),
-    h("div", { class: "tile-status" }, h("span", { text: steps?.at(-1) ?? "" })),
-  );
+  return tile({ title: task.label, sub: steps ? "Agente" : "Integração", dot: task.color, status: steps?.at(-1) ?? "" });
 }
 
 /**
@@ -226,7 +224,7 @@ function boardCardOf(c: Claude): BoardCardOf {
   const nowBox = h("div", { class: "now-box" });
   // With several sessions followed: how many, and the way to the list of them.
   let blip = () => {};
-  const sessionsBtn = sessionsChip(store, () => {
+  const sessionsBtn = sessionsChip(c.api, store, () => {
     blip();
     c.openSessions();
   });
@@ -325,7 +323,7 @@ function idleCard(c: Claude, task: Pill): HTMLElement {
   const statusColor = configured ? "#22C55E" : "#F4505E";
   const desktop = store.session.client === "desktop";
   const terminal = !desktop && claudeSettings(c.api).idleOpen === "terminal";
-  const actions = h("div", { class: "tile-actions" },
+  const actions = [
     h("button", {
       class: "link-btn",
       style: `color:${task.color}b3`,
@@ -340,17 +338,11 @@ function idleCard(c: Claude, task: Pill): HTMLElement {
             ? ClaudeBridge.startClaudeTerminal().then((ok) => ok || ClaudeBridge.openInVSCode(store.session.cwd, store.session.wslDistro))
             : ClaudeBridge.openInVSCode(store.session.cwd, store.session.wslDistro)),
     }),
-  );
+  ];
   if (!configured) {
-    actions.append(h("button", { class: "link-btn", style: "color:#8e939c", text: "Configurações…", onclick: () => void App.openSettingsWindow() }));
+    actions.push(h("button", { class: "link-btn", style: "color:#8e939c", text: "Configurações…", onclick: () => void App.openSettingsWindow() }));
   }
-  return h(
-    "div",
-    { class: "tile-card" },
-    h("div", { class: "tile-head" }, dot(task.color, 7), h("b", { text: store.clientName }), h("span", { text: "Integração" })),
-    h("div", { class: "tile-status" }, dot(statusColor, 5), h("span", { text: label })),
-    actions,
-  );
+  return tile({ title: store.clientName, sub: "Integração", dot: task.color, status: [dot(statusColor, 5), h("span", { text: label })], actions });
 }
 
 // ── Approval ──────────────────────────────────────────────────────────────────

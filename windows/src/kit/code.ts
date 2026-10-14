@@ -5,6 +5,12 @@
 // line at a time, so a small tokenizer per comment style is all it takes. It
 // knows nothing of what came on the line before (a string or a comment left
 // open), which a diff's fragments wouldn't tell it anyway.
+//
+// Public classes (styled in kit/code.css)
+//   .code-diff              a block of diff lines; colours its .hl-* tokens
+//   .diff-line              one line (grid: .n number, .s sign, .t text); `.add` / `.del` / `.hunk` say what it is, `.gone` strikes a removed word
+//   .diff-pm                the "+N −M" pair; .diff-add and .diff-del are its two colours
+//   .file-ext               the file-kind badge (`.dark` for light colours); its colour is --c
 
 import { h } from "./dom";
 import { COLOR, isLight } from "./palette";

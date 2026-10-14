@@ -1,4 +1,5 @@
-/* A piece of code or a diff: its lines, its gutter, its file badge and an editor's colours (see kit/code.ts). */
+/* A piece of code or a diff: its lines, its gutter, its file badge and an editor's colours (see kit/code.ts).
+   Public classes: .code-diff, .diff-line (.add .del .hunk; .n .s .t .gone), .diff-pm (.diff-add .diff-del), .file-ext (.dark). */
 :root {
   --code: #d6d9df;
   --code-keyword: #c792ea;

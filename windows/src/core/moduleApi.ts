@@ -126,7 +126,9 @@ export interface IslandApi {
   timeout(fn: () => void, ms: number): Disposer;
   interval(fn: () => void, ms: number, opts?: { whenVisible?: boolean }): Disposer;
   status: { set(line: StatusLine | null): void };
-  avatar: { publish(sig: AvatarSignal | null): void; emote(e: BotEmoteName): void; morph(v: number): void; gulp(): void; tint(color: string | null): void; bodyColor(): string | null;
+  avatar: { publish(sig: AvatarSignal | null): void;
+    /** The glow behind Mochi for a mood (colour and opacity); idle's for an unknown name. */
+    glow(mood: string): { color: string; opacity: number }; emote(e: BotEmoteName): void; morph(v: number): void; gulp(): void; tint(color: string | null): void; bodyColor(): string | null;
     /**
      * Defines a Mochi mood of this module and returns its name, "<moduleId>.<local>": use that name in avatar.publish,
      * pills.set and mochi.free/sprite. Removed when the module stops (anything still wearing it draws as idle).

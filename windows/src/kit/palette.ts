@@ -57,25 +57,3 @@ const LIGHT_FROM = 0.32;
 
 /** True for a colour light enough that what is written on it must be dark. */
 export const isLight = (hex: string) => brightness(hex) >= LIGHT_FROM;
-
-/** The glow behind Mochi for a state (state names are plain strings here: kit takes no core types). */
-export function botGlowColor(s: string): string {
-  switch (s) {
-    case "working":
-      return "#3B9EFF";
-    case "thinking":
-      return "#A78BFA";
-    case "searching":
-      return "#6366F1";
-    case "alert":
-      return "#F5A524";
-    case "error":
-      return "#F4505E";
-    case "done":
-      return "#34D399";
-    case "waiting":
-      return "#F59E0B";
-    default:
-      return "#FFFFFF";
-  }
-}

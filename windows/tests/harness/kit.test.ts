@@ -44,4 +44,28 @@ describe("kit builders", () => {
       h("span", { class: "pane-right" }, h("b", { text: "s" }), h("span", { class: "pane-ago", text: "1m" })));
     expect(row({ icon: dot("#fff", 7), title: "T", where: "W", status: h("b", { text: "s" }), ago: "1m", cls: "sess-row", attrs: { title: "t" } }).outerHTML).toBe(old.outerHTML);
   });
+
+  it("row = claude's file row (two status columns, empty folder keeps its span)", () => {
+    const old = (dir: string) => h("button", { class: "pane-row pane-file", title: "a.ts" },
+      h("i", { class: "pane-row-icon" }, h("i", { class: "file-ext", text: "TS" })),
+      h("span", { class: "pane-row-title", text: "a.ts" }),
+      h("span", { class: "pane-row-where", text: dir }),
+      h("span", { class: "pane-right" }, h("span", { class: "pane-file-status", text: "novo" }), h("span", { class: "diff-pm" }), h("span", { class: "pane-ago", text: "2m" })));
+    for (const dir of ["", "src/"]) {
+      expect(row({ icon: h("i", { class: "file-ext", text: "TS" }), title: "a.ts", where: dir, status: [h("span", { class: "pane-file-status", text: "novo" }), h("span", { class: "diff-pm" })], ago: "2m", cls: "pane-file", attrs: { title: "a.ts" } }).outerHTML).toBe(old(dir).outerHTML);
+    }
+  });
+
+  it("tile = the agent card and the idle cards of claude and integrations", () => {
+    const oldOther = (last: string) => h("div", { class: "tile-card" },
+      h("div", { class: "tile-head" }, dot("#88aaff", 7), h("b", { text: "Ag" }), h("span", { text: "Agente" })),
+      h("div", { class: "tile-status" }, h("span", { text: last })));
+    for (const last of ["", "lendo"]) expect(tile({ title: "Ag", sub: "Agente", dot: "#88aaff", status: last }).outerHTML).toBe(oldOther(last).outerHTML);
+    const btn = () => [h("button", { class: "link-btn", text: "Abrir" }), h("button", { class: "link-btn", text: "Configurações…" })];
+    const oldIdle = h("div", { class: "tile-card" },
+      h("div", { class: "tile-head" }, dot("#d97757", 7), h("b", { text: "Claude Code" }), h("span", { text: "Integração" })),
+      h("div", { class: "tile-status" }, dot("#22C55E", 5), h("span", { text: "Conectado" })),
+      h("div", { class: "tile-actions" }, ...btn()));
+    expect(tile({ title: "Claude Code", sub: "Integração", dot: "#d97757", status: [dot("#22C55E", 5), h("span", { text: "Conectado" })], actions: btn() }).outerHTML).toBe(oldIdle.outerHTML);
+  });
 });

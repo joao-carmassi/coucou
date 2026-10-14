@@ -13,6 +13,7 @@ import { CLAUDE_ID } from "./types";
 import { claudeOf } from "./claude";
 import { ICONS } from "./icons";
 import { CARDS } from "./views/cards";
+import { buildClaudeHome, HOME_H } from "./views/home";
 import { buildSession } from "./views/session";
 import { buildSessionsView } from "./views/sessions";
 
@@ -26,6 +27,8 @@ const view = (
 export const claude: ModuleDef = {
   id: "claude",
   views: [
+    // Home while the board is off (see the homeView hook below); no tab, so nothing else lights.
+    view("claude-home", { height: HOME_H, botX: 68, botY: null, botDiameter: 58 }, (ctx) => buildClaudeHome(claudeOf(ctx.api), ctx)),
     view("approval", { height: 160, botX: 62, botY: null, botDiameter: 56, extraHeight: PANEL_H - 160 },
       (ctx) => CARDS.buildApproval(claudeOf(ctx.api), ctx)),
     // 196 as docs/SPEC.md has it: a question, its options, and a line for what the option under the mouse means.
@@ -49,6 +52,8 @@ export const claude: ModuleDef = {
     const c = claudeOf(api);
     const offs = [
       c.start(),
+      // Without the board there is no home tab: the session card is home (github's request has priority 5).
+      api.provide("homeView", () => api.use("board.host") === undefined ? { view: "claude-home", priority: 10 } : null),
       // The board (home) asks the owner of each pill: Claude's and the agents' are ours.
       api.provide<BoardCardOf>("board.card", CARDS.boardCardOf(c)),
       api.provide<BoardPillOf>("board.pill", (id) => c.owns(id)

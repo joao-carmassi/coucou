@@ -10,6 +10,7 @@ import { COLOR } from "../../../kit/palette";
 import { timeAgo } from "../../../kit/format";
 import type { Pill } from "../../../core/moduleApi";
 import { App } from "../../../kit/app";
+import { tile } from "../../../kit/tile";
 import { type GithubActivityKind, type GithubData, type GithubTarget, IntegrationsBridge } from "../bridge";
 import { GITHUB, PROVIDERS, info, steps } from "../store";
 
@@ -47,9 +48,9 @@ function idleCard(task: Pill, openSettings: () => void): HTMLElement {
   const label = error ?? (configured ? "Conectado · carregando…" : missing);
   const statusColor = error || !configured ? "#F4505E" : "#22C55E";
 
-  const actions = h("div", { class: "tile-actions" });
+  const actions: HTMLElement[] = [];
   if (task.id === "integration_n8n") {
-    actions.append(
+    actions.push(
       h("button", {
         class: "link-btn",
         style: `color:${task.color}d9`,
@@ -58,7 +59,7 @@ function idleCard(task: Pill, openSettings: () => void): HTMLElement {
       }),
     );
   } else if (OPEN_URLS[task.id]) {
-    actions.append(
+    actions.push(
       h("button", {
         class: "link-btn",
         style: `color:${task.color}d9`,
@@ -68,7 +69,7 @@ function idleCard(task: Pill, openSettings: () => void): HTMLElement {
     );
   }
   if (configured) {
-    actions.append(
+    actions.push(
       h("button", {
         class: "link-btn",
         style: `color:${task.color}d9`,
@@ -77,18 +78,12 @@ function idleCard(task: Pill, openSettings: () => void): HTMLElement {
       }),
     );
   } else {
-    actions.append(
+    actions.push(
       h("button", { class: "link-btn", style: "color:#8e939c", text: "Configurações…", onclick: openSettings }),
     );
   }
 
-  return h(
-    "div",
-    { class: "tile-card" },
-    header(task.color, task.label, "Integração"),
-    h("div", { class: "tile-status" }, dot(statusColor, 5), h("span", { text: label })),
-    actions,
-  );
+  return tile({ title: task.label, sub: "Integração", dot: task.color, status: [dot(statusColor, 5), h("span", { text: label })], actions });
 }
 
 // ── Vercel ────────────────────────────────────────────────────────────────────

@@ -18,6 +18,7 @@
 
 import { h, svg, clear, dot, replay } from "../../../kit/dom";
 import { panel } from "../../../kit/panel";
+import { row } from "../../../kit/list";
 import { diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath, type FileKind } from "../../../kit/code";
 import { ICONS } from "../icons";
 import { COLOR } from "../../../kit/palette";
@@ -27,8 +28,7 @@ import { CLAUDE_ID, type ChangedFile, type ClaudeSession, type SessionStep } fro
 import type { Claude } from "../claude";
 import type { ClaudeStore } from "../store";
 import { stepIcon, stepName, stepPreview, type ToType } from "./step";
-import { botGlowColor } from "../../../kit/palette";
-import type { ViewContext, ViewHost } from "../../../core/moduleApi";
+import type { IslandApi, ViewContext, ViewHost } from "../../../core/moduleApi";
 
 /** What a session is called until it has a project or a title to go by. */
 const UNNAMED = "Claude Code";
@@ -74,14 +74,14 @@ const counted = (n: number, one: string) => `${n} ${n === 1 ? one : one.endsWith
 export const sessionName = (session: ClaudeSession) => session.title ?? session.project;
 
 /** Where a session is at, as a colour and in words: what its tab shows and says. */
-function standing(session: ClaudeSession): { color: string; words: string } {
+function standing(api: IslandApi, session: ClaudeSession): { color: string; words: string } {
   if (session.question) return { color: COLOR.cyan, words: "está perguntando" };
   if (session.approval) return { color: COLOR.amber, words: "precisa de permissão" };
   if (session.news === "error" || session.state === "error") return { color: COLOR.red, words: "parou com um erro" };
   if (session.news === "done" || session.state === "done") return { color: COLOR.green, words: "terminou" };
   if (session.state === "ask") return { color: COLOR.cyan, words: "está esperando você" };
   if (session.state === "idle" || session.state === "sleeping") return { color: COLOR.grey, words: "em repouso" };
-  return { color: botGlowColor(session.state), words: "trabalhando" };
+  return { color: api.avatar.glow(session.state).color, words: "trabalhando" };
 }
 
 /** Something a session wants looked at: it is waiting for an answer, or has news nobody has seen. */
@@ -93,7 +93,7 @@ const calls = (session: ClaudeSession) => session.news != null || session.questi
  * only with more than one, and takes the colour of a session behind the one
  * on show that wants looking at.
  */
-export function sessionsChip(store: ClaudeStore, onOpen: () => void): { el: HTMLElement; sync(): void } {
+export function sessionsChip(api: IslandApi, store: ClaudeStore, onOpen: () => void): { el: HTMLElement; sync(): void } {
   const el = h("button", { class: "sess-chip", onclick: onOpen });
   return {
     el,
@@ -103,26 +103,23 @@ export function sessionsChip(store: ClaudeStore, onOpen: () => void): { el: HTML
       el.textContent = counted(count, "sessão");
       const calling = store.sessions.find((s) => s.id !== store.frontId && calls(s));
       el.classList.toggle("calls", calling != null);
-      el.style.setProperty("--c", calling ? standing(calling).color : "currentColor");
-      el.title = calling ? `${sessionName(calling)} ${standing(calling).words}` : "Todas as sessões do Claude Code acompanhadas";
+      el.style.setProperty("--c", calling ? standing(api, calling).color : "currentColor");
+      el.title = calling ? `${sessionName(calling)} ${standing(api, calling).words}` : "Todas as sessões do Claude Code acompanhadas";
     },
   };
 }
 
 /** A session in the list of them: where it is at, its name, its project, and what it did last. */
-function sessionRow(store: ClaudeStore, session: ClaudeSession, onPick: (id: string) => void): HTMLElement {
-  const { color, words } = standing(session);
+function sessionRow(api: IslandApi, store: ClaudeStore, session: ClaudeSession, onPick: (id: string) => void): HTMLElement {
+  const { color, words } = standing(api, session);
   const front = session.id === store.frontId;
   const state = h("span", { class: "pane-file-status", text: front ? `em cena · ${words}` : words });
   if (calls(session)) state.style.color = color;
-  return h(
-    "button",
-    { class: front ? "pane-row sess-row on" : "pane-row sess-row", title: sessionName(session), onclick: () => onPick(session.id) },
-    h("i", { class: "pane-row-icon" }, dot(color, 7)),
-    h("span", { class: "pane-row-title", text: sessionName(session) }),
-    h("span", { class: "pane-row-where", text: session.title ? session.project : (session.lines.at(-1) ?? "") }),
-    h("span", { class: "pane-right" }, state, h("span", { class: "pane-ago", text: timeAgo(session.heardAt) })),
-  );
+  return row({
+    icon: dot(color, 7), title: sessionName(session), where: session.title ? session.project : (session.lines.at(-1) ?? ""),
+    status: state, ago: timeAgo(session.heardAt), cls: front ? "sess-row on" : "sess-row",
+    attrs: { title: sessionName(session), onclick: () => onPick(session.id) },
+  });
 }
 
 /** What happened to the file, as the GitHub panel says it: "edited" in grey, "new" in green. */
@@ -134,14 +131,10 @@ function statusWord(file: ChangedFile): HTMLElement {
 
 function fileRow(file: ChangedFile): HTMLElement {
   const { dir, base } = splitPath(file.path);
-  return h(
-    "button",
-    { class: "pane-row pane-file", title: file.path, onclick: () => go({ kind: "file", path: file.path }) },
-    h("i", { class: "pane-row-icon" }, extBadge(file.path)),
-    h("span", { class: "pane-row-title", text: base }),
-    h("span", { class: "pane-row-where", text: dir }),
-    h("span", { class: "pane-right" }, statusWord(file), plusMinus(file.additions, file.deletions), h("span", { class: "pane-ago", text: timeAgo(file.at) })),
-  );
+  return row({
+    icon: extBadge(file.path), title: base, where: dir, status: [statusWord(file), plusMinus(file.additions, file.deletions)], ago: timeAgo(file.at),
+    cls: "pane-file", attrs: { title: file.path, onclick: () => go({ kind: "file", path: file.path }) },
+  });
 }
 
 /** A quiet line across a diff: lines skipped, or the start of another edit. */
@@ -288,7 +281,7 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
     svg(ICONS.arrowUpRight, 10),
   );
   // With several sessions followed: the way to the list of them.
-  const sessionsBtn = sessionsChip(store, () => {
+  const sessionsBtn = sessionsChip(ctx.api, store, () => {
     actions.blip();
     go({ kind: "sessions" });
   });
@@ -546,7 +539,7 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
       // Rebuilding the rows between a mouse-down and its mouse-up would swallow
       // the click, so only rebuild when something they show has changed.
       const total = files.reduce((n, f) => n + f.edits.length, 0);
-      const others = screen.kind === "sessions" ? store.sessions.map((s) => [s.id, sessionName(s), standing(s).words, calls(s)].join(":")).join("|") : "";
+      const others = screen.kind === "sessions" ? store.sessions.map((s) => [s.id, sessionName(s), standing(ctx.api, s).words, calls(s)].join(":")).join("|") : "";
       const next = [session.id, stamp, screen.kind, total, files[0]?.path, others].join("~");
       if (next === key) return;
       key = next;
@@ -556,7 +549,7 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
       drawn = now;
       clear(list);
       list.classList.toggle("pane-edge", picked != null);
-      if (screen.kind === "sessions") for (const s of store.sessions) list.append(sessionRow(store, s, pick));
+      if (screen.kind === "sessions") for (const s of store.sessions) list.append(sessionRow(ctx.api, store, s, pick));
       else if (picked) list.append(diffView(picked, fileKind(picked.path)));
       else if (files.length === 0) list.append(h("div", { class: "pane-empty", text: "Nada escrito nesta sessão ainda." }));
       else for (const f of files) list.append(fileRow(f));
