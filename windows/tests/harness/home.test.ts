@@ -1,4 +1,4 @@
-// Home: the board owns it when it is on; Claude (the real module) draws its own when the board is off.
+// Home: the board owns it when it is on; with it off there is no Início at all (first tab, else empty).
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../src/modules/index", async () => {
@@ -33,15 +33,15 @@ beforeAll(() => {
 afterAll(() => vi.useRealTimers());
 
 describe("home", () => {
-  it("claude without the board: claude-home, with the Claude card", () => {
+  it("claude without the board: no Início, home is the first tab (Sessões)", () => {
     Registry.apply({ board: false, claude: true });
     tick(15_000);
-    expect(State.defaultView()).toBe("claude-home");
-    island.open("claude-home");
+    expect(State.defaultView()).not.toBe("overview");
+    expect(State.defaultView()).not.toBe("empty");
+    expect(State.tabs.some((t) => t.view === "overview")).toBe(false);
+    island.open(State.defaultView());
     tick(100);
-    expect(State.view).toBe("claude-home");
-    expect(document.querySelector(".overview.solo .left-body .tile-card .tile-head span")?.textContent).toBe("Integração");
-    expect(document.querySelector("[data-tab='overview']")).toBeNull();
+    expect(document.querySelector(".overview")).toBeNull();
   });
 
   it("the board on: overview is home", () => {
@@ -54,15 +54,16 @@ describe("home", () => {
     expect(document.querySelector(".left-body .tile-card")).not.toBeNull();
   });
 
-  it("the board coming on while claude-home is showing moves the island to the board's home", () => {
-    Registry.apply({ board: false, claude: true });
-    tick(100);
-    island.open("claude-home");
-    tick(100);
-    expect(State.view).toBe("claude-home");
+  it("the board turned off while showing Início: the island leaves it", () => {
     Registry.apply({ board: true, claude: true });
     tick(100);
+    island.open("overview");
+    tick(100);
     expect(State.view).toBe("overview");
+    Registry.apply({ board: false, claude: true });
+    tick(100);
+    expect(State.view).not.toBe("overview");
+    expect(document.querySelector(".overview")).toBeNull();
   });
 
   it("both off: empty", () => {

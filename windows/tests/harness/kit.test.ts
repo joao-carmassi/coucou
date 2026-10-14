@@ -32,7 +32,7 @@ describe("kit builders", () => {
     expect(panel({ side: { title: "T" }, main: h("div") }).querySelector(".pane-side-who")?.outerHTML).toBe('<div class="pane-side-who"><b>T</b></div>');
   });
 
-  it("homeLayout = the old board / claude-home literals", () => {
+  it("homeLayout = the old board literals (board and solo cases)", () => {
     const l = () => h("div", { class: "card" }, h("div", { class: "left-body" }));
     const r = () => h("div", { class: "card" }, h("div", { class: "pills" }));
     const board = h("div", { class: "view overview" }, h("div", { class: "left" }, l()), h("div", { class: "right" }, r()));

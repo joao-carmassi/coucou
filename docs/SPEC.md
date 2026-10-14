@@ -45,7 +45,7 @@ Status line (compact, no other pill, or `overGrid`): one at a time, highest prio
 
 ## 5. Views
 
-Common: header with tabs (from the modules that have one) and sound button; cards radius 20 on `#141518`; a coloured wash from the bottom matches the task state. Views other than `overview` put the other tasks in a column on the right. With the board off, `claude` provides the home itself (`claude-home`: the session card, no tab).
+Common: header with tabs (from the modules that have one) and sound button; cards radius 20 on `#141518`; a coloured wash from the bottom matches the task state. Views other than `overview` put the other tasks in a column on the right. With the board off there is no Início: home is the first tab, or the "no module" card.
 
 | View | Owner | Content |
 |---|---|---|

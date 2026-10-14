@@ -211,7 +211,7 @@ Nothing below is verified at runtime beyond the checks in `docs/idle-baseline.md
 | Module | Default | Notes |
 |---|---|---|
 | board | ON | TS only (no Rust, no `requires`). Owns the home tab ("Início") and the `overview` view; asks the owner of each pill for its card via `board.*` services (0.4.0) |
-| claude | ON | Without the board it is home itself (`claude-home`, see "Home"). Backend `src-tauri/src/modules/claude`, frontend `src/modules/claude`. Integration news on its finished/error cards comes through the `board.news` service; it provides `board.card`/`board.pill`/`board.focus` for its own pills |
+| claude | ON | Without the board it has no Início: home is its first tab (see "Home"). Backend `src-tauri/src/modules/claude`, frontend `src/modules/claude`. Integration news on its finished/error cards comes through the `board.news` service; it provides `board.card`/`board.pill`/`board.focus` for its own pills |
 | media | ON | Mochi drag-out ghost lives in the module (core hooks: `mochiDrop`, `Overlay.cursor(down)`). `attach_window` and the core `inbox_ingest` share `core/inbox.rs` |
 | upload | ON, requires claude | The drop animation starts after the island opens |
 | timer | OFF | Countdown and stopwatch |
@@ -397,7 +397,7 @@ Mochi's vocabulary is data (`mochi/moods.ts`): the 11 built-in moods are rows; a
 
 ## Home (0.6.0)
 
-Home is the strongest `homeView` request, else the tab flagged `home`, else the first tab, else `empty` (`core/hooks.ts: homeOf`). With the board on, `overview` is home. With the board off (`api.use("board.host") === undefined`), modules that have their own surface ask for home: `claude` returns `{ view: "claude-home", priority: 10 }`, `github` `{ view: "github", priority: 5 }`, so Claude wins when both are on. `claude-home` is Claude's `board.card` for the front Claude pill on a card of its own (click opens the session, the arrow answers `pillOpen`); it has no tab and does not light one. With the board and claude off, home is `github` if on, else `empty`. `tests/harness/home.test.ts` covers board off + claude on, board on, and both off.
+Home is the strongest `homeView` request, else the tab flagged `home`, else the first tab, else `empty` (`core/hooks.ts: homeOf`). With the board on, `overview` is home. With the board off there is no Início: modules that have their own surface may ask for home (`github` returns `{ view: "github", priority: 5 }` while `board.host` is absent), otherwise home is the first tab by order (Claude's Sessões, timer, media...), else `empty` ("Nenhum módulo ativo"). Turning the board off while Início is on screen sends the island to the new home. `tests/harness/home.test.ts` covers board off + claude on, board on, the board turned off while shown, and both off.
 
 ## How to add a module (M8)
 
