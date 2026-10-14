@@ -43,8 +43,12 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
     expiry[kind] = ttlMs != null ? timeout(() => { expiry[kind] = null; host.redraw(); }, ttlMs + 20) : null;
   };
 
+  const badged = new Set<string>();
+  scope.add(() => { for (const t of badged) State.setPillBadge(t, null); });
+
   return {
     id,
+    pill: { badge(taskId, badge) { badged.add(taskId); State.setPillBadge(taskId, badge); } },
     settings: () => State.settings,
     invoke: (cmd, args) => command(cmd, args),
     listen<T>(event: string, fn: (p: T) => void): Disposer {

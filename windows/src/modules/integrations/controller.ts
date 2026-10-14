@@ -92,6 +92,7 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
     clearTimer?.();
     clearTimer = null;
     if (info[id]) info[id].news = null;
+    api.pill.badge(id, null);
     if (stay) borrowedFrom = null;
     else giveBack();
     const task = State.tasks.find((t) => t.id === id);
@@ -152,6 +153,7 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
         State.focusId = update.id;
         opened = true;
       }
+      if (State.focusId !== id) api.pill.badge(id, event.success ? "finished" : "error");
       // A run the panel was showing when it ended has been played there already.
       const about = event.open?.target;
       const heard = about?.kind === "run" && sawRunEnd(about.id);

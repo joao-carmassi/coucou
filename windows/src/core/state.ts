@@ -3,8 +3,9 @@
 import { Hooks } from "./hooks";
 import type { BotEmoteName, BotStateName, IslandMode, IslandViewName } from "./layout";
 import type { EyeShape } from "../mochi/engine";
+import { applyBadge, type PillBadge } from "./badge";
+export type { PillBadge };
 
-/** A mini Mochi (compact grid): what the minibots draw. */
 export interface AgentTask {
   id: string;
   name: string;
@@ -12,6 +13,7 @@ export interface AgentTask {
   state: BotStateName;
   emote?: BotEmoteName | null;
   miniEye?: EyeShape | null;
+  pillBadge?: PillBadge | null;
 }
 
 export interface Settings {
@@ -79,6 +81,10 @@ class AppState {
   /** Marks the UI dirty; the island re-renders on the next frame. */
   notify() {
     for (const fn of this.listeners) fn();
+  }
+
+  setPillBadge(id: string, badge: PillBadge | null) {
+    if (applyBadge(this.tasks, id, badge)) this.notify();
   }
 
   get focusTask(): AgentTask | null {

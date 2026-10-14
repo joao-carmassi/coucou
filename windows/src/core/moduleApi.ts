@@ -1,7 +1,7 @@
 // Module contract: types only, plus resolveEnabled. Only `import type` here (Node loads it in tests).
 
 import type { BotEmoteName, BotStateName, IslandMode, ViewLayout } from "./layout";
-import type { Settings } from "./state";
+import type { PillBadge, Settings } from "./state";
 import type { FsmState } from "../island/fsm";
 import type { ViewActions } from "../views/views";
 
@@ -93,6 +93,8 @@ export interface IslandApi {
   interval(fn: () => void, ms: number, opts?: { whenVisible?: boolean }): Disposer;
   status: { set(line: StatusLine | null): void };
   avatar: { publish(sig: AvatarSignal | null): void; emote(e: BotEmoteName): void; morph(v: number): void; gulp(): void; tint(color: string | null): void; bodyColor(): string | null };
+  /** A badge on a pill (task id) this module owns; cleared when the module stops. */
+  pill: { badge(taskId: string, badge: PillBadge | null): void };
   island: {
     open(view: string, opts?: { pinMs?: number }): void; setView(view: string): void; close(): void; wake(): void; hide(): void;
     keepAwake(pred: () => boolean): Disposer; isVisible(): boolean; mode(): IslandMode; fsmState(): FsmState; mouseInside(): boolean; view(): string;
