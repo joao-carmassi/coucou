@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3
+
+- Mochi's "love" emote now plays on time after hovering him; the stopped frame loop only drew it once the mouse moved.
+- A session that finishes (or fails) behind another one now reveals a hidden island; before, only the sound played.
+- Settings: Claude Code, Soltar arquivo and Voz share one "Claude" group.
+
 ## 0.2.2
 
 - Settings: upload and voice (which need Claude Code) are grouped under "Precisam do Claude Code".

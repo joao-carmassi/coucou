@@ -493,7 +493,10 @@ function handleAgent(c: Claude, payload: HookPayload, agent: string) {
       if (payload.message) c.appendStep(agentId, payload.message.slice(0, LINE_CHARS));
       Sound.play("finish");
       if (focused) alert("finished");
-      else c.store.setBadge(agentId, "finished");
+      else {
+        c.store.setBadge(agentId, "finished");
+        if (c.api.island.mode() === "hidden") c.api.island.wake();
+      }
       c.api.timeout(() => c.removeAgent(agentId), FINISHED_MS);
       break;
 
@@ -581,6 +584,9 @@ export function handleHook(c: Claude, payload: HookPayload) {
     if (focused) return surface(what, true);
     if (!front) session.news = what;
     if (c.focusId() !== CLAUDE_ID) c.store.setBadge(CLAUDE_ID, what);
+    // The sound already played: a hidden island has to show up too (it folds back on its own),
+    // or a session that ends behind the front one is heard and never seen.
+    if (c.api.island.mode() === "hidden") c.api.island.wake();
   };
 
   switch (name) {

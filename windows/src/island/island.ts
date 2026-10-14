@@ -676,6 +676,8 @@ export class Island implements IslandHost {
       if (performance.now() / 1000 - this.lastLoveTime < 6) return;
       this.lastLoveTime = performance.now() / 1000;
       this.engine.triggerEmote("love");
+      // The loop is stopped while idle: without this the emote only shows once the mouse moves.
+      this.ensureRunning();
       Sound.play("love");
     }, 1900);
   }
@@ -703,6 +705,7 @@ export class Island implements IslandHost {
         this.setView(this.prevViewBeforeConfused === "confused" ? fallback : this.prevViewBeforeConfused);
       }
       this.engine.triggerEmote("happy");
+      this.ensureRunning();
     }, 3300);
   }
 

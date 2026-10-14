@@ -60,8 +60,8 @@ per module; a disabled module has no tab, view, pill, timer, thread or listener.
 | Claude Code (`claude`) | on | Hooks, sessions, approvals, questions, Sessions tab |
 | Mídia (`media`) | on | Screenshots, game-bar clips and dropped files in a grid |
 | Timer (`timer`) | off | Countdown (1 to 600 min) or stopwatch, shown as a pill |
-| Soltar arquivo (`upload`) | on | Drop a file, open it in Claude Code. Needs `claude`; under **Precisam do Claude Code** |
-| Voz (`voice`) | off | Speech to a new Claude Code session. Needs `claude`; under **Precisam do Claude Code** |
+| Soltar arquivo (`upload`) | on | Drop a file, open it in Claude Code. Needs `claude`; under **Claude** |
+| Voz (`voice`) | off | Speech to a new Claude Code session. Needs `claude`; under **Claude** |
 | GitHub, Vercel, Stripe, n8n, Resend, Cal.com, Notion | off | Read-only pills, under **Integrações** |
 
 Turning `claude` off turns `voice` and `upload` off with it. The contract is in
