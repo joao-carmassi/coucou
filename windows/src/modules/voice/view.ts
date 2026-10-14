@@ -6,6 +6,7 @@ import { CLAUDE_SERVICE, type LaunchPrompt } from "../claude/api";
 import { VoiceBridge } from "./bridge";
 import type { IslandApi, ViewContext, ViewHost } from "../../core/moduleApi";
 import { h, clear } from "../../kit/dom";
+import { card, view } from "../../kit/card";
 
 export type Phase = "none" | "listening" | "transcribing" | "review" | "sending" | "error";
 
@@ -59,7 +60,7 @@ export function buildVoiceView(_ctx: ViewContext): ViewHost {
   const actions = h("div", { style: "display:flex;gap:8px;margin-top:6px" });
   const text = h("div", { style: "display:none;max-height:64px;overflow:auto;white-space:pre-wrap;word-break:break-word;font-size:13px" });
   const body = h("div", { class: "stack", style: "padding:0 18px 0 100px" }, title, text, sub, meter, actions);
-  const el = h("div", { class: "view" }, h("div", { class: "card" }, body));
+  const el = view(card(null, body));
   const done = () => { Voice.phase = "none"; Voice.leave(); };
 
   return {

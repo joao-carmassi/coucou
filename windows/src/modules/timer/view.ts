@@ -1,5 +1,5 @@
 import { h, clear, replay } from "../../kit/dom";
-import { card } from "../../kit/card";
+import { card, view } from "../../kit/card";
 import type { ViewContext, ViewHost } from "../../core/moduleApi";
 import type { TimerClock } from "./timer";
 
@@ -11,7 +11,7 @@ function btn(label: string, kind: "primary" | "secondary", onClick: () => void):
 export function buildTimerView(Timer: TimerClock, ctx: ViewContext): ViewHost {
   const body = h("div", { class: "stack" });
   body.style.padding = "4px 16px 4px 84px";
-  const el = h("div", { class: "view" }, card(null, body));
+  const el = view(card(null, body));
   const label = h("div", { class: "timer-label" });
   const readout = h("div", { class: "timer-readout" });
   const fill = h("i");
