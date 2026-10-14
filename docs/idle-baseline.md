@@ -40,7 +40,19 @@ Installed build, taken 2026-10-13 with Claude Code hook traffic active (~1 event
 | installed build | default | 31 min | 3453 ms | 0.19 % | 44 | 405 | 32 MB | 139 MB |
 | installed build, hook traffic | default | 20 s | main thread ~3 % | n/a | | | | |
 
-Hook events legitimately wake the UI. A clean idle sample (no hook traffic) is still to be taken.
+Hook events legitimately wake the UI.
+
+Taken 2026-10-14 on v0.2.0, default module set, 120 s, no tool or hook traffic during the window
+(`pwsh -File scripts/idle-measure.ps1 -Seconds 120`; Windows PowerShell 5 fails on the script):
+
+| Process | CPU / 120 s | % of 1 core |
+|---|---|---|
+| coucou (main) | 250 ms (all in the first sample, flat after) | 0.21 % |
+| msedgewebview2 (8 processes, sum) | 3406 ms | 2.84 % |
+
+Threads 47 -> 46, handles 441 -> 446 (fluctuates 442-446, no growth trend). Main process is flat; the
+WebView2 cost is the island being visible in compact (frame loop and cursor hover), not a module.
+Not measured: per-module ON/OFF rows and hidden-island webview cost on this build.
 
 Template, one row per module, hidden island, 60 s, no hook traffic:
 
