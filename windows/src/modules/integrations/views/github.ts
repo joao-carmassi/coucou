@@ -5,8 +5,9 @@
 // rather than from GitHub's look.
 
 import { h, svg, clear, dot } from "../../../kit/dom";
-import { panel } from "../../../kit/panel";
-import { diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath } from "../../../kit/code";
+import { PANE_MOTION, paneAside, paneBadge, paneCode, paneEdge, paneHead, paneIcon, paneList, paneMain, paneSub, paneTab, panel } from "../../../kit/panel";
+import { ago as agoAtom, empty, fileStatus, right, rowIcon, rowOf, rowTitle, rowWhere } from "../../../kit/list";
+import { diffBlock, diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath } from "../../../kit/code";
 import { ICONS } from "../icons";
 import { COLOR, wear } from "../../../kit/palette";
 import { ACTIVITY_STYLE, GITHUB_LEVELS, compact, githubData, repoName, type GithubOpening } from "./integrations";
@@ -490,13 +491,11 @@ function eventRow(
 ): HTMLElement {
   const style = ACTIVITY_STYLE[item.kind];
   const where = [repoName(item.repo, login), item.detail].filter(Boolean).join(" · ");
-  return h(
-    "button",
-    { class: "pane-row", onclick: () => openTarget(item.target, item.title, item.url) },
-    h("i", { class: "pane-row-icon", style: `color:${style.color}` }, svg(style.icon, 12, { stroke: 2 })),
-    h("span", { class: "pane-row-title", text: item.title }),
-    h("span", { class: "pane-row-where", text: where }),
-    ago != null ? h("span", { class: "pane-ago", text: ago }) : null,
+  return rowOf("button", { attrs: { onclick: () => openTarget(item.target, item.title, item.url) } },
+    rowIcon(svg(style.icon, 12, { stroke: 2 }), `color:${style.color}`),
+    rowTitle(item.title),
+    rowWhere(where),
+    ago != null ? agoAtom(ago) : null,
   );
 }
 
@@ -584,21 +583,17 @@ function newsBell(repo: string): HTMLElement {
  * speaks up.
  */
 function repoRow(repo: GithubRepo, login: string, onOpen: () => void): HTMLElement {
-  return h(
-    "div",
-    { class: "pane-row", onclick: onOpen },
+  return rowOf("div", { attrs: { onclick: onOpen } },
     dot(repo.languageColor ?? COLOR.blank, 6),
-    h("span", { class: "pane-row-title", text: repoName(repo.fullName, login) }),
+    rowTitle(repoName(repo.fullName, login)),
     repo.private ? h("i", { class: "gh-lock", title: "Privado" }, svg(ICONS.lock, 9, { stroke: 2.2 })) : null,
-    h("span", { class: "pane-row-where", text: repo.language ?? "" }),
-    h(
-      "span",
-      { class: "pane-right" },
+    rowWhere(repo.language ?? ""),
+    right(
       newsBell(repo.fullName),
       buildBadge(repo.build, repo.fullName),
       meta(svg(ICONS.star, 9), repo.stars),
       meta(svg(ICONS.pullRequest, 9, { stroke: 2 }), repo.openPrs, () => void App.openUrl(`${repo.url}/pulls`)),
-      h("span", { class: "pane-ago", text: repo.pushedAt ? timeAgo(repo.pushedAt) : "" }),
+      agoAtom(repo.pushedAt ? timeAgo(repo.pushedAt) : ""),
     ),
   );
 }
@@ -834,7 +829,7 @@ function daySection(pick: DayPick, login: string, onClose: () => void): HTMLElem
   );
 
   if (pick.error) {
-    section.append(h("div", { class: "pane-empty", text: pick.error }));
+    section.append(empty(pick.error));
     return section;
   }
   if (!pick.data) {
@@ -846,16 +841,14 @@ function daySection(pick: DayPick, login: string, onClose: () => void): HTMLElem
   if (pick.data.privateCount > 0) {
     const n = pick.data.privateCount;
     section.append(
-      h(
-        "div",
-        { class: "pane-row muted" },
-        h("i", { class: "pane-row-icon" }, svg(ICONS.lock, 10, { stroke: 2.2 })),
-        h("span", { class: "pane-row-where", text: `${counted(n, "contribuição")} em repositórios privados` }),
+      rowOf("div", { cls: "muted" },
+        rowIcon(svg(ICONS.lock, 10, { stroke: 2.2 })),
+        rowWhere(`${counted(n, "contribuição")} em repositórios privados`),
       ),
     );
   }
   if (pick.data.items.length === 0 && pick.data.privateCount === 0) {
-    section.append(h("div", { class: "pane-empty", text: "Nada público nesse dia." }));
+    section.append(empty("Nada público nesse dia."));
   }
   // The day's lines come in one by one the first time they are drawn — after a
   // wait, or at once from the cache.
@@ -1046,13 +1039,7 @@ function pullBlock(p: GithubProject): HTMLElement {
     });
   }
   const style = PULL_STYLE[pr.state];
-  const size = h(
-    "span",
-    {},
-    h("span", { class: "diff-add", text: `+${pr.additions}` }),
-    " ",
-    h("span", { class: "diff-del", text: `−${pr.deletions}` }),
-  );
+  const size = plusMinus(pr.additions, pr.deletions, true);
   const review = pr.review ? h("span", { text: pt(pr.review), style: `color:${REVIEW_COLOR[pr.review]}` }) : null;
   const files = counted(pr.changedFiles, "arquivo");
   const comments = counted(pr.comments, "comentário");
@@ -1214,7 +1201,7 @@ const MODIFIED = { color: COLOR.amber };
  * is the news, and wears its colour.
  */
 function statusWord(file: GithubFile): HTMLElement {
-  const word = h("span", { class: "pane-file-status", text: pt(file.status ?? "modified") });
+  const word = fileStatus(pt(file.status ?? "modified"));
   const known = FILE_STATUS[file.status ?? ""];
   if (known) word.style.color = known.color;
   return word;
@@ -1254,9 +1241,9 @@ function fileRow(file: GithubFile, url: string): HTMLElement {
   return h(
     "button",
     { class: "pane-row pane-file", onclick: () => openDiff(file, url) },
-    h("i", { class: "pane-row-icon" }, extBadge(file.path)),
-    h("span", { class: "pane-row-title", text: base }),
-    h("span", { class: "pane-row-where", text: dir }),
+    rowIcon(extBadge(file.path)),
+    rowTitle(base),
+    rowWhere(dir),
     statusWord(file),
     plusMinus(file.additions, file.deletions),
   );
@@ -1305,7 +1292,7 @@ function remarkHead(r: GithubRemark, did?: { say: string; color?: string }): HTM
     { class: "gh-say-head" },
     h("b", { text: r.author ?? "ghost" }),
     word,
-    h("span", { class: "pane-ago", text: r.at ? timeAgo(r.at) : "" }),
+    agoAtom(r.at ? timeAgo(r.at) : ""),
   );
 }
 
@@ -1375,10 +1362,10 @@ function threadBlock(c: GithubCommentsDetail, thread: GithubThread): HTMLElement
       title: !found ? "Abrir esta conversa no GitHub" : onLine ? `Abrir ${base} nesta linha` : `Abrir ${base}`,
       onclick: () => openThread(c, thread),
     },
-    h("i", { class: "pane-row-icon" }, extBadge(thread.path)),
-    h("span", { class: "pane-row-title", text: thread.line != null ? `${base}:${thread.line}` : base }),
-    h("span", { class: "pane-row-where", text: dir }),
-    state ? h("span", { class: "pane-file-status", text: state }) : null,
+    rowIcon(extBadge(thread.path)),
+    rowTitle(thread.line != null ? `${base}:${thread.line}` : base),
+    rowWhere(dir),
+    state ? fileStatus(state) : null,
     // Its file isn't among the ones the sheet carries: this one leaves for GitHub.
     found ? null : h("span", { class: "gh-thread-out" }, svg(ICONS.arrowUpRight, 9)),
   );
@@ -1398,7 +1385,7 @@ function threadBlock(c: GithubCommentsDetail, thread: GithubThread): HTMLElement
     { class: "gh-thread" },
     head,
     thread.code.length
-      ? h("div", { class: "code-diff" }, ...dedent(thread.code).map((l) => diffLine(l.number, l.sign, l.text, kind)))
+      ? diffBlock(undefined, ...dedent(thread.code).map((l) => diffLine(l.number, l.sign, l.text, kind)))
       : null,
     threadTalk(thread),
   );
@@ -1423,7 +1410,7 @@ function commentsView(c: GithubCommentsDetail, login: string): HTMLElement {
       : null,
     ...c.entries.map((entry) => (entry.kind === "thread" ? threadBlock(c, entry) : sayRow(entry))),
     said + threads.length === 0
-      ? h("div", { class: "pane-empty", text: c.entries.length ? "Ninguém comentou ainda." : "Sem descrição, e ninguém comentou ainda." })
+      ? empty(c.entries.length ? "Ninguém comentou ainda." : "Sem descrição, e ninguém comentou ainda.")
       : null,
   );
 }
@@ -1530,7 +1517,7 @@ function issueView(i: GithubIssueDetail, login: string): HTMLElement {
       i.assignees.length > 0 && `atribuído a ${i.assignees.join(", ")}`,
     ),
     labelChips(i.labels),
-    description(i.body) ?? h("div", { class: "pane-empty", text: "Sem descrição." }),
+    description(i.body) ?? empty("Sem descrição."),
   );
 }
 
@@ -1550,16 +1537,14 @@ function commitsView(c: GithubCommitsDetail, login: string, screen: DetailScreen
           commit.message,
           commit.url,
         );
-    return h(
-      "button",
-      { class: "pane-row", onclick: open },
-      h("i", { class: "pane-row-icon", style: `color:${COLOR.blue}` }, svg(ICONS.commit, 12, { stroke: 2 })),
-      h("span", { class: "pane-row-title", text: commit.message }),
-      h("span", { class: "pane-row-where" }, h("span", { class: "gh-sha", text: commit.sha }), commit.author ? ` · ${commit.author}` : ""),
-      h("span", { class: "pane-ago", text: commit.at ? timeAgo(commit.at) : "" }),
+    return rowOf("button", { attrs: { onclick: open } },
+      rowIcon(svg(ICONS.commit, 12, { stroke: 2 }), `color:${COLOR.blue}`),
+      rowTitle(commit.message),
+      rowWhere(h("span", { class: "gh-sha", text: commit.sha }), commit.author ? ` · ${commit.author}` : ""),
+      agoAtom(commit.at ? timeAgo(commit.at) : ""),
     );
   });
-  const more = count > c.commits.length ? h("div", { class: "pane-empty", text: `e mais ${count - c.commits.length} no GitHub` }) : null;
+  const more = count > c.commits.length ? empty(`e mais ${count - c.commits.length} no GitHub`) : null;
   const changed = c.additions != null && c.deletions != null ? plusMinus(c.additions, c.deletions) : undefined;
   return h(
     "div",
@@ -1587,13 +1572,11 @@ function size(bytes: number): string {
 
 function releaseView(r: GithubReleaseDetail, login: string): HTMLElement {
   const assets = r.assets.map((a) =>
-    h(
-      "div",
-      { class: "pane-row" },
-      h("i", { class: "pane-row-icon", style: `color:${COLOR.cyan}` }, svg(ICONS.tag, 11, { stroke: 2 })),
-      h("span", { class: "pane-row-title", text: a.name }),
-      h("span", { class: "pane-row-where", text: size(a.size) }),
-      h("span", { class: "pane-ago", text: `${compact(a.downloads)} ↓` }),
+    rowOf("div", {},
+      rowIcon(svg(ICONS.tag, 11, { stroke: 2 }), `color:${COLOR.cyan}`),
+      rowTitle(a.name),
+      rowWhere(size(a.size)),
+      agoAtom(`${compact(a.downloads)} ↓`),
     ),
   );
   return h(
@@ -1750,15 +1733,15 @@ function timedRow(
 ): HTMLElement {
   const parts = [
     mark
-      ? h("i", { class: "pane-row-icon" }, mark)
-      : h("i", { class: "pane-row-icon", style: `color:${BUILD_STYLE[t.state].color}` }, timedMark(t)),
-    h("span", { class: "pane-row-title", text: name }),
-    where ? h("span", { class: "pane-row-where", text: where }) : null,
-    h("span", { class: "pane-ago gh-took", text: took(t, now) }),
+      ? rowIcon(mark)
+      : rowIcon(timedMark(t), `color:${BUILD_STYLE[t.state].color}`),
+    rowTitle(name),
+    where ? rowWhere(where) : null,
+    agoAtom(took(t, now), "gh-took"),
     bar(t, whole, now, mark != null),
   ];
-  const cls = mark ? "pane-row gh-timed gh-crew" : "pane-row gh-timed";
-  return open ? h("button", { class: cls, onclick: open }, ...parts) : h("div", { class: cls }, ...parts);
+  const cls = mark ? "gh-timed gh-crew" : "gh-timed";
+  return open ? rowOf("button", { cls, attrs: { onclick: open } }, ...parts) : rowOf("div", { cls }, ...parts);
 }
 
 /** "3 passed · 1 failed". */
@@ -1811,9 +1794,9 @@ function runView(r: GithubRunDetail, login: string, screen: DetailScreen): HTMLE
         crewMember(r.id, job),
       );
     }),
-    r.moreJobs > 0 ? h("div", { class: "pane-empty", text: `e mais ${r.moreJobs} no GitHub` }) : null,
+    r.moreJobs > 0 ? empty(`e mais ${r.moreJobs} no GitHub`) : null,
     r.jobs.length === 0
-      ? h("div", { class: "pane-empty", text: r.state === "running" ? "Aguardando o primeiro job…" : "Nenhum job para mostrar." })
+      ? empty(r.state === "running" ? "Aguardando o primeiro job…" : "Nenhum job para mostrar.")
       : null,
   );
 }
@@ -1836,7 +1819,7 @@ function jobView(job: GithubJob, run: GithubRunDetail): HTMLElement {
     }),
     heading("Etapas"),
     ...job.steps.map((step) => timedRow(step, step.name, null, whole, now)),
-    job.steps.length === 0 ? h("div", { class: "pane-empty", text: "Ainda sem etapas." }) : null,
+    job.steps.length === 0 ? empty("Ainda sem etapas.") : null,
     h("button", { class: "gh-host", text: "Os logs estão no GitHub", onclick: () => void App.openUrl(job.url) }),
   );
 }
@@ -2029,12 +2012,12 @@ function diffView(file: GithubFile, url: string, thread?: GithubThread): HTMLEle
     return h(
       "div",
       { class: "gh-sheet gh-code-empty" },
-      h("div", { class: "pane-empty", text: "Sem diff de texto neste arquivo — binário, ou grande demais para o GitHub mostrar." }),
+      empty("Sem diff de texto neste arquivo — binário, ou grande demais para o GitHub mostrar."),
     );
   }
 
   const kind = fileKind(file.path);
-  const diff = h("div", { class: "code-diff" });
+  const diff = diffBlock();
   const noted = thread ? threadRow(file.patch, thread) : null;
   let row = 0;
   let first = true;
@@ -2071,9 +2054,7 @@ function diffView(file: GithubFile, url: string, thread?: GithubThread): HTMLEle
       h("div", { class: "gh-diff-note apart" }, h("div", { class: "gh-diff-note-why", text: why }), threadTalk(thread)),
     );
   }
-  return h(
-    "div",
-    { class: "pane-code" },
+  return paneCode(undefined,
     diff,
     file.truncated
       ? h("button", { class: "gh-host", text: "O resto deste diff está no GitHub", onclick: () => void App.openUrl(url) })
@@ -2094,12 +2075,10 @@ export function buildGithub(ctx: ViewContext): ViewHost {
     look: (state: BotStateName | null) => api.avatar.publish(state ? { state, priority: 25 } : null),
   };
   const who = h("b", { text: "GitHub" });
-  const sub = h("span", { class: "pane-sub" });
-  const refreshBtn = h("button", { class: "pane-icon", title: "Atualizar" }, svg(ICONS.refresh, 12, { stroke: 2 }));
-  const openBtn = h(
-    "button",
+  const sub = paneSub();
+  const refreshBtn = paneIcon({ title: "Atualizar" }, svg(ICONS.refresh, 12, { stroke: 2 }));
+  const openBtn = paneIcon(
     {
-      class: "pane-icon",
       title: "Abrir no GitHub",
       // Whatever is on screen, on GitHub — the way out, never the way in.
       onclick: () => {
@@ -2119,23 +2098,21 @@ export function buildGithub(ctx: ViewContext): ViewHost {
     svg(ICONS.arrowUpRight, 10),
   );
   // GitHub's red dot on the lists; the screen's own badge over them.
-  const badge = h("span", { class: "pane-head-badge" });
+  const badge = paneBadge();
   // What rides next to the tab: what happened to a file, and its lines added
   // and removed.
-  const aside = h("span", { class: "pane-head-aside" });
+  const aside = paneAside();
   // Like an editor's tab: what is open on the left, where it sits on the right.
   // No ‹ here: the column's trail steps back, the island's house goes home.
-  const head = h(
-    "div",
-    { class: "pane-head" },
-    h("div", { class: "pane-tab" }, badge, who), aside, h("div", { class: "grow" }), sub, refreshBtn, openBtn,
+  const head = paneHead(
+    paneTab(badge, who), aside, h("div", { class: "grow" }), sub, refreshBtn, openBtn,
   );
   const status = h("div", { class: "gh-status" });
-  const list = h("div", { class: "pane-list" });
+  const list = paneList();
   // News that came in with the panel open; see drawNotice. It sits in the
   // card, over the panel and as wide as it — not in what is being read.
   const notice = h("div", { class: "gh-notice-slot" });
-  const main = h("div", { class: "pane-main" }, head, status, list);
+  const main = paneMain(head, status, list);
 
   // Mochi's column: Mochi himself (drawn by the island), whose GitHub this
   // is, then the tabs — or, deeper, the way down.
@@ -2360,7 +2337,7 @@ export function buildGithub(ctx: ViewContext): ViewHost {
       return section;
     }
     if (d.activity.length === 0) {
-      section.append(h("div", { class: "pane-empty", text: "Nada nos últimos 30 dias." }));
+      section.append(empty("Nada nos últimos 30 dias."));
     }
     for (const a of d.activity) section.append(activityRow(a, d.login));
     return section;
@@ -2373,11 +2350,11 @@ export function buildGithub(ctx: ViewContext): ViewHost {
   function clearList() {
     clear(list);
     // Only a file's code runs edge to edge; everything else keeps its margins.
-    list.classList.remove("pane-edge");
+    paneEdge(list, false);
     actions.tintMochi(null);
   }
 
-  const MOTIONS = ["pane-from-right", "pane-from-left", "gh-rise", "gh-swap"];
+  const MOTIONS = [PANE_MOTION.right, PANE_MOTION.left, "gh-rise", "gh-swap"];
 
   /** Restarts a one-off animation on an element that may have played it before. */
   function replay(el: HTMLElement, name: string) {
@@ -2395,12 +2372,12 @@ export function buildGithub(ctx: ViewContext): ViewHost {
     switch (done) {
       case "deeper":
       case "back":
-        replay(list, done === "deeper" ? "pane-from-right" : "pane-from-left");
+        replay(list, done === "deeper" ? PANE_MOTION.right : PANE_MOTION.left);
         replay(head, "gh-swap");
         break;
       case "tab-right":
       case "tab-left":
-        replay(list, done === "tab-right" ? "pane-from-right" : "pane-from-left");
+        replay(list, done === "tab-right" ? PANE_MOTION.right : PANE_MOTION.left);
         break;
       case "day":
       case "undo-day":
@@ -2445,7 +2422,7 @@ export function buildGithub(ctx: ViewContext): ViewHost {
       sub.textContent = kind(found?.run.workflow ?? "");
       if (screen.run.error) status.append(dot(COLOR.red, 5), h("span", { text: screen.run.error }));
       if (found) list.append(jobView(found.job, found.run));
-      else list.append(h("div", { class: "pane-empty", text: "Este job não está mais na execução." }));
+      else list.append(empty("Este job não está mais na execução."));
     } else if (screen.type === "diff") {
       // As an editor heads a file: its name on the tab, its path on the right.
       who.textContent = splitPath(screen.file.path).base;
@@ -2453,7 +2430,7 @@ export function buildGithub(ctx: ViewContext): ViewHost {
       sub.classList.add("path");
       who.classList.add("file");
       aside.append(statusWord(screen.file), plusMinus(screen.file.additions, screen.file.deletions));
-      list.classList.add("pane-edge");
+      paneEdge(list, true);
       list.append(diffView(screen.file, screen.url, screen.thread));
     } else if (screen.type === "project") {
       who.textContent = repoName(screen.fullName, login);
@@ -2481,7 +2458,7 @@ export function buildGithub(ctx: ViewContext): ViewHost {
     list.scrollTop = scroll;
     // A diff opened from a thread opens on the thread's line, a little down
     // from the top so the lines before it say where it sits.
-    const noted = fresh ? list.querySelector<HTMLElement>(".diff-line.noted") : null;
+    const noted = fresh ? list.querySelector<HTMLElement>(".noted") : null;
     if (noted) {
       list.scrollTop = noted.getBoundingClientRect().top - list.getBoundingClientRect().top - NOTE_LEAD;
     }
@@ -2613,7 +2590,7 @@ export function buildGithub(ctx: ViewContext): ViewHost {
       }
       if (tab === "projects") {
         if (d.repos.length === 0) {
-          list.append(h("div", { class: "pane-empty", text: "Ainda sem repositórios." }));
+          list.append(empty("Ainda sem repositórios."));
         }
         for (const repo of d.repos) {
           list.append(repoRow(repo, d.login, () => openProject(repo.fullName)));
