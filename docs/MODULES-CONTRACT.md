@@ -324,3 +324,10 @@ Goal: a module is one folder, `src/modules/<id>/`. Nothing in `core/`, `island/`
 Catalog: `build.rs` generates Rust `CATALOG` from the manifests; TS builds `MODULE_INFO` from the same files. Node tests cannot use `import.meta.glob`: `modules/resolve.ts` (`buildCatalog`, `collectDefs`) is pure and `tests/catalog.ts` feeds it manifests read from disk.
 
 Honest limits: (a) Rust code still needs the three edits in `modules/mod.rs`; (b) glob order is alphabetical by folder, so module CSS must not rely on cascade order between modules; (c) `devOnly` modules' JS is still in the release bundle (never started, not in the catalog); (d) `order` must be unique in practice for a stable start order across modules written by different people.
+
+## Shared UI kit and CSS conventions (0.3.1)
+
+- `src/views` and `src/style` hold only generic parts: header glyphs and icons used by 2+ modules, `dom.ts`, `format.ts`, a parametrised code/diff view (`code.ts`, `diff-*` classes) and the panel kit (`pane-*` classes, `style/pane.css`).
+- A module's own icons live in `modules/<id>/icons.ts` (`ICONS = { ...CORE, ...own }`). `tile-*` is the overview card layout, hosted by the claude module; other modules dress their cards in it through the `taskCard` service.
+- Module prefixes (`sess-`, `gh-`, `int-`, ...) are forbidden in core selectors: `neutrality-audit` derives them from `modules/*/*.css` and fails the build on a hit. The audit also fails on comments that name a module.
+- Mood, badge and sound aliases of the old names were removed in 0.3.1 (`alert`, `ask`, `done`, `waiting`; `alert.wav`, `ask.wav`, `wait.wav`).

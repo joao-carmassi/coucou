@@ -180,7 +180,7 @@
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
-/* Like the overview ticker, a row cut by the bottom edge fades out — but only
+/* Like a ticker, a row cut by the bottom edge fades out — but only
    while there is more below. At the end of the list nothing is hidden. */
 .pane-list.more {
   -webkit-mask-image: linear-gradient(to bottom, #000 82%, transparent 100%);

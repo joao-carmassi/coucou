@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+- The core no longer carries module content: module icons, GitHub/Claude CSS and the diff kit moved to the modules or became generic (`pane-*`, `diff-*`).
+- Old mood/badge/sound aliases removed; WAV files renamed to `alert`, `ask`, `wait`.
+- `neutrality-audit` also checks core CSS and comments.
+
 ## 0.3.0
 
 Neutral core: the island and Mochi no longer know any module.
