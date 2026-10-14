@@ -25,13 +25,6 @@ const ALLOWLIST = [
   ["src/core/registry.ts", "modules/catalog", "registry reads the catalog"],
   ["src/settings/main.ts", "modules/settings", "settings window loads the sections only (no island code or CSS)"],
   ["src/settings/main.ts", "modules/catalog", "settings window lists the modules"],
-  // Legacy alias maps: old persisted/emitted names still accepted for one version window; delete with the window.
-  ["src/core/badge.ts", "LegacyBadgeName", "legacy alias (one-version window)"],
-  ["src/core/badge.ts", "BADGE_ALIAS", "legacy alias (one-version window)"],
-  ["src/core/layout.ts", "MOOD_ALIAS", "legacy alias (one-version window)"],
-  ["src/core/layout.ts", "LegacyMoodName", "legacy alias (one-version window)"],
-  ["src/core/sound.ts", "const FILE", "sound file names keep the old wav names (alias window)"],
-  ["src/core/sound.ts", "SOUND_ALIAS", "legacy alias (one-version window)"],
   ["src-tauri/src/core/drop_target.rs", "self.emit(", "generic enter/leave/drop of the OS drag, relayed as `file-drag`: not module events"],
 ];
 const CORE_EVENTS = ["cursor", "tray", "screen-changed", "settings-changed", "settings-shown", "modules-changed", "file-drag", "hotkey-error", "inbox-added"];

@@ -70,28 +70,21 @@ test("pill badge: applyBadge reports change only", async () => {
   assert.equal(applyBadge(pills, "a", null), true);
 });
 
-test("badge mapping: old names map to neutral ones", async () => {
-  const { badgeName } = await import("../src/core/badge.ts");
-  assert.equal(badgeName("approval"), "alert");
-  assert.equal(badgeName("finished"), "done");
-  assert.equal(badgeName("error"), "error");
-  assert.equal(badgeName("done"), "done");
-  assert.equal(badgeName(null), null);
+test("old mood/badge/sound aliases are gone", async () => {
+  const badge = await import("../src/core/badge.ts");
+  const layout = await import("../src/core/layout.ts");
+  const sound = await import("../src/core/sound.ts");
+  for (const k of ["badgeName", "BADGE_ALIAS"]) assert.equal(k in badge, false);
+  for (const k of ["moodName", "MOOD_ALIAS"]) assert.equal(k in layout, false);
+  for (const k of ["soundName", "SOUND_ALIAS"]) assert.equal(k in sound, false);
+  for (const n of ["alert", "ask", "wait", "attach"]) assert.ok((sound.SOUND_NAMES as readonly string[]).includes(n));
+  for (const n of ["approval", "question", "rate"]) assert.equal((sound.SOUND_NAMES as readonly string[]).includes(n), false);
 });
 
-test("mood alias map: old names map to neutral ones, new ones pass", async () => {
-  const { moodName } = await import("../src/core/layout.ts");
-  assert.deepEqual(
-    ["approval", "question", "finished", "ratelimit"].map(moodName),
-    ["alert", "ask", "done", "waiting"],
-  );
-  for (const m of ["idle", "working", "alert", "ask", "done", "waiting", "error"]) assert.equal(moodName(m), m);
-});
-
-test("sound alias: old names map to neutral ones", async () => {
-  const { soundName, SOUND_NAMES } = await import("../src/core/sound.ts");
-  assert.deepEqual(["approval", "question", "rate", "blip"].map(soundName), ["alert", "ask", "wait", "blip"]);
-  for (const n of ["alert", "ask", "wait", "attach"]) assert.ok((SOUND_NAMES as readonly string[]).includes(n));
+test("every sound name has a WAV file", async () => {
+  const { SOUND_NAMES } = await import("../src/core/sound.ts");
+  const { existsSync } = await import("node:fs");
+  for (const n of SOUND_NAMES) assert.ok(existsSync(new URL(`../sounds/${n}.wav`, import.meta.url)), n);
 });
 
 test("pills: owner stamp, patch, order, owner-only removal, focus fallback", async () => {

@@ -2,9 +2,9 @@
 
 import { Hooks, homeOf } from "./hooks";
 import type { TabDef } from "./moduleApi";
-import type { BotEmoteName, BotStateName, IslandMode, IslandViewName, LegacyMoodName } from "./layout";
+import type { BotEmoteName, BotStateName, IslandMode, IslandViewName } from "./layout";
 import type { EyeShape } from "../mochi/engine";
-import { applyBadge, type LegacyBadgeName, type PillBadge } from "./badge";
+import { applyBadge, type PillBadge } from "./badge";
 export type { PillBadge };
 
 /** A mini Mochi in the compact grid / pill row. Neutral: any module may own some (api.pills). */
@@ -22,7 +22,7 @@ export interface Pill {
 /** A new pill needs label and color; later calls patch fields (null clears emote / eye / badge). */
 export type PillPatch = Pick<Pill, "id"> & Partial<Omit<Pill, "id" | "owner">>;
 /** What api.pills.set takes: a PillPatch that also accepts the old mood / badge names for one version. */
-export type PillInput = Omit<PillPatch, "mood" | "badge"> & { mood?: BotStateName | LegacyMoodName; badge?: PillBadge | LegacyBadgeName | null };
+export type PillInput = Omit<PillPatch, "mood" | "badge"> & { mood?: BotStateName; badge?: PillBadge | null };
 /** Where a new pill goes: default the end. `after`: missing anchor = start; `before`: missing anchor = end. */
 export type PillAt = "start" | { after: string } | { before: string };
 

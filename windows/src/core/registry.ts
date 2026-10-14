@@ -7,8 +7,6 @@ import { Compact } from "./compact";
 import { Hooks, Services, onMode } from "./hooks";
 import { dropPills, putPill } from "./pills";
 import { Sound } from "./sound";
-import { moodName } from "./layout";
-import { badgeName } from "./badge";
 import { resolveEnabled } from "./moduleApi";
 import type { AvatarSignal, Disposer, IslandApi, IslandHooks, IslandHost, ModuleDef, StatusLine } from "./moduleApi";
 import { State } from "./state";
@@ -53,8 +51,7 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
     id,
     pills: {
       set(pill, at) {
-        const p = { ...pill, mood: pill.mood && moodName(pill.mood), badge: pill.badge === undefined ? undefined : badgeName(pill.badge) };
-        if (putPill(State, id, p, at)) State.notify();
+        if (putPill(State, id, pill, at)) State.notify();
       },
       remove(pid) { if (dropPills(State, id, pid)) State.notify(); },
       clear() { if (dropPills(State, id)) State.notify(); },
@@ -85,7 +82,7 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
     },
     avatar: {
       publish(sig: AvatarSignal | null) {
-        if (Avatar.publish(id, sig && { ...sig, state: moodName(sig.state) })) host.redraw();
+        if (Avatar.publish(id, sig)) host.redraw();
         expire("avatar", sig?.ttlMs);
       },
       emote: (e) => host.avatarEmote(e),

@@ -1,6 +1,6 @@
 // Module contract: types only, plus resolveEnabled. Only `import type` here (Node loads it in tests).
 
-import type { BotEmoteName, BotStateName, IslandMode, LegacyMoodName, ViewLayout } from "./layout";
+import type { BotEmoteName, BotStateName, IslandMode, ViewLayout } from "./layout";
 import type { PillAt, PillInput, Settings } from "./state";
 import type { FsmState } from "../island/fsm";
 import type { ViewActions } from "../views/views";
@@ -22,7 +22,7 @@ export interface StatusLine {
 }
 
 /** `state` also takes the old mood names (approval, question, finished, ratelimit) for one version. */
-export interface AvatarSignal { state: BotStateName | LegacyMoodName; priority: number; emote?: BotEmoteName; ttlMs?: number }
+export interface AvatarSignal { state: BotStateName; priority: number; emote?: BotEmoteName; ttlMs?: number }
 
 export interface ViewHost {
   el: HTMLElement;

@@ -12,12 +12,6 @@ export const SOUND_NAMES = [
 
 export type SoundName = (typeof SOUND_NAMES)[number];
 
-/** Neutral name -> WAV file, where they differ (the shipped files keep their old names). */
-const FILE: Readonly<Record<string, string>> = { alert: "approval", ask: "question", wait: "rate" };
-/** Old names, accepted for one version. */
-export const SOUND_ALIAS: Readonly<Record<string, string>> = { approval: "alert", question: "ask", rate: "wait" };
-export const soundName = (n: string) => SOUND_ALIAS[n] ?? n;
-
 class SoundEngine {
   enabled = true;
   volume = 0.12;
@@ -64,7 +58,7 @@ class SoundEngine {
       master.connect(ctx.destination);
       this.master = master;
       await Promise.all([
-        ...SOUND_NAMES.map((name) => this.load(name, `/sounds/${FILE[name] ?? name}.wav`)),
+        ...SOUND_NAMES.map((name) => this.load(name, `/sounds/${name}.wav`)),
         ...[...this.extra].map(([name, url]) => this.load(name, url)),
       ]);
       // A sound registered while the rest was loading missed the snapshot above.
@@ -111,9 +105,8 @@ class SoundEngine {
     else void this.ctx?.suspend();
   }
 
-  play(raw: SoundName | string) {
+  play(name: SoundName | string) {
     if (!this.enabled) return;
-    const name = soundName(raw);
     const ctx = this.ctx;
     const master = this.master;
     const buf = this.buffers.get(name);

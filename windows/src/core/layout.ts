@@ -21,14 +21,6 @@ export type BotStateName =
   | "sleeping"
   | "dizzy";
 
-/** Old mood names, accepted for one version by api.avatar.publish and api.pills.set. */
-export const MOOD_ALIAS: Readonly<Record<string, BotStateName>> = { approval: "alert", question: "ask", finished: "done", ratelimit: "waiting" };
-export type LegacyMoodName = "approval" | "question" | "finished" | "ratelimit";
-
-export function moodName(s: string): BotStateName {
-  return MOOD_ALIAS[s] ?? (s as BotStateName);
-}
-
 export type BotEmoteName = "love" | "surprised" | "proud" | "wink" | "yawn" | "happy" | "annoyed";
 
 export type AgentLayoutMode = "none" | "grid" | "pills" | "column";
