@@ -7,8 +7,8 @@
 // tool's result and no more; none of it is fetched, and none of it is kept
 // once the session is gone.
 
-import { h, svg } from "../../../views/dom";
-import { diffLine, fileKind, readPatch } from "../../../views/code";
+import { h, svg } from "../../../kit/dom";
+import { diffLine, fileKind, readPatch } from "../../../kit/code";
 import { ICONS } from "../icons";
 import type { SessionStep } from "../types";
 

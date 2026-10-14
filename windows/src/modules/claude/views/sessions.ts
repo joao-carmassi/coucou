@@ -3,8 +3,8 @@
 // erased (two clicks). The 5 s poll of the running ones lives only while the
 // view is on screen — hidden, the island costs nothing.
 
-import { h } from "../../../views/dom";
-import { timeAgo } from "../../../views/format";
+import { h } from "../../../kit/dom";
+import { timeAgo } from "../../../kit/format";
 import { type ClaudeProfile, type LiveSession, type ManagedSession, ClaudeBridge } from "../bridge";
 import type { ViewContext, ViewHost } from "../../../core/moduleApi";
 import type { Claude } from "../claude";

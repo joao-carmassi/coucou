@@ -1,12 +1,12 @@
 // Static neutrality audit: "the core (island + Mochi) knows no module".
-// Scope: src/{core,island,views,mochi,settings,style}/**, src/main.ts, src-tauri/src/core/**, src-tauri/src/lib.rs.
+// Scope: src/{core,island,views,mochi,settings,style,kit}/**, src/main.ts, src-tauri/src/core/**, src-tauri/src/lib.rs.
 // FAIL by default: exit 1 on any non-allowlisted finding, comment-only hits included.
 // `--warn` prints everything and exits 0 (comment hits shown as warnings).
 // Run: npm run neutrality-audit [-- --warn] [-- --verbose]
 //
 // LINTS (behavioural; FAIL by default when a count is above scripts/neutrality-ratchet.json; `--warn-lints` only prints):
 //   A. boundary: src/modules/** must not import `State` (value import from core/state), write `State.<field> =`, or
-//      value-import core other than core/moduleApi, views/dom, views/icons, kit/* (`import type` is always fine).
+//      value-import core other than core/moduleApi, kit/* (`import type` is always fine).
 //   B. dead fields: every field of Settings, AppState, ViewLayout and IslandApi must be READ in src/{core,island,views,mochi}
 //      (IslandApi: used by any src file but moduleApi.ts/registry.ts, since modules are its readers).
 // scripts/neutrality-ratchet.json holds the counts; they may only go down (`--write-ratchet` lowers them).
@@ -111,6 +111,9 @@ function scan(f, lang) {
       if (re.test(code)) add(name, i + 1, rule, raw, false);
       else if (re.test(com)) add(name, i + 1, rule + " (comment)", raw, true);
     };
+    // kit is module-agnostic: no modules/, island/, core/state or core/bridge (CSS: module prefixes, rule 4).
+    if (lang === "ts" && name.startsWith("src/kit/") && /\bfrom\s+["'][^"']*\/(modules|island)\/|\bfrom\s+["'][^"']*core\/(state|bridge)["']/.test(code))
+      add(name, i + 1, "kit imports modules/island/state/bridge", raw, false);
     if (lang === "ts" && /\bfrom\s+["'][^"']*\/modules\/|\bimport\s*\(\s*["'][^"']*\/modules\//.test(code))
       add(name, i + 1, "import /modules/", raw, false);
     if (lang === "rs") {
@@ -134,7 +137,7 @@ function selectorClasses(f) {
   }
   return out;
 }
-const coreCss = files(join(root, "src/style"), [".css"]).concat(files(join(root, "src/settings"), [".css"]));
+const coreCss = files(join(root, "src/style"), [".css"]).concat(files(join(root, "src/kit"), [".css"])).concat(files(join(root, "src/settings"), [".css"]));
 const coreClasses = new Set(coreCss.flatMap((f) => selectorClasses(f).map((x) => x.cls)));
 const prefixOwners = new Map();
 for (const m of moduleDirs)
@@ -149,9 +152,9 @@ for (const f of coreCss) {
   for (const { cls, n } of selectorClasses(f)) if (modulePrefix.has(cls.split("-")[0])) add(rel(f), n, `css prefix "${cls.split("-")[0]}-"`, lines[n - 1], false);
 }
 
-for (const d of ["core", "island", "views", "mochi", "settings"]) for (const f of files(join(root, "src", d), [".ts"])) scan(f, "ts");
+for (const d of ["core", "island", "views", "mochi", "settings", "kit"]) for (const f of files(join(root, "src", d), [".ts"])) scan(f, "ts");
 scan(join(root, "src/main.ts"), "ts");
-for (const f of files(join(root, "src/style"), [".css"]).concat(files(join(root, "src/settings"), [".css"]))) scan(f, "css");
+for (const f of coreCss) scan(f, "css");
 for (const f of files(join(root, "src-tauri/src/core"), [".rs"]).concat([join(root, "src-tauri/src/lib.rs")])) scan(f, "rs");
 
 // ── Behavioural lints (see header) ───────────────────────────────────────────────
@@ -161,7 +164,7 @@ const codeLines = (f) => {
   const st = { block: false };
   return readFileSync(f, "utf8").split("\n").map((l) => splitLine(l, st, "ts").code);
 };
-const ALLOWED_CORE = /\/(core\/moduleApi|views\/dom|views\/icons|kit\/[\w/-]+)$/;
+const ALLOWED_CORE = /\/(core\/moduleApi|kit\/[\w/-]+)$/;
 const stateImports = [], stateWrites = [], foreignImports = [];
 for (const m of moduleDirs) for (const f of files(join(root, "src/modules", m), [".ts"])) {
   const lines = codeLines(f), code = lines.join("\n");
@@ -204,7 +207,7 @@ function members(file, kind, name, nested) {
   return [...out];
 }
 const srcTs = files(join(root, "src"), [".ts"]);
-const coreTs = ["core", "island", "views", "mochi"].flatMap((d) => files(join(root, "src", d), [".ts"]));
+const coreTs = ["core", "island", "views", "mochi", "kit"].flatMap((d) => files(join(root, "src", d), [".ts"]));
 const corpus = (list) => list.map((f) => ({ f, code: codeLines(f).join("\n") }));
 const coreCode = corpus(coreTs), apiCode = corpus(srcTs.filter((f) => !/core\/(moduleApi|registry)\.ts$/.test(rel(f)))), moduleCode = corpus(srcTs.filter((f) => rel(f).startsWith("src/modules/")));
 const notWrite = String.raw`(?!\s*(?:=(?!=)|[+\-*]=|\+\+|--))`;

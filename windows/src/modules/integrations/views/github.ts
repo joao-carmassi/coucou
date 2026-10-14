@@ -4,12 +4,12 @@
 // island's own pieces — the card, the rows, the dots, Mochi's state colours —
 // rather than from GitHub's look.
 
-import { h, svg, clear, dot } from "../../../views/dom";
-import { diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath } from "../../../views/code";
+import { h, svg, clear, dot } from "../../../kit/dom";
+import { diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath } from "../../../kit/code";
 import { ICONS } from "../icons";
-import { COLOR, wear } from "../../../views/palette";
+import { COLOR, wear } from "../../../kit/palette";
 import { ACTIVITY_STYLE, GITHUB_LEVELS, compact, githubData, repoName, type GithubOpening } from "./integrations";
-import { timeAgo } from "../../../views/format";
+import { timeAgo } from "../../../kit/format";
 import { rt } from "../store";
 import { GITHUB, cleanups, info as infos, integrationSettings, later, redraw } from "../store";
 import { Bridge } from "../../../core/bridge";

@@ -8,7 +8,7 @@
 import type { ModuleSettings } from "../../core/moduleSettings";
 import "./settings.css";
 import { type HookPreview, type HookStatus, type WslStatus, ClaudeBridge } from "./bridge";
-import { h, clear } from "../../views/dom";
+import { h, clear } from "../../kit/dom";
 import type { ClaudeSettings } from "./store";
 
 /** main.ts fires this on `window` every time the settings window comes up (WSL is slow, so only then). */

@@ -1,7 +1,7 @@
 // The Mídia module: screenshots, recordings and dropped files, plus Mochi dropped on a window.
 // Its Rust half (modules/media) watches the Windows folders and keeps the list.
 
-import { svg } from "../../views/dom";
+import { svg } from "../../kit/dom";
 import "./media.css";
 import { PANEL_H } from "../../core/layout";
 import type { ModuleDef } from "../../core/moduleApi";

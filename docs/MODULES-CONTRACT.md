@@ -244,9 +244,9 @@ src/island/fsm.ts                              0         1
 src/island/island.ts                           0         6
 src/mochi/engine.ts                            4         0
 src/settings/main.ts                           3         1
-src/views/code.ts                              0        12
-src/views/icons.ts                             1         7
-src/views/palette.ts                           0         4
+src/kit/code.ts                                0        12
+src/kit/icons.ts                              1         7
+src/kit/palette.ts                           0         4
 src/views/views.ts                             4         0
 TOTAL findings 172, warnings 99, allowlisted 4
 ```
@@ -350,7 +350,7 @@ Honest limits: (a) Rust code still needs the three edits in `modules/mod.rs`; (b
 
 ## Shared UI kit and CSS conventions (0.3.1)
 
-- `src/views` and `src/style` hold only generic parts: header glyphs and icons used by 2+ modules, `dom.ts`, `format.ts`, a parametrised code/diff view (`code.ts`, `diff-*` classes) and the panel kit (`pane-*` classes, `style/pane.css`).
+- `src/kit` is the shared, module-agnostic UI kit: `dom.ts`, `icons.ts` (header glyphs and icons used by 2+ modules), `format.ts`, `palette.ts`, a parametrised code/diff view (`code.ts`, `code.css`, `diff-*` classes) and the panel kit (`pane-*` classes, `pane.css`). Modules and core may import `kit/*`; `kit/` imports nothing from `modules/`, `island/`, `core/state` or `core/bridge` and its CSS uses no module prefix (enforced by `neutrality-audit`, scope includes `src/kit/**`). `src/views` keeps only the core header/views host (`views.ts`). `style/index.ts` imports `../kit/pane.css` and `../kit/code.css` at their old cascade positions.
 - A module's own icons live in `modules/<id>/icons.ts` (`ICONS = { ...CORE, ...own }`). `tile-*` is the overview card layout, hosted by the claude module; other modules dress their cards in it through the `taskCard` service.
 - Module prefixes (`sess-`, `gh-`, `int-`, ...) are forbidden in core selectors: `neutrality-audit` derives them from `modules/*/*.css` and fails the build on a hit. The audit also fails on comments that name a module.
 - Mood, badge and sound aliases of the old names were removed in 0.3.1 (`alert`, `ask`, `done`, `waiting`; `alert.wav`, `ask.wav`, `wait.wav`).
@@ -361,5 +361,5 @@ Honest limits: (a) Rust code still needs the three edits in `modules/mod.rs`; (b
 
 - **Headless harness** (`npm run test:harness`, part of `npm run check`): vitest + happy-dom (`vitest.config.ts`, `tests/harness/`). `modules/index` and `modules/catalog` are mocked so the island boots with only `clock` (dev module) and `tests/harness/dummyModule.ts` (2 views, a pill, an overlay, a pin request; no Rust). Canvas, Path2D, `@tauri-apps/api` invoke/listen are stubbed and recorded; timers and rAF are fake. It asserts: greeting ends in compact, a status line shows, a click opens the home tab and the header lists every registered tab, `api.avatar.emote` reaches the engine, hovering the bot 1.9 s triggers `love` and `ensureRunning`, `Registry.apply` with no modules lands on `empty`, zero `console.error`, and no recorded command or event named `claude_`, `github_`, `voice_`, `media_` or `integrations_`. happy-dom does no layout, so geometry is not asserted. `tests/harness/requests.test.ts` drives the request queue through the island (two modules, priorities, `ms`, module stop, Aguardar + hover reopen).
 - **Lints** (in `scripts/neutrality-audit.mjs`, FAIL by default when a count is above `scripts/neutrality-ratchet.json`, whose `reasons` justify what stays; `--warn-lints` only prints; `--write-ratchet` lowers it after a cleanup, counts never go up):
-  - *Boundary*: `src/modules/**` must not value-import `State` from `core/state` (`stateImports`), write `State.<field> =` (`stateWrites`), or value-import core other than `core/moduleApi`, `views/dom`, `views/icons`, `kit/*` (`foreignCoreImports`). `import type` is always fine. Offenders are printed per module.
+  - *Boundary*: `src/modules/**` must not value-import `State` from `core/state` (`stateImports`), write `State.<field> =` (`stateWrites`), or value-import core other than `core/moduleApi`, `kit/*` (`foreignCoreImports`). `import type` is always fine. Offenders are printed per module.
   - *Dead fields*: every field of `Settings`, `AppState`, `ViewLayout` and `IslandApi` must be read in `src/{core,island,views,mochi}` (`deadFields`). `IslandApi` is implemented by the core and read by modules, so its fields count as used when any file except `moduleApi.ts` and `registry.ts` reads them. A field only written, or only read by modules, is listed with how often modules mention it.

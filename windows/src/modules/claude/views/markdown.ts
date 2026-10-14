@@ -6,7 +6,7 @@
 // stays as it was written. Everything is built as text nodes: nothing an
 // answer contains is ever read as HTML, and a link is shown, not followed.
 
-import { h } from "../../../views/dom";
+import { h } from "../../../kit/dom";
 
 const INLINE = /(\*\*[^*\n]+\*\*|`[^`\n]+`|\[[^\]\n]+\]\([^)\n]+\)|\*[^*\s][^*\n]*\*)/g;
 

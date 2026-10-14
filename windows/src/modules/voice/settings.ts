@@ -4,7 +4,7 @@
 import { onEvent } from "../../core/bridge";
 import { VoiceBridge } from "./bridge";
 import type { ModuleSettings } from "../../core/moduleSettings";
-import { h } from "../../views/dom";
+import { h } from "../../kit/dom";
 
 /** Rust keeps the hotkey in `extra`: absent = the default (settingsDefaults), "" = off. */
 export function voiceSettingsSection(ms: ModuleSettings): { el: HTMLElement; dispose(): void } {

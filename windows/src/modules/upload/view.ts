@@ -3,7 +3,7 @@
 //
 // `choose` offers the one action the spec asks for: open the file in Claude Code.
 
-import { h, clear } from "../../views/dom";
+import { h, clear } from "../../kit/dom";
 import { Up } from "./state";
 import { CLAUDE_SERVICE, type LaunchFile } from "../claude/api";
 import type { IslandApi, ViewContext, ViewHost } from "../../core/moduleApi";

@@ -3,8 +3,8 @@
 // view is open (it arms on view.sync and disarms itself the first tick after the view is left).
 import "./clock.css";
 import { BAND, type Disposer, type IslandApi, type ModuleDef } from "../../core/moduleApi";
-import { svg } from "../../views/dom";
-import { ICONS } from "../../views/icons";
+import { svg } from "../../kit/dom";
+import { ICONS } from "../../kit/icons";
 import { formatOf, timeText } from "./format";
 import { buildClockView } from "./view";
 

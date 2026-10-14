@@ -1,4 +1,4 @@
-import { h, clear, replay } from "../../views/dom";
+import { h, clear, replay } from "../../kit/dom";
 import { card } from "../../views/views";
 import type { ViewContext, ViewHost } from "../../core/moduleApi";
 import type { TimerClock } from "./timer";

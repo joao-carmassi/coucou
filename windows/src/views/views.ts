@@ -1,8 +1,8 @@
 // Island views — DOM ports of IslandViewContent.swift, core only: the empty home
 // card, the greeting, note, confused and in-island settings.
 
-import { h, svg, clear } from "./dom";
-import { ICONS } from "./icons";
+import { h, svg, clear } from "../kit/dom";
+import { ICONS } from "../kit/icons";
 import { State } from "../core/state";
 import { washRGBA } from "../core/layout";
 import type { IslandViewName, Wash } from "../core/layout";

@@ -1,6 +1,6 @@
 // The Relógio section of the settings window (only while the module is on).
 import type { ModuleSettings } from "../../core/moduleSettings";
-import { h } from "../../views/dom";
+import { h } from "../../kit/dom";
 import { formatOf } from "./format";
 
 function clockSettingsSection(ms: ModuleSettings): { el: HTMLElement } {

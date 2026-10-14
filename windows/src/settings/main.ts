@@ -8,7 +8,7 @@ import { moduleSettings } from "../core/moduleSettings";
 import { MODULE_INFO } from "../modules/catalog";
 import { SETTINGS_SECTIONS } from "../modules/settings";
 import { DEFAULT_SETTINGS, State, type Settings } from "../core/state";
-import { h, clear } from "../views/dom";
+import { h, clear } from "../kit/dom";
 
 let settings: Settings = { ...DEFAULT_SETTINGS };
 // ModuleSettings reads State.settings (this same object) and saves patches of its own keys.

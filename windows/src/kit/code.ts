@@ -251,7 +251,7 @@ export function plusMinus(additions: number, deletions: number): HTMLElement {
   );
 }
 
-/** "src/views/" and "code.ts". */
+/** "src/kit/" and "code.ts". */
 export function splitPath(path: string): { dir: string; base: string } {
   const i = path.lastIndexOf("/");
   return i < 0 ? { dir: "", base: path } : { dir: path.slice(0, i + 1), base: path.slice(i + 1) };

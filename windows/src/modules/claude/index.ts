@@ -8,7 +8,7 @@ import "./chat.css";
 import "./panel.css";
 import "./claude.css";
 import { PANEL_H } from "../../core/layout";
-import { svg } from "../../views/dom";
+import { svg } from "../../kit/dom";
 import { claudeOf } from "./claude";
 import { ICONS } from "./icons";
 import { CARDS } from "./views/cards";
