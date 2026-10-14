@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.4
+
+- Compact mini grid: with no status line on show (nobody working) every other pill is listed again, ambient integrations included (up to 6); while a status line shows, ambient pills stay out. Core only (`State.gridPills`, `State.statusLine`); `api.pills.others()` unchanged. The width follows the same list.
+- Regression tests: news on a folded island (front or not) and ambient pills.
+
 ## 0.8.3
 
 - New focus model. Implicit focus for every tab (core, no module code): leaving a view (tab change, or the island leaving `expanded`) remembers it; reopening within `focusHoldMinutes` (default 1) lands on it unless it is the home view. Unknown views are skipped; `0` turns it off.

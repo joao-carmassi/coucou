@@ -11,7 +11,6 @@ import {
 } from "../core/layout";
 import type { BotEmoteName, IslandMode, IslandViewName } from "../core/layout";
 import { Avatar } from "../core/avatar";
-import { Compact } from "../core/compact";
 import { Hooks, emitMode } from "../core/hooks";
 import { glowOf } from "../mochi/moods";
 import { EXPANDED_W, PANEL_H } from "../core/moduleApi";
@@ -454,12 +453,12 @@ export class Island implements IslandHost {
 
   /** The one-line status the compact island says: the strongest module line. */
   private compactLine(): string {
-    return Compact.resolve(State.gridPills.length)?.text ?? "";
+    return State.statusLine?.text ?? "";
   }
 
   /** The line takes the place of the mini grid. */
   private textOverGrid(): boolean {
-    return !!Compact.resolve(State.gridPills.length)?.overGrid;
+    return !!State.statusLine?.overGrid;
   }
 
   /** New word rises from below while the old one leaves upward; instant if nothing was showing. */

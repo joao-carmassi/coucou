@@ -1,7 +1,7 @@
 // Task holds (api.island.hold) and ambient pills driven through the real island.
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { dummyProbe, requestPin } from "./dummyModule";
-import type { IslandApi, ModuleDef } from "../../src/core/moduleApi";
+import { BAND, type IslandApi, type ModuleDef } from "../../src/core/moduleApi";
 
 const { second, secondModule } = vi.hoisted(() => {
   const second: { api: IslandApi | null } = { api: null };
@@ -27,7 +27,7 @@ import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
 import { State } from "../../src/core/state";
 import { Holds, Last } from "../../src/core/holds";
-import { Compact } from "../../src/core/compact";
+import { compactWidth } from "../../src/core/layout";
 
 let island: Island;
 const tick = (ms: number) => vi.advanceTimersByTime(ms);
@@ -219,11 +219,50 @@ describe("sticky holds", () => {
 });
 
 describe("ambient pills", () => {
+  const ids = () => State.gridPills.map((p) => p.id);
+  const width = () => (island as unknown as { targetSize(): { w: number } }).targetSize().w;
+  const add = () => {
+    b().pills.set({ id: "second-quiet", label: "Q", color: "#222", ambient: true });
+    b().pills.set({ id: "second-loud", label: "L", color: "#444", mood: "done", badge: "done" });
+  };
+  const drop = () => { b().pills.remove("second-quiet"); b().pills.remove("second-loud"); };
+
   it("stay listed, leave the grid, and do not hide the status line", () => {
     a().pills.set({ id: "dummy-quiet", label: "Q", color: "#222", ambient: true });
     expect(a().pills.others().map((p) => p.id)).toContain("dummy-quiet");
     expect(State.gridPills.map((p) => p.id)).not.toContain("dummy-quiet");
-    expect(Compact.resolve(State.gridPills.length)?.text).toBe("dummy status");
+    expect(State.statusLine?.text).toBe("dummy status");
     a().pills.remove("dummy-quiet");
+  });
+
+  it("a status line on show hides the ambient pills; only the ones with news compete", () => {
+    b().pills.set({ id: "second-quiet", label: "Q", color: "#222", ambient: true });
+    expect(ids()).toEqual([]);
+    b().pills.set({ id: "second-loud", label: "L", color: "#444", mood: "done", badge: "done" });
+    expect(State.statusLine).toBeNull(); // a pill with news takes the grid, so the line steps aside
+    expect(ids()).toEqual(["second-quiet", "second-loud"]);
+    drop();
+  });
+
+  it("nobody working: every pill shows again, ambient ones included, and the width follows", () => {
+    a().status.set(null);
+    add();
+    expect(ids()).toEqual(["second-quiet", "second-loud"]);
+    expect(width()).toBe(compactWidth(2, 0));
+    b().pills.remove("second-loud");
+    expect(ids()).toEqual(["second-quiet"]);
+    expect(width()).toBe(compactWidth(1, 0));
+    a().status.set({ priority: BAND.ACTIVE, text: "dummy status" });
+    expect(ids()).toEqual([]);
+    drop();
+  });
+
+  it("an overGrid line hides the grid whatever the pills", () => {
+    a().status.set({ priority: BAND.URGENT, text: "timer", overGrid: true });
+    add();
+    expect(State.statusLine?.text).toBe("timer");
+    expect(ids()).toEqual(["second-loud"]);
+    drop();
+    a().status.set({ priority: BAND.ACTIVE, text: "dummy status" });
   });
 });

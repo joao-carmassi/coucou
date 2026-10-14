@@ -27,7 +27,6 @@ const loadCatalog = async () => {
 import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
 import { State } from "../../src/core/state";
-import { Compact } from "../../src/core/compact";
 
 const dummy = () => dummyProbe.api!;
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -49,7 +48,7 @@ describe("integrations on core/moduleApi", () => {
   it("idle at start: ambient, so the dummy status keeps the compact island", () => {
     expect(vercel()?.ambient).toBe(true);
     expect(State.gridPills.map((p) => p.id)).not.toContain("integration_vercel");
-    expect(Compact.resolve(State.gridPills.length)?.text).toBe("dummy status");
+    expect(State.statusLine?.text).toBe("dummy status");
   });
 
   it("news badges the pill, board.focus brings it to front and onChange clears the badge", () => {

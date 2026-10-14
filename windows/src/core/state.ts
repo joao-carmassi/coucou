@@ -1,5 +1,6 @@
 // App state — the parts the island needs. Core only: modules plug in later.
 
+import { Compact } from "./compact";
 import { Hooks, homeOf } from "./hooks";
 import { Requests } from "./requests";
 import type { TabDef } from "./moduleApi";
@@ -125,9 +126,17 @@ class AppState {
     return this.pills.find((t) => t.id === this.focusId) ?? this.pills[0] ?? null;
   }
 
-  /** The other pills that take the compact grid (every one that is not ambient). */
+  /**
+   * The other pills in the compact grid. While a status line is on show the ambient ones stay out
+   * (only pills with something to say compete); with no line on show, every pill is listed.
+   */
   get gridPills(): Pill[] {
-    return this.otherPills.filter((p) => !p.ambient);
+    return this.statusLine ? this.otherPills.filter((p) => !p.ambient) : this.otherPills;
+  }
+
+  /** The compact status line on show: only the non-ambient pills can hide it (an overGrid line never hides). */
+  get statusLine() {
+    return Compact.resolve(this.otherPills.filter((p) => !p.ambient).length);
   }
 
   get otherPills(): Pill[] {
