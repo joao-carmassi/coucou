@@ -8,7 +8,7 @@ export type IslandMode = "hidden" | "compact" | "expanded";
 /** Core views plus whatever modules register. */
 export type IslandViewName = string;
 
-export type BotStateName =
+export type BuiltinMood =
   | "idle"
   | "working"
   | "thinking"
@@ -21,7 +21,11 @@ export type BotStateName =
   | "sleeping"
   | "dizzy";
 
-export type BotEmoteName = "love" | "surprised" | "proud" | "wink" | "yawn" | "happy" | "annoyed";
+/** A built-in mood, or one a module defined ("<moduleId>.<name>"; unknown ones draw as idle). */
+export type BotStateName = BuiltinMood | `${string}.${string}`;
+
+export type BuiltinEmote = "love" | "surprised" | "proud" | "wink" | "yawn" | "happy" | "annoyed";
+export type BotEmoteName = BuiltinEmote | `${string}.${string}`;
 
 export interface ViewLayout {
   height: number;
@@ -150,17 +154,5 @@ export function botPosition(
       const cy = headerBottom + (islandH - headerBottom - cardH) / 2 + cardH / 2;
       return { cx, cy, diameter: layout.botDiameter, opacity: 1 };
     }
-  }
-}
-
-export function botGlowOpacity(s: BotStateName): number {
-  switch (s) {
-    case "idle":
-    case "sleeping":
-      return 0.15;
-    case "dizzy":
-      return 0;
-    default:
-      return 0.65;
   }
 }

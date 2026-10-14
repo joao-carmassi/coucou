@@ -1,6 +1,7 @@
 // Module contract: types only, plus resolveEnabled. Only `import type` here (Node loads it in tests).
 
 import type { BotEmoteName, BotStateName, IslandMode, ViewLayout } from "./layout";
+import type { EmoteDef, MoodDef } from "../mochi/moods";
 import type { RequestSpec } from "./requests";
 import type { ModuleSettings } from "./moduleSettings";
 import type { Pill, PillAt, PillInput } from "./state";
@@ -125,7 +126,15 @@ export interface IslandApi {
   timeout(fn: () => void, ms: number): Disposer;
   interval(fn: () => void, ms: number, opts?: { whenVisible?: boolean }): Disposer;
   status: { set(line: StatusLine | null): void };
-  avatar: { publish(sig: AvatarSignal | null): void; emote(e: BotEmoteName): void; morph(v: number): void; gulp(): void; tint(color: string | null): void; bodyColor(): string | null };
+  avatar: { publish(sig: AvatarSignal | null): void; emote(e: BotEmoteName): void; morph(v: number): void; gulp(): void; tint(color: string | null): void; bodyColor(): string | null;
+    /**
+     * Defines a Mochi mood of this module and returns its name, "<moduleId>.<local>": use that name in avatar.publish,
+     * pills.set and mochi.free/sprite. Removed when the module stops (anything still wearing it draws as idle).
+     */
+    defineMood(local: string, def: MoodDef): `${string}.${string}`;
+    /** Defines an emote of this module and returns its name, "<moduleId>.<local>", for avatar.emote / avatar.publish / a pill's emote. Removed when the module stops. */
+    defineEmote(local: string, def: EmoteDef): `${string}.${string}`;
+  };
   /**
    * Pills (mini Mochis) this module owns; all removed when it stops. set creates (label + color) or patches.
    * `focus` puts one of its pills in front (the pill being opened, during a `pillOpen` reaction, is allowed too); another
@@ -142,8 +151,12 @@ export interface IslandApi {
     /** Every pill but the front one. */
     others(): readonly Pill[];
   };
-  /** Plays a core sound by name (SOUND_NAMES in core/sound.ts); a name that is not loaded stays silent. */
-  sound: { play(name: string): void };
+  /** Plays a sound by name (SOUND_NAMES in core/sound.ts, or one registered); a name that is not loaded stays silent. */
+  sound: {
+    play(name: string): void;
+    /** Adds a sound from a same-origin URL (throws otherwise) and returns its name, "<moduleId>.<local>". Removed when the module stops. */
+    register(local: string, url: string): string;
+  };
   mochi: {
     /** A mini Mochi whose body is `size` CSS px across, in the pill's colour and mood. Ticked by the island until detached. */
     mini(pill: Pill, size: number): HTMLElement;

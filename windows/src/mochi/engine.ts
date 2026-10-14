@@ -6,15 +6,12 @@
 
 import { Ease, lerp, type EaseFn } from "../core/anim";
 import { Sound } from "../core/sound";
-import type { BotEmoteName, BotStateName } from "../core/layout";
+import type { BotEmoteName, BotStateName, BuiltinEmote } from "../core/layout";
+import { emoteDefOf, hasMood, moodOf, type BadgeKind, type EyeShape, type MoodDef } from "./moods";
+
+export type { BadgeKind, EyeShape };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-export type EyeShape =
-  | "pill" | "wide" | "dot" | "line" | "flat" | "happy" | "closed"
-  | "spiral" | "heart" | "star" | "tired" | "wink" | "cup";
-
-export type BadgeKind = "dots" | "bang" | "question" | "dot";
 
 export interface Badge {
   kind: BadgeKind;
@@ -69,43 +66,31 @@ const BASE_BOTTOM: RGB = [0.769, 0.773, 0.792]; // #C4C5CA
 const INK = "rgb(26,20,18)"; // #1A1412
 const MINI_INK = "rgb(16,19,26)"; // #10131A
 
-const C = {
-  idle: [0.902, 0.914, 0.933] as RGB,
-  working: [0.231, 0.62, 1] as RGB,
-  thinking: [0.545, 0.361, 0.965] as RGB,
-  searching: [0.388, 0.396, 0.949] as RGB,
-  alert: [0.961, 0.647, 0.141] as RGB,
-  ask: [0.133, 0.827, 0.933] as RGB,
-  error: [0.957, 0.314, 0.369] as RGB,
-  done: [0.204, 0.831, 0.6] as RGB,
-  waiting: [0.984, 0.573, 0.235] as RGB,
-  sleeping: [0.58, 0.635, 0.722] as RGB,
-  dizzy: [0.957, 0.447, 0.714] as RGB,
-};
+const NO_MOTION = { bounces: false, scans: false, breathes: false, zz: false, sweat: false };
+const cfgs = new WeakMap<MoodDef, BotStateCfg>();
 
-const base = {
-  bounces: false, scans: false, breathes: false, zz: false, sweat: false,
-  look: null, tilt: 0,
-};
+/** The engine's working form of a mood (cached per definition). Unknown names are idle. */
+export function cfgOf(name: string): BotStateCfg {
+  const d = moodOf(name);
+  let c = cfgs.get(d);
+  if (!c) {
+    c = {
+      ...NO_MOTION, ...d.motion, look: d.motion?.look ?? null, tilt: d.motion?.tilt ?? 0,
+      color: hexToRGB(d.color), tint: d.tint ?? 0.72, eye: d.eye,
+      badge: d.badge ? { kind: d.badge.kind, color: hexToRGB(d.badge.color ?? d.color) } : null,
+    };
+    cfgs.set(d, c);
+  }
+  return c;
+}
 
-export const BOT_STATES: Record<BotStateName, BotStateCfg> = {
-  idle: { ...base, color: C.idle, tint: 0, eye: "pill", badge: null },
-  working: { ...base, color: C.working, tint: 0.72, eye: "pill", badge: { kind: "dots", color: C.working } },
-  thinking: { ...base, color: C.thinking, tint: 0.72, eye: "pill", badge: { kind: "dots", color: C.thinking }, look: [0.55, 0.55] },
-  searching: { ...base, color: C.searching, tint: 0.72, eye: "pill", badge: { kind: "dots", color: C.searching }, scans: true },
-  alert: { ...base, color: C.alert, tint: 0.78, eye: "wide", badge: { kind: "bang", color: C.alert }, bounces: true },
-  ask: { ...base, color: C.ask, tint: 0.75, eye: "pill", badge: { kind: "question", color: C.ask }, tilt: 0.17 },
-  error: { ...base, color: C.error, tint: 0.78, eye: "flat", badge: { kind: "dot", color: C.error } },
-  done: { ...base, color: C.done, tint: 0.35, eye: "happy", badge: { kind: "dot", color: C.done } },
-  waiting: { ...base, color: C.waiting, tint: 0.72, eye: "tired", badge: { kind: "dot", color: C.waiting }, sweat: true },
-  sleeping: { ...base, color: C.sleeping, tint: 0.32, eye: "closed", badge: null, breathes: true, zz: true },
-  dizzy: { ...base, color: C.dizzy, tint: 0.7, eye: "spiral", badge: null },
-};
-
-const EMOTE_EYE: Record<BotEmoteName, EyeShape> = {
+const EMOTE_EYE: Record<BuiltinEmote, EyeShape> = {
   love: "heart", surprised: "dot", proud: "star", wink: "wink",
   yawn: "tired", happy: "happy", annoyed: "line",
 };
+
+const isBuiltinEmote = (e: string): e is BuiltinEmote => Object.hasOwn(EMOTE_EYE, e);
+const emoteEye = (e: BotEmoteName): EyeShape | null => (isBuiltinEmote(e) ? EMOTE_EYE[e] : emoteDefOf(e)?.eye ?? null);
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
@@ -176,11 +161,11 @@ export class BotEngine {
   // Mouth spring (fraction of R)
   slotH = 0; slotHTarget = 0; slotHVel = 0; isChewing = false;
 
-  col: RGB = C.idle;
-  colT: RGB = C.idle;
+  col: RGB = cfgOf("idle").color;
+  colT: RGB = cfgOf("idle").color;
 
   state: BotStateName = "idle";
-  cfg: BotStateCfg = BOT_STATES.idle;
+  cfg: BotStateCfg = cfgOf("idle");
 
   eyeOverride: EyeShape | null = null;
   eyeOverrideUntil = 0;
@@ -216,42 +201,48 @@ export class BotEngine {
   // ── Public API ──────────────────────────────────────────────────────────────
 
   setState(next: BotStateName, force = false) {
-    if (!BOT_STATES[next]) return;
+    if (!hasMood(next)) next = "idle";
     if (this.state === next && !force) return;
     const prev = this.state;
     this.state = next;
-    this.cfg = BOT_STATES[next];
+    this.cfg = cfgOf(next);
     this.colT = this.cfg.color;
     if (!this.locks.has("tint")) this.tint = this.cfg.tint;
     if (!this.locks.has("tilt")) this.tgTilt = this.cfg.tilt;
     this.setBadge(this.cfg.badge);
 
-    switch (next) {
-      case "done":
+    const mood = moodOf(next);
+    switch (mood.enter ?? "blink") {
+      case "spark-roll":
         this.doRoll(950, 1);
         setTimeout(() => this.emit("spark", 5), 500);
         break;
-      case "error":
+      case "roll":
+        this.doRoll(950, 1);
+        break;
+      case "shake":
         this.anim("ox", [
           [0.08, 50, Ease.out], [-0.08, 70, Ease.inOut],
           [0.05, 70, Ease.inOut], [0, 90, Ease.out],
         ]);
         break;
-      case "alert":
+      case "hop":
         this.anim("oy", [[-0.2, 150, Ease.out], [0, 300, Ease.back]]);
         break;
-      case "dizzy":
+      case "roll2":
         this.doRoll(1300, 2);
         break;
-      case "ask":
-        this.blink();
-        break;
-      case "waiting":
+      case "sweat":
         this.emit("sweat", 1);
         break;
-      default:
+      case "none":
+        break;
+      case "blink":
         if (prev !== "idle" || next !== "idle") this.blink();
+        break;
     }
+    // Minis follow their pill silently; only a Mochi that is not initialising speaks.
+    if (mood.sound && !force && !this.isMini) Sound.play(mood.sound);
   }
 
   setBadge(b: Badge | null) {
@@ -360,7 +351,7 @@ export class BotEngine {
       this.miniNextBehavior = now() + 0.8 + Math.random() * 1.7;
       return;
     }
-    this.permanentEye = emote ? EMOTE_EYE[emote] : null;
+    this.permanentEye = emote ? emoteEye(emote) : null;
     if (this.permanentEye) {
       this.eyeOverride = this.permanentEye;
       this.eyeOverrideUntil = Number.POSITIVE_INFINITY;
@@ -371,7 +362,25 @@ export class BotEngine {
     this.miniNextBehavior = now() + 0.8 + Math.random() * 1.7;
   }
 
-  triggerEmote(emote: BotEmoteName, duration = 1.8) {
+  /** A module's emote (api.avatar.defineEmote): one generic path from its definition. */
+  private customEmote(name: BotEmoteName, sec?: number) {
+    const d = emoteDefOf(name);
+    if (!d) return;
+    const dur = sec ?? (d.ms ?? 1800) / 1000;
+    this.eyeOverride = d.eye;
+    this.eyeOverrideUntil = now() + dur;
+    const hold = Math.max(0, dur * 1000 - 500);
+    if (d.blush) this.anim("blush", [[d.blush, 250, Ease.out], [d.blush, hold, Ease.lin], [0, 300, Ease.inOut]]);
+    if (d.particles) this.emit(d.particles.kind, d.particles.n);
+    if (d.motion === "hop") this.anim("oy", [[-0.1, 160, Ease.out], [0, 300, Ease.back]]);
+    else if (d.motion === "tilt") this.anim("tilt", [[0.12, 160, Ease.out], [0.12, hold, Ease.lin], [0, 240, Ease.inOut]]);
+    else if (d.motion === "squash") this.squash();
+    if (d.sound) Sound.play(d.sound);
+  }
+
+  triggerEmote(emote: BotEmoteName, duration?: number) {
+    if (!isBuiltinEmote(emote)) return this.customEmote(emote, duration);
+    duration ??= 1.8;
     const t = now();
     this.eyeOverride = EMOTE_EYE[emote];
     this.eyeOverrideUntil = t + duration;

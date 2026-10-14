@@ -1,7 +1,8 @@
 // Mini Mochis (pills + compact grid) — port of MiniBotCanvasView.
 // Each canvas owns a BotEngine; the island's frame loop ticks every live one.
 
-import { BOT_STATES, BotEngine, hexToRGB } from "./engine";
+import { BotEngine, cfgOf, hexToRGB } from "./engine";
+import { hasMood } from "./moods";
 import type { BotEmoteName, BotStateName } from "../core/layout";
 import type { FreeMochi, MochiSprite } from "../core/moduleApi";
 import { wipe } from "../kit/canvas";
@@ -78,7 +79,8 @@ export function createFreeBot(
   color: string, state: BotStateName, bodySize: number, eyes = 1,
 ): { el: HTMLElement; engine: BotEngine } {
   const { slot, engine } = mount(bodySize, "");
-  const cfg = BOT_STATES[state];
+  if (!hasMood(state)) state = "idle";
+  const cfg = cfgOf(state);
   engine.bodyColor = hexToRGB(color);
   engine.state = state;
   engine.cfg = cfg;

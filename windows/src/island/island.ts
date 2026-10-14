@@ -6,14 +6,14 @@ import { Bridge, IS_TAURI } from "../core/bridge";
 import { wipe } from "../kit/canvas";
 import {
   COMPACT_BOT_CX, COMPACT_CONTENT_X, COMPACT_PAD, EXPANDED_CORNER, PANEL_W,
-  ROUNDED_CORNER, botGlowOpacity, botPosition, registerLayout, viewLayout,
+  ROUNDED_CORNER, botPosition, registerLayout, viewLayout,
   compactWidth, islandSize, miniGridSize,
 } from "../core/layout";
 import type { BotEmoteName, IslandMode, IslandViewName } from "../core/layout";
 import { Avatar } from "../core/avatar";
 import { Compact } from "../core/compact";
 import { Hooks, emitMode } from "../core/hooks";
-import { botGlowColor } from "../kit/palette";
+import { glowOf } from "../mochi/moods";
 import { EXPANDED_W, PANEL_H } from "../core/moduleApi";
 import type { Disposer, IslandHost, Overlay, TabDef, ViewContext, ViewDef } from "../core/moduleApi";
 import { Requests, type Req, type RequestSpec } from "../core/requests";
@@ -846,14 +846,14 @@ export class Island implements IslandHost {
 
     if (State.mode === "expanded" && !greetingActive && viewLayout(State.view).glow !== false) {
       const d = p.diameter;
-      const color = botGlowColor(this.effState());
+      const glow = glowOf(this.effState());
       this.botGlow.style.display = "block";
       this.botGlow.style.width = `${d * 2.2}px`;
       this.botGlow.style.height = `${d * 2.2}px`;
       this.botGlow.style.left = `${this.botCx.value - d * 1.1}px`;
       this.botGlow.style.top = `${this.botCy.value - d * 1.1}px`;
-      this.botGlow.style.background = `radial-gradient(circle, ${color} 0%, transparent 62%)`;
-      this.botGlow.style.opacity = String(botGlowOpacity(this.effState()));
+      this.botGlow.style.background = `radial-gradient(circle, ${glow.color} 0%, transparent 62%)`;
+      this.botGlow.style.opacity = String(glow.opacity);
     } else {
       this.botGlow.style.display = "none";
     }
