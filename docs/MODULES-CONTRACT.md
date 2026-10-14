@@ -213,3 +213,36 @@ Nothing below is verified at runtime beyond the checks in `docs/idle-baseline.md
 | github, vercel, stripe, n8n, resend, calcom, notion | OFF | One module per service (group "Integrações"). One shared scheduler, no task while none is on. Hooks used: `taskCard`, `taskNews`, `avatar.tint` |
 
 Known limit: the compact grid shows at most 4 mini pills (display limit, not a limit on modules).
+
+## Neutrality baseline
+
+`npm run neutrality-audit` (warn mode; `-- --fail` exits 1; `-- --verbose` lists lines). Findings = hits in code, warnings = comment-only hits. Baseline at M0 (before M1/M2): **172 findings, 99 warnings**.
+
+```
+file                                    findings  warnings
+src-tauri/src/core/drop_target.rs              3         1
+src-tauri/src/core/hotkeys.rs                  6         0
+src-tauri/src/core/inbox.rs                    3         4
+src-tauri/src/core/island.rs                   0         2
+src-tauri/src/core/platform/mod.rs             0         2
+src-tauri/src/core/platform/windows.rs         0         2
+src-tauri/src/core/settings.rs                 8         0
+src-tauri/src/lib.rs                         135         4
+src/core/anim.ts                               0         2
+src/core/badge.ts                              1         0
+src/core/bridge.ts                             0        43
+src/core/hooks.ts                              0         1
+src/core/layout.ts                             3         0
+src/core/moduleApi.ts                          0         6
+src/core/registry.ts                           0         1
+src/core/sound.ts                              1         0
+src/island/fsm.ts                              0         1
+src/island/island.ts                           0         6
+src/mochi/engine.ts                            4         0
+src/settings/main.ts                           3         1
+src/views/code.ts                              0        12
+src/views/icons.ts                             1         7
+src/views/palette.ts                           0         4
+src/views/views.ts                             4         0
+TOTAL findings 172, warnings 99, allowlisted 4
+```

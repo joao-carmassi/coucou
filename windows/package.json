@@ -10,6 +10,7 @@
     "test": "node --test tests/resolvers.test.ts tests/timer.test.ts tests/upload.test.ts tests/providers.test.ts",
     "icons": "node scripts/gen-icons.mjs",
     "idle-audit": "node scripts/idle-audit.mjs",
+    "neutrality-audit": "node scripts/neutrality-audit.mjs",
     "tauri": "tauri",
     "predev": "cargo build --release -p coucou-hook",
     "prebuild": "cargo build --release -p coucou-hook",
