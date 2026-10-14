@@ -375,7 +375,7 @@ function buildOverview(c: Claude, ctx: ViewContext): ViewHost {
       // Nothing else active: the left card takes the full width.
       el.classList.toggle("solo", others.length === 0);
       // The Claude pill's name changes with Settings too, not only with a session.
-      const pillKey = others.map((t) => `${t.id}:${store.badges.get(t.id) ?? ""}`).join("|") + `|${store.clientName}`;
+      const pillKey = others.map((t) => `${t.id}:${store.badges.get(t.id) ?? t.pillBadge ?? ""}`).join("|") + `|${store.clientName}`;
       if (pillKey !== pillIds) {
         pillIds = pillKey;
         clear(pills);
@@ -445,7 +445,7 @@ function buildPill(c: Claude, task: AgentTask): HTMLElement {
     (pill.querySelector(".lbl") as HTMLElement).style.color = "";
   });
 
-  const badgeKind = c.store.badges.get(task.id);
+  const badgeKind = c.store.badges.get(task.id) ?? task.pillBadge;
   if (badgeKind) {
     const colors = { approval: "#F5A524", finished: "#22C55E", error: "#F4505E" } as const;
     const icons = { approval: ICONS.bang, finished: ICONS.check, error: ICONS.xmark } as const;

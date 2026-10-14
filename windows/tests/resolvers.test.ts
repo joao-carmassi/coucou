@@ -60,3 +60,12 @@ test("Hooks.home(false) ignores pinned requests", () => {
   assert.equal(Hooks.home(false), null);
   off();
 });
+
+test("pill badge: applyBadge reports change only", async () => {
+  const { applyBadge } = await import("../src/core/badge.ts");
+  const tasks = [{ id: "a", name: "a", color: "#000", state: "idle" as const }];
+  assert.equal(applyBadge(tasks, "a", "error"), true);
+  assert.equal(applyBadge(tasks, "a", "error"), false);
+  assert.equal(applyBadge(tasks, "zz", "error"), false);
+  assert.equal(applyBadge(tasks, "a", null), true);
+});
