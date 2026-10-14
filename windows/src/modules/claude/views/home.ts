@@ -3,6 +3,7 @@
 import type { ViewContext, ViewHost } from "../../../core/moduleApi";
 import { card } from "../../../kit/card";
 import { clear, h, svg } from "../../../kit/dom";
+import { homeLayout } from "../../../kit/home";
 import { ICONS } from "../../../kit/icons";
 import { tile } from "../../../kit/tile";
 import type { BoardCard } from "../../board/api";
@@ -19,7 +20,7 @@ export function buildClaudeHome(c: Claude, ctx: ViewContext): ViewHost {
   const body = h("div", { class: "left-body" });
   const jump = h("button", { class: "icon-btn jump", title: "Abrir", onclick: () => api.call("pillOpen", api.pills.front()?.id ?? CLAUDE_ID) }, svg(ICONS.arrowUpRight, 8));
   const left = card(null, body, jump);
-  const el = h("div", { class: "view overview solo" }, h("div", { class: "left" }, left));
+  const el = homeLayout({ left, solo: true });
   left.addEventListener("click", (e) => {
     if (!shown?.open || (e.target as Element).closest("button")) return;
     actions.blip();

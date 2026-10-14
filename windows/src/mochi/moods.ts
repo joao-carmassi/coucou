@@ -55,6 +55,9 @@ export const BUILTIN_MOODS: Record<BuiltinMood, MoodDef> = {
 };
 
 const custom = new Map<string, MoodDef>();
+let version = 0;
+/** Bumped whenever a custom mood is added, replaced or removed: a sprite re-reads its mood when this changes. */
+export const moodVersion = () => version;
 const customEmotes = new Map<string, EmoteDef>();
 
 const own = (name: string): name is BuiltinMood => Object.hasOwn(BUILTIN_MOODS, name);
@@ -72,10 +75,23 @@ export function glowOf(name: string): { color: string; opacity: number } {
   return m.glow ?? { color: m.color, opacity: 0.65 };
 }
 
+const HEX = /^#[0-9a-f]{6}$/i;
+const bad = (owner: string, what: string, c: unknown) => {
+  if (typeof c !== "string" || !HEX.test(c)) throw new Error(`module "${owner}": ${what} must be a #RRGGBB colour, got ${JSON.stringify(c)}`);
+};
+/** Throws (naming the module) when a colour of a mood is not #RRGGBB. */
+export function checkMood(owner: string, local: string, def: MoodDef) {
+  const w = `mood "${local}"`;
+  bad(owner, `${w} color`, def.color);
+  if (def.badge?.color !== undefined) bad(owner, `${w} badge.color`, def.badge.color);
+  if (def.glow) bad(owner, `${w} glow.color`, def.glow.color);
+}
+
 /** Registers a module's mood; the returned function removes it (only if it is still this definition). */
 export function registerMood(name: string, def: MoodDef): () => void {
   custom.set(name, def);
-  return () => { if (custom.get(name) === def) custom.delete(name); };
+  version++;
+  return () => { if (custom.get(name) === def) { custom.delete(name); version++; } };
 }
 
 export const emoteDefOf = (name: string): EmoteDef | undefined => customEmotes.get(name);

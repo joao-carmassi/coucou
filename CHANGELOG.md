@@ -6,7 +6,13 @@
 - Modules define their own Mochi moods, emotes and sounds (`api.avatar.defineMood/defineEmote`, `api.sound.register`, names `<moduleId>.<local>`), removed with the module; `api.avatar.glow(mood)` gives the glow of any mood. The last hard-coded glow table (`botGlowColor`) is gone.
 - Generic kit builders (`panel`, `tile`, `row`) with public `pane-*`, `tile-*`, `diff-*` classes and the `--tile-inset`, `--pane-side-w`, `--pane-side-top` variables; Claude's sessions list, file list and idle cards and the integrations idle card use them (same markup). Audit rule K2 keeps modules out of the kit's class namespaces.
 - Claude has its own home without the board (`claude-home`: the session card, priority 10 over GitHub's 5).
-- `scripts/css-rules.mjs` snapshot copies the built CSS on Windows paths again.
+- The home layout (`.overview`, `.left`, `.right`, `.solo`, `.left-body`) is a kit sheet (`kit/home.css`) with a builder (`kit/home.ts`, `homeLayout`); board and Claude's home use it, so Claude no longer depends on `board.css`. Same CSS rules, same markup.
+- `api.avatar.defineMood` rejects colours that are not `#RRGGBB` (error names the module); emotes are clamped when played (particles 0..12, ms 100..10000, blush 0..1). A removed mood makes live sprites fall back to idle on the next frame and a redefined one is picked up.
+- The island follows the home when it moves: with the board turned on while `claude-home` shows, it goes to the board.
+- `build.rs`: a loose file directly under `modules/` is a clear error, comments in `PREFIXES` are ignored, and top-level `src/*.rs` changes rerun it; in release a module id missing from `CATALOG` is logged and a unit test checks every id.
+- Kit: `tile` draws its status dot whenever `dot` is given (even an empty colour, as the old cards did); `panel` `side.sub` is optional.
+- `scripts/css-rules.mjs` (new in 0.6.0) compares the built CSS rule by rule before/after a kit refactor.
+- **Behaviour change:** with the board off, GitHub owned and Claude on, the home is `claude-home` (priority 10) instead of the GitHub panel.
 
 ## 0.5.0
 

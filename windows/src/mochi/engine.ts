@@ -7,7 +7,7 @@
 import { Ease, lerp, type EaseFn } from "../core/anim";
 import { Sound } from "../core/sound";
 import type { BotEmoteName, BotStateName, BuiltinEmote } from "../core/layout";
-import { emoteDefOf, hasMood, moodOf, type BadgeKind, type EyeShape, type MoodDef } from "./moods";
+import { emoteDefOf, hasMood, moodOf, moodVersion, type BadgeKind, type EyeShape, type MoodDef } from "./moods";
 
 export type { BadgeKind, EyeShape };
 
@@ -200,6 +200,21 @@ export class BotEngine {
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
+  private moodV = moodVersion();
+
+  /** A module's mood was redefined or removed: re-read it (no entrance), or fall back to idle. */
+  private refreshMood() {
+    this.moodV = moodVersion();
+    if (!hasMood(this.state)) return this.setState("idle");
+    const c = cfgOf(this.state);
+    if (c === this.cfg) return;
+    this.cfg = c;
+    this.colT = c.color;
+    if (!this.locks.has("tint")) this.tint = c.tint;
+    if (!this.locks.has("tilt")) this.tgTilt = c.tilt;
+    this.setBadge(c.badge);
+  }
+
   setState(next: BotStateName, force = false) {
     if (!hasMood(next)) next = "idle";
     if (this.state === next && !force) return;
@@ -366,12 +381,14 @@ export class BotEngine {
   private customEmote(name: BotEmoteName, sec?: number) {
     const d = emoteDefOf(name);
     if (!d) return;
-    const dur = sec ?? (d.ms ?? 1800) / 1000;
+    const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, Number.isFinite(v) ? v : lo));
+    const dur = sec ?? clamp(d.ms ?? 1800, 100, 10000) / 1000;
+    const blush = d.blush ? clamp(d.blush, 0, 1) : 0;
     this.eyeOverride = d.eye;
     this.eyeOverrideUntil = now() + dur;
     const hold = Math.max(0, dur * 1000 - 500);
-    if (d.blush) this.anim("blush", [[d.blush, 250, Ease.out], [d.blush, hold, Ease.lin], [0, 300, Ease.inOut]]);
-    if (d.particles) this.emit(d.particles.kind, d.particles.n);
+    if (blush) this.anim("blush", [[blush, 250, Ease.out], [blush, hold, Ease.lin], [0, 300, Ease.inOut]]);
+    if (d.particles) this.emit(d.particles.kind, Math.round(clamp(d.particles.n, 0, 12)));
     if (d.motion === "hop") this.anim("oy", [[-0.1, 160, Ease.out], [0, 300, Ease.back]]);
     else if (d.motion === "tilt") this.anim("tilt", [[0.12, 160, Ease.out], [0.12, hold, Ease.lin], [0, 240, Ease.inOut]]);
     else if (d.motion === "squash") this.squash();
@@ -492,6 +509,7 @@ export class BotEngine {
   // ── Update ──────────────────────────────────────────────────────────────────
 
   update(dt: number) {
+    if (this.moodV !== moodVersion()) this.refreshMood();
     const n = now();
     const nowMs = performance.now();
 

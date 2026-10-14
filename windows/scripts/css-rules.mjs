@@ -1,5 +1,5 @@
 // CSS equality check for kit refactors: the SET of (at-rule context, selector, declarations) of the built CSS must not change,
-// except the declarations listed in VARIABLIZED (a fixed value that became `var(--x, same value)`). Rule ORDER is reported, not failed
+// except the declarations listed in VARIABLIZED (a fixed value that became `var(--x, same value)`). Rule ORDER must match too, apart from the blocks the kit took over (tile-*, the home layout)
 //   node scripts/css-rules.mjs snapshot <dir>   build and save the built CSS to <dir>
 //   node scripts/css-rules.mjs compare  <dir>   build and compare with the snapshot in <dir>; exit 1 on a difference
 import { execSync } from "node:child_process";
@@ -67,12 +67,12 @@ if (mode === "snapshot" && dir) {
   console.log(`rules before ${b.length}, after ${a.length}`);
   console.log(`variable-ized (listed ${VARIABLIZED.length}, applied ${applied.size}):\n  ${[...applied].join("\n  ")}`);
   if (applied.size !== VARIABLIZED.length) console.log("note: baseline already variable-ized (nothing to swap)");
-  // Order: without the moved block (tile-*) the two sequences must be the same.
-  const noTile = (l) => l.map(sig).filter((x) => !/\| \.tile-/.test(x));
+  // Order: without the blocks the kit took over (tile-*, .overview/.left-body) the two sequences must be the same.
+  const noTile = (l) => l.map(sig).filter((x) => !/\| \.(tile-|overview|left-body)/.test(x));
   const nb = noTile(b), na = noTile(a);
   const sameOrder = nb.length === na.length && nb.every((x, i) => x === na[i]);
   const at = (l) => l.findIndex((r) => /\| \.tile-card/.test(r.sel));
-  console.log(`order: ${sameOrder ? "identical apart from the tile-* block" : "DIFFERENT beyond the tile-* block"}; tile-* block was rule #${at(b)}, now #${at(a)}`);
+  console.log(`order: ${sameOrder ? "identical apart from the moved blocks (tile-*, home layout)" : "DIFFERENT beyond the moved blocks"}; tile-* block was rule #${at(b)}, now #${at(a)}`);
   if (!sameOrder) bad++;
   console.log(bad ? `DIFFERENT (${bad})` : "IDENTICAL: same set of (selector, declarations) apart from the listed variable-ized ones");
   rmSync(out, { recursive: true, force: true });

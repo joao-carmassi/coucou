@@ -54,6 +54,17 @@ describe("home", () => {
     expect(document.querySelector(".left-body .tile-card")).not.toBeNull();
   });
 
+  it("the board coming on while claude-home is showing moves the island to the board's home", () => {
+    Registry.apply({ board: false, claude: true });
+    tick(100);
+    island.open("claude-home");
+    tick(100);
+    expect(State.view).toBe("claude-home");
+    Registry.apply({ board: true, claude: true });
+    tick(100);
+    expect(State.view).toBe("overview");
+  });
+
   it("both off: empty", () => {
     Registry.apply({ board: false, claude: false });
     tick(100);

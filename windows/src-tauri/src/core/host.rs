@@ -133,6 +133,11 @@ fn resolve(catalog: &[ModuleInfo], s: &Settings) -> BTreeMap<String, bool> {
     out
 }
 
+/// Ids of `modules` that have no catalog entry.
+fn uncataloged<'a>(catalog: &[ModuleInfo], modules: &'a [Box<dyn Module>]) -> Vec<&'a str> {
+    modules.iter().map(|m| m.id()).filter(|id| !catalog.iter().any(|c| c.id == *id)).collect()
+}
+
 pub struct ModuleHost {
     catalog: &'static [ModuleInfo],
     modules: Vec<Box<dyn Module>>,
@@ -142,7 +147,14 @@ pub struct ModuleHost {
 
 impl ModuleHost {
     pub fn new(catalog: &'static [ModuleInfo], modules: Vec<Box<dyn Module>>) -> Self {
-        debug_assert!(modules.iter().all(|m| catalog.iter().any(|c| c.id == m.id())), "a Module id is not in the catalog (manifest.json)");
+        let missing = uncataloged(catalog, &modules);
+        if !missing.is_empty() {
+            // Release too: such a module would never start. Fix: a manifest.json for it.
+            let msg = format!("Module id(s) {missing:?} not in the catalog (manifest.json): they never start");
+            eprintln!("{msg}");
+            crate::core::log::line(&msg);
+            debug_assert!(false, "{msg}");
+        }
         Self { catalog, modules, running: Mutex::default(), effective: Mutex::default() }
     }
 
@@ -262,6 +274,22 @@ pub async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct Fake(&'static str);
+    impl Module for Fake {
+        fn id(&self) -> &'static str { self.0 }
+        fn start(&self, _: &ModuleCtx, _: &Settings) {}
+    }
+
+    /// `registry()` itself cannot run here (it links tauri's GUI, which the test exe has no manifest for);
+    /// ModuleHost::new runs this same check on the real list at boot and logs/asserts.
+    #[test]
+    fn uncataloged_finds_ids_missing_from_the_catalog() {
+        let ok: Vec<Box<dyn Module>> = crate::modules::CATALOG.iter().map(|c| Box::new(Fake(c.id)) as Box<dyn Module>).collect();
+        assert!(uncataloged(crate::modules::CATALOG, &ok).is_empty());
+        let bad: Vec<Box<dyn Module>> = vec![Box::new(Fake("claude")), Box::new(Fake("ghost"))];
+        assert_eq!(uncataloged(crate::modules::CATALOG, &bad), vec!["ghost"]);
+    }
 
     #[test]
     fn requires_follow_claude() {

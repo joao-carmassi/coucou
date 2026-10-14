@@ -1073,14 +1073,18 @@ export class Island implements IslandHost {
     };
   }
 
+  private lastHome: IslandViewName = "empty";
+
   setTabs(tabs: TabDef[]) {
     State.tabs = tabs;
     this.header.setTabs(tabs);
-    // The empty card was home: a module came on, so move to the new home.
-    if (State.view === "empty" && State.defaultView() !== "empty") {
-      if (State.mode === "expanded") this.setView(State.defaultView());
-      else State.view = State.defaultView();
+    // The view on show was home (the empty card, a module's fallback home) and home moved: follow it.
+    const home = State.defaultView();
+    if (State.view === this.lastHome && home !== this.lastHome) {
+      if (State.mode === "expanded") this.setView(home);
+      else State.view = home;
     }
+    this.lastHome = home;
     this.redraw();
   }
 

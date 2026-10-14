@@ -1,6 +1,7 @@
 // The kit builders produce the DOM the modules used to write by hand (outerHTML identical).
 import { describe, expect, it } from "vitest";
 import { dot, h } from "../../src/kit/dom";
+import { homeLayout } from "../../src/kit/home";
 import { panel } from "../../src/kit/panel";
 import { tile } from "../../src/kit/tile";
 import { row } from "../../src/kit/list";
@@ -17,6 +18,27 @@ describe("kit builders", () => {
     expect(tile({ title: "Nada por aqui", status: "O que os módulos ligados fizerem aparece aqui" }).outerHTML).toBe(oldEmpty.outerHTML);
     expect(tile({ title: "A", sub: "B", cls: "detail", actions: [h("button")] }).outerHTML)
       .toContain('<div class="tile-head"><b>A</b><span>B</span></div><div class="tile-status"></div><div class="tile-actions"><button></button></div>');
+  });
+
+  it("tile draws the dot even for an empty colour, as the old cards did (dot(task.color, 7))", () => {
+    const old = h("div", { class: "tile-card" },
+      h("div", { class: "tile-head" }, dot("", 7), h("b", { text: "Agent" }), h("span", { text: "Agente" })),
+      h("div", { class: "tile-status" }, h("span", { text: "" })));
+    expect(tile({ title: "Agent", sub: "Agente", dot: "", status: "" }).outerHTML).toBe(old.outerHTML);
+    expect(tile({ title: "A" }).querySelector(".dot")).toBeNull();
+  });
+
+  it("panel side.sub is optional", () => {
+    expect(panel({ side: { title: "T" }, main: h("div") }).querySelector(".pane-side-who")?.outerHTML).toBe('<div class="pane-side-who"><b>T</b></div>');
+  });
+
+  it("homeLayout = the old board / claude-home literals", () => {
+    const l = () => h("div", { class: "card" }, h("div", { class: "left-body" }));
+    const r = () => h("div", { class: "card" }, h("div", { class: "pills" }));
+    const board = h("div", { class: "view overview" }, h("div", { class: "left" }, l()), h("div", { class: "right" }, r()));
+    expect(homeLayout({ left: l(), right: r() }).outerHTML).toBe(board.outerHTML);
+    const solo = h("div", { class: "view overview solo" }, h("div", { class: "left" }, l()));
+    expect(homeLayout({ left: l(), solo: true }).outerHTML).toBe(solo.outerHTML);
   });
 
   it("panel = the old markup literal", () => {

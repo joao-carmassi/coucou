@@ -5,6 +5,7 @@ import type { ViewContext, ViewHost } from "../../core/moduleApi";
 import type { Pill } from "../../core/state";
 import { askPill } from "../../kit/ask";
 import { clear, h, svg } from "../../kit/dom";
+import { homeLayout } from "../../kit/home";
 import { ICONS } from "../../kit/icons";
 import { tile } from "../../kit/tile";
 import type { BoardCard, BoardCardOf, BoardFocus, BoardPillOf } from "./api";
@@ -46,10 +47,7 @@ export function buildBoard(ctx: ViewContext): ViewHost {
   const left = h("div", { class: "card" }, leftBody, jump);
   const pills = h("div", { class: "pills" });
   const right = h("div", { class: "card" }, pills);
-  const el = h("div", { class: "view overview" },
-    h("div", { class: "left" }, left),
-    h("div", { class: "right" }, right),
-  );
+  const el = homeLayout({ left, right });
 
   let shown: BoardCard | null = null;
   let cardKey = "";

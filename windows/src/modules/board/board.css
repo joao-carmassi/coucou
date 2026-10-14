@@ -1,26 +1,3 @@
-/* The island's home: the focused pill's card on the left, the other pills on the right. */
-.overview {
-  display: flex;
-  gap: 10px;
-  height: 100%;
-}
-.overview > .left {
-  flex: 0 0 322px;
-  width: 322px;
-}
-.overview > .right {
-  flex: 1 1 auto;
-}
-/* Only one pill is active: no empty right card, the left one is full width. */
-.overview.solo > .left {
-  flex: 1 1 auto;
-  width: auto;
-  /* Else a long unwrapped command line widens the card past the island. */
-  min-width: 0;
-}
-.overview.solo > .right {
-  display: none;
-}
 /* ── Agent pills ────────────────────────────────────────────────────────── */
 
 .pills {
@@ -90,13 +67,8 @@
   height: 6px;
 }
 
-/* The home's left slot: the tile-* cards modules draw for a pill live in kit/tile.css. */
+/* The home layout (.overview, .left, .left-body) is kit/home.css; the tile-* cards are kit/tile.css. */
 
-.left-body {
-  position: relative;
-  z-index: 1;
-  height: 100%;
-}
 /* A card that opens something: the whole card is the button. */
 .card.opens:hover {
   background: color-mix(in srgb, var(--card), #fff 2.5%);

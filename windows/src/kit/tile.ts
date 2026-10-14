@@ -13,7 +13,7 @@ const kids = (k: Kids | undefined) => (k == null ? [] : Array.isArray(k) ? k : [
 /** `status` is always drawn (an empty line keeps the card's height); `actions` only when given. */
 export function tile(o: { title: string; sub?: string; dot?: string; status?: Kids; actions?: Node[]; cls?: string }): HTMLElement {
   return h("div", { class: o.cls ? `tile-card ${o.cls}` : "tile-card" },
-    h("div", { class: "tile-head" }, o.dot && dotEl(o.dot, 7), h("b", { text: o.title }), o.sub != null && h("span", { text: o.sub })),
+    h("div", { class: "tile-head" }, o.dot != null && dotEl(o.dot, 7), h("b", { text: o.title }), o.sub != null && h("span", { text: o.sub })),
     h("div", { class: "tile-status" }, ...kids(o.status).map((k) => (typeof k === "string" ? h("span", { text: k }) : k))),
     o.actions && h("div", { class: "tile-actions" }, ...o.actions),
   );

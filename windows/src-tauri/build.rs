@@ -59,6 +59,18 @@ fn commands_in(path: &Path) -> Vec<String> {
     out
 }
 
+/// The text without `//` and `/* */` comments (string literals are not special-cased: a PREFIXES list has no `//` inside).
+fn strip_comments(text: &str) -> String {
+    let mut out = String::new();
+    let (mut i, b) = (0, text.as_bytes());
+    while i < b.len() {
+        if b[i..].starts_with(b"//") { while i < b.len() && b[i] != b'\n' { i += 1 } }
+        else if b[i..].starts_with(b"/*") { i = text[i + 2..].find("*/").map_or(b.len(), |e| i + 2 + e + 2) }
+        else { let c = text[i..].chars().next().unwrap(); out.push(c); i += c.len_utf8() }
+    }
+    out
+}
+
 /// `modules/<f>/mod.rs` -> `pub mod <f>;` entries in OUT_DIR/modules.rs, the module registry and the
 /// invoke-handler table, so a new Rust module is just a new folder. Build-time collision checks:
 /// prefixes end with '_' and never nest, a folder's commands use its prefixes, core commands use none.
@@ -66,15 +78,24 @@ fn modules() {
     let src = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("src");
     println!("cargo:rerun-if-changed=src/modules");
     println!("cargo:rerun-if-changed=src/core");
-    println!("cargo:rerun-if-changed=src/lib.rs");
-    let mut folders: Vec<String> = fs::read_dir(src.join("modules")).unwrap().filter_map(|e| {
+    for e in fs::read_dir(&src).unwrap() {
+        let p = e.unwrap().path(); // a top-level src/*.rs (lib.rs, main.rs, ...) may hold commands
+        if p.extension().is_some_and(|x| x == "rs") { println!("cargo:rerun-if-changed={}", p.display()); }
+    }
+    let mut folders: Vec<String> = Vec::new();
+    for e in fs::read_dir(src.join("modules")).unwrap() {
         let p = e.unwrap().path();
-        p.join("mod.rs").is_file().then(|| p.file_name().unwrap().to_string_lossy().into_owned())
-    }).collect();
+        let name = p.file_name().unwrap().to_string_lossy().into_owned();
+        if p.is_dir() {
+            if p.join("mod.rs").is_file() { folders.push(name) }
+        } else if name != "mod.rs" && name != "README.md" {
+            panic!("src/modules/{name}: a module is a folder `src/modules/<id>/mod.rs`, not a file directly under modules/");
+        }
+    }
     folders.sort();
     let mut prefixes: Vec<(String, Vec<String>)> = Vec::new();
     for f in &folders {
-        let text = fs::read_to_string(src.join("modules").join(f).join("mod.rs")).unwrap();
+        let text = strip_comments(&fs::read_to_string(src.join("modules").join(f).join("mod.rs")).unwrap());
         let decl = text.split("pub const PREFIXES").nth(1).unwrap_or_else(|| panic!("modules/{f}/mod.rs: missing `pub const PREFIXES: &[&str] = &[\"{f}_\"];`"));
         let list = &decl[decl.find('=').unwrap()..decl.find(';').unwrap()];
         let p: Vec<String> = list.split('"').skip(1).step_by(2).map(String::from).collect();

@@ -9,7 +9,7 @@ import { moduleSettings } from "./moduleSettings";
 import { dropPills, focusPill, putPill } from "./pills";
 import { Requests } from "./requests";
 import { Sound } from "./sound";
-import { glowOf, registerEmote, registerMood } from "../mochi/moods";
+import { checkMood, glowOf, registerEmote, registerMood } from "../mochi/moods";
 import { createMiniBot, freeMochi, mochiSprite } from "../mochi/minibots";
 import { resolveEnabled } from "./moduleApi";
 import type { AvatarSignal, Disposer, IslandApi, IslandHooks, IslandHost, ModuleDef, StatusLine } from "./moduleApi";
@@ -124,6 +124,7 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
       glow: glowOf,
       defineMood(local, def) {
         const name = `${id}.${local}` as const;
+        checkMood(id, local, def);
         scope.add(registerMood(name, def));
         return name;
       },

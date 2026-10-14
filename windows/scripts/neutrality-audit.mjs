@@ -11,7 +11,7 @@
 //   A2. crossModuleImports: a module value-imports `../<other>/x` where x is not `api` (`import type` is fine).
 //   K. kit rule (a finding, not a ratchet): src/kit/** may value-import only kit/* and @tauri-apps/*; from core/ and mochi/
 //      only `import type`.
-//   K2. kit CSS: kit stylesheets use only kit class prefixes (pane-, tile-, diff-, code-, file-, hl-), and no module stylesheet
+//   K2. kit CSS: kit stylesheets use only kit class prefixes (pane-, tile-, diff-, code-, file-, hl-, plus the kit-owned home layout names overview/left/solo), and no module stylesheet
 //      defines a NEW pane-/tile-/diff- class (it may refine one the kit defines, e.g. `.tile-card.detail`).
 //   B. dead fields: every field of Settings, AppState, ViewLayout and IslandApi must be READ in src/{core,island,views,mochi,kit}
 //      (Settings: also src/settings/** and src/main.ts; IslandApi: used by any src file but moduleApi.ts/registry.ts, since modules are its readers).
@@ -45,6 +45,8 @@ const ALLOWLIST = [
   ["src/core/registry.ts", "modules/catalog", "registry reads the catalog"],
   ["src/settings/main.ts", "modules/settings", "settings window loads the sections only (no island code or CSS)"],
   ["src/settings/main.ts", "modules/catalog", "settings window lists the modules"],
+  ["src/kit/home.css", "overview", "`overview` is the kit-owned class name of the home layout (a CSS name, not the board concept)"],
+  ["src/kit/home.ts", "overview", "same class name, set by the kit builder"],
   ["src-tauri/src/core/drop_target.rs", "self.emit(", "generic enter/leave/drop of the OS drag, relayed as `file-drag`: not module events"],
 ];
 const CORE_EVENTS = ["cursor", "tray", "screen-changed", "settings-changed", "settings-shown", "modules-changed", "file-drag", "hotkey-error", "inbox-added"];
@@ -184,7 +186,7 @@ for (const f of files(join(root, "src/kit"), [".ts"])) {
 
 // K2: kit CSS prefixes, and modules do not grow the kit's namespaces. (Separate from the rules above.)
 {
-  const KIT_PREFIXES = ["pane", "tile", "diff", "code", "file", "hl"];
+  const KIT_PREFIXES = ["pane", "tile", "diff", "code", "file", "hl", "overview", "left", "solo"];
   const NAMESPACES = ["pane", "tile", "diff"];
   const kitCss = files(join(root, "src/kit"), [".css"]);
   const kitDefined = new Set();

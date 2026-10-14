@@ -1,0 +1,35 @@
+/* The island's home layout (build with kit/home.ts): a left card, optionally a right card beside it.
+ *
+ * Public classes (kit-owned names: `overview`, `left`, `left-body`, `solo` are the kit's, not a module's)
+ *   .overview        the layout (row, 100% high)
+ *   .left            left slot, 322px; .right is the optional right slot (grows)
+ *   .overview.solo   only the left slot: it takes the full width, .right is hidden
+ *   .left-body       positioned body of the left card (the card's content; .jump, in style/ui.css, sits over it)
+ */
+.overview {
+  display: flex;
+  gap: 10px;
+  height: 100%;
+}
+.overview > .left {
+  flex: 0 0 322px;
+  width: 322px;
+}
+.overview > .right {
+  flex: 1 1 auto;
+}
+/* Only one pill is active: no empty right card, the left one is full width. */
+.overview.solo > .left {
+  flex: 1 1 auto;
+  width: auto;
+  /* Else a long unwrapped command line widens the card past the island. */
+  min-width: 0;
+}
+.overview.solo > .right {
+  display: none;
+}
+.left-body {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+}

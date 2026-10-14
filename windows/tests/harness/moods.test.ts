@@ -21,7 +21,7 @@ import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
 import { Sound } from "../../src/core/sound";
 import { BotEngine } from "../../src/mochi/engine";
-import { BUILTIN_MOODS, moodOf } from "../../src/mochi/moods";
+import { BUILTIN_MOODS, moodOf, registerMood } from "../../src/mochi/moods";
 import { createFreeBot } from "../../src/mochi/minibots";
 
 type Priv = { engine: BotEngine };
@@ -122,5 +122,58 @@ describe("built-in entrances are unchanged", () => {
     expect(emit).not.toHaveBeenCalled();
     tick(500);
     expect(emit).toHaveBeenCalledWith("spark", 5);
+  });
+});
+
+describe("emote numbers are clamped", () => {
+  it("particles 0..12, ms 100..10000, blush 0..1", () => {
+    Registry.apply({ clock: false, dummy: true });
+    const name = api().avatar.defineEmote("wild", { eye: "star", ms: 99_999_999, particles: { kind: "heart", n: 5000 }, blush: 40 });
+    const e = new BotEngine();
+    const emit = vi.spyOn(e, "emit");
+    const anim = vi.spyOn(e as never, "anim");
+    e.triggerEmote(name);
+    expect(emit).toHaveBeenCalledWith("heart", 12);
+    expect(e.eyeOverrideUntil - performance.now() / 1000).toBeLessThanOrEqual(10.001);
+    expect((anim.mock.calls[0] as unknown[][])[1]).toEqual([[1, 250, expect.anything()], [1, 9500, expect.anything()], [0, 300, expect.anything()]]);
+    const low = api().avatar.defineEmote("tiny", { eye: "dot", ms: 1, particles: { kind: "z", n: -3 } });
+    const e2 = new BotEngine();
+    const emit2 = vi.spyOn(e2, "emit");
+    e2.triggerEmote(low);
+    expect(emit2).toHaveBeenCalledWith("z", 0);
+    expect(e2.eyeOverrideUntil - performance.now() / 1000).toBeGreaterThan(0.09);
+    expect(e2.eyeOverrideUntil - performance.now() / 1000).toBeLessThanOrEqual(0.101);
+  });
+});
+
+describe("defineMood validates colours", () => {
+  it("throws naming the module for a bad body, badge or glow colour", () => {
+    Registry.apply({ clock: false, dummy: true });
+    const d = api().avatar.defineMood;
+    expect(() => d("x", { color: "red", eye: "dot" })).toThrow(/module "dummy".*color/);
+    expect(() => d("x", { color: "#abc", eye: "dot" })).toThrow(/#RRGGBB/);
+    expect(() => d("x", { color: "#112233", eye: "dot", badge: { kind: "dot", color: "nope" } })).toThrow(/badge\.color/);
+    expect(() => d("x", { color: "#112233", eye: "dot", glow: { color: "#12345", opacity: 1 } })).toThrow(/glow\.color/);
+    expect(d("ok", { color: "#AbCdEf", eye: "dot" })).toBe("dummy.ok");
+  });
+});
+
+describe("live sprites follow the mood registry", () => {
+  it("a removed mood falls back to idle on the next frame; a redefine is picked up", () => {
+    const off = registerMood("t.live", { color: "#112233", eye: "dot" });
+    const e = new BotEngine();
+    e.setState("t.live");
+    expect((e as unknown as { cfg: { eye: string } }).cfg.eye).toBe("dot");
+    registerMood("t.live", { color: "#445566", eye: "wide" });
+    e.update(0.016);
+    expect(e.state).toBe("t.live");
+    expect((e as unknown as { cfg: { eye: string } }).cfg.eye).toBe("wide");
+    off(); // the first definition is already replaced: removing it changes nothing
+    e.update(0.016);
+    expect(e.state).toBe("t.live");
+    const off2 = registerMood("t.live", { color: "#778899", eye: "line" });
+    off2();
+    e.update(0.016);
+    expect(e.state).toBe("idle");
   });
 });

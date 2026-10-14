@@ -8,5 +8,6 @@ import "./core.css";
 import "./text.css";
 import "../kit/pane.css";
 import "../kit/tile.css";
+import "../kit/home.css";
 import "../kit/code.css";
 import "./settings.css";

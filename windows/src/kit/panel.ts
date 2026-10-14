@@ -18,9 +18,9 @@ type Part = string | HTMLElement;
 type Kids = Node | (Node | null | undefined | false)[];
 
 /** `cls` is the view's own extra class. `side` is omitted for a panel without the left column. */
-export function panel(o: { cls?: string; side?: { title: Part; sub: Part; body?: Node }; main: Kids }): HTMLElement {
+export function panel(o: { cls?: string; side?: { title: Part; sub?: Part; body?: Node }; main: Kids }): HTMLElement {
   const part = (p: Part, tag: "b" | "span") => (typeof p === "string" ? h(tag, { text: p }) : p);
-  const side = o.side && h("div", { class: "pane-side" }, h("div", { class: "pane-side-who" }, part(o.side.title, "b"), part(o.side.sub, "span")), o.side.body);
+  const side = o.side && h("div", { class: "pane-side" }, h("div", { class: "pane-side-who" }, part(o.side.title, "b"), o.side.sub != null && part(o.side.sub, "span")), o.side.body);
   const main = Array.isArray(o.main) ? o.main : [o.main];
   return h("div", { class: o.cls ? `view pane-view ${o.cls}` : "view pane-view" }, h("div", { class: "card pane-card" }, side, h("div", { class: "pane-col" }, ...main)));
 }
