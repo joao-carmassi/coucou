@@ -1010,7 +1010,7 @@ export class Island implements IslandHost {
     const showGrid = State.mode === "compact" && !this.textOverGrid();
     this.miniGrid.style.opacity = showGrid ? "1" : "0";
     if (showGrid) {
-      const others = State.gridPills.slice(0, 6);
+      const others = State.gridPills.slice(0, 4);
       const key = others.map((t) => t.id).join("|");
       if (this.miniGrid.dataset.key !== key) {
         this.miniGrid.dataset.key = key;

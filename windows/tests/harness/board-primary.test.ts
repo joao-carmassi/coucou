@@ -224,6 +224,16 @@ describe("board primary: a folded island reverts the pick", () => {
     Registry.apply(ALL);
   });
 
+  it("something else took the front after the pick: the fold revert does not force the default over it", () => {
+    reopen();
+    clickPill("Vercel");
+    fold();
+    probe.alpha!.pills.focus("alpha-pill");
+    expect(front()).toBe("alpha-pill");
+    tick(61_000);
+    expect(front()).toBe("alpha-pill");
+  });
+
   it("a pending request: the fold revert does not open the island", () => {
     reopen();
     clickPill("Vercel");

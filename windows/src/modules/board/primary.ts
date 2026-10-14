@@ -52,7 +52,7 @@ export function startPrimary(api: IslandApi): Disposer {
       if (prev === "expanded" && mode !== "expanded") {
         closedAt = Date.now();
         revert?.();
-        revert = pick ? api.timeout(() => { revert = null; pick = null; applyDefault(true); }, settings().holdMs) : null;
+        revert = pick ? api.timeout(() => { revert = null; if (!pick) return; pick = null; applyDefault(true); }, settings().holdMs) : null;
       }
       if (mode !== "expanded" || prev === "expanded") return;
       revert?.();
@@ -66,6 +66,8 @@ export function startPrimary(api: IslandApi): Disposer {
       if (busy || !pick || front()?.id === pick) return;
       const gone = !api.pills.get(pick);
       pick = null;
+      revert?.();
+      revert = null;
       if (gone) applyDefault();
     }),
   ];
