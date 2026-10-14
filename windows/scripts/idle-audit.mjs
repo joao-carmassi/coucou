@@ -32,6 +32,7 @@ const ALLOWLIST = [
   ["modules/voice/settings.ts", "setTimeout(() => void refresh()", "settings panel: one-shot refresh 300 ms after a user save; panel only exists while open"],
   ["modules/claude/pipe.rs", "async_runtime::spawn(async move {", "accept loop: handle returned to mod.rs and registered via ctx.adopt; blocked on pipe accept"],
   ["modules/claude/pipe.rs", "spawn(async move { handle(", "per-connection handler: finishes with the connection, parked in I/O otherwise"],
+  ["modules/integrations/scheduler.rs", "async_runtime::spawn(run(", "refcounted scheduler service shared by provider modules; exists only while >=1 provider is on"],
   ["modules/media/media.rs", "std::thread::spawn(move || settle_and_add", "on-demand settle thread: short-lived (file settle wait), ends by itself or on stop flag"],
   ["modules/voice/voice.rs", "std::thread::spawn(move || {", "recorder reader thread: lives only while recording, ends with the child process"],
 ];

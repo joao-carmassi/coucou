@@ -11,7 +11,7 @@ The core is the island + the Mochi avatar. Everything else is a module on the mo
 | upload | ON (requires claude) | ported (M5) | the drop animation starts AFTER the island opens (fixes the "0 %" bug) |
 | timer | OFF | ported (M5) | |
 | voice | OFF (requires claude) | ported (M5) | English only (Whistle/needle.exe); alert hotkey belongs to claude |
-| integrations | OFF | ported (M5) | one scheduler, no task when no provider is active; GitHub panel + pills; hooks `taskCard`/`taskNews`/`avatar.tint` |
+| github, vercel, stripe, n8n, resend, calcom, notion | OFF | ported (split) | 7 modules (one per service, group "Integrações"); one refcounted scheduler, no task while none is on; GitHub panel + pills; hooks `taskCard`/`taskNews`/`avatar.tint` |
 
 Known gaps: pill badge on mini bots (`pillBadge`), idle "Nova sessão" card, keyframes `gh-swap`,
 `gh-dim`, `gh-undim`, `gh-grow`, `gh-rise`, `gh-ghost`, `gh-live`, `gh-dot-in`, `gh-breathe`.

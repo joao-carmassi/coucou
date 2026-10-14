@@ -49,7 +49,7 @@ pub fn present(key: &str) -> bool {
     get(key).is_some()
 }
 
-/// The keys a provider cannot poll without (ids as in `activeIntegrations`).
+/// The keys a provider cannot poll without (ids `integration_<short>`).
 pub fn key_for(id: &str) -> &'static [&'static str] {
     match id {
         "integration_n8n" => &["n8n-url", "n8n-api-key"],
@@ -69,9 +69,18 @@ pub fn configured(id: &str) -> bool {
     !keys.is_empty() && keys.iter().all(|k| present(k))
 }
 
-/// True when at least one of these providers has its keys in the Credential Manager.
-pub fn any_configured(active: &[String]) -> bool {
-    active.iter().any(|id| configured(id))
+/// The provider module (short id) a key belongs to.
+pub fn provider_of(key: &str) -> Option<&'static str> {
+    match key {
+        "n8n-url" | "n8n-api-key" => Some("n8n"),
+        "vercel-token" => Some("vercel"),
+        "github-token" => Some("github"),
+        "stripe-api-key" => Some("stripe"),
+        "resend-api-key" => Some("resend"),
+        "notion-api-key" => Some("notion"),
+        "calcom-api-key" => Some("calcom"),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -95,7 +104,7 @@ mod tests {
         }
         assert!(key_for("integration_x").is_empty());
         assert!(!configured("integration_x"));
-        assert!(!any_configured(&[]));
+        assert!(KNOWN_KEYS.iter().all(|k| provider_of(k).is_some()));
     }
 
     #[test]
