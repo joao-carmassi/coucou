@@ -4,6 +4,13 @@
 // `--warn` prints everything and exits 0 (comment hits shown as warnings).
 // Run: npm run neutrality-audit [-- --warn] [-- --verbose]
 //
+// LINTS (behavioural, WARN by default: printed, exit 0; `--fail-lints` makes a regression fail):
+//   A. boundary: src/modules/** must not import `State` (value import from core/state), write `State.<field> =`, or
+//      value-import core other than core/moduleApi, views/dom, views/icons, kit/* (`import type` is always fine).
+//   B. dead fields: every field of Settings, AppState, ViewLayout and IslandApi must be READ in src/{core,island,views,mochi}
+//      (IslandApi: used by any src file but moduleApi.ts/registry.ts, since modules are its readers).
+// scripts/neutrality-ratchet.json holds the counts; they may only go down (`--write-ratchet` lowers them).
+//
 // Rules:
 //   1. TS import path containing `/modules/` (core/registry.ts and settings/main.ts may import modules/settings + catalog).
 //   2. Module id / label / group (derived from src/modules/* folders and their manifest.json) as a whole word in code
@@ -16,7 +23,7 @@
 //      `#[cfg(test)]` blocks are skipped.
 //
 // ALLOWLIST: [file suffix, substring of the offending line, reason]. Keep each entry justified.
-import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync, statSync, existsSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -146,6 +153,103 @@ scan(join(root, "src/main.ts"), "ts");
 for (const f of files(join(root, "src/style"), [".css"]).concat(files(join(root, "src/settings"), [".css"]))) scan(f, "css");
 for (const f of files(join(root, "src-tauri/src/core"), [".rs"]).concat([join(root, "src-tauri/src/lib.rs")])) scan(f, "rs");
 
+// ── Behavioural lints (see header) ───────────────────────────────────────────────
+const ratchetFile = join(root, "scripts/neutrality-ratchet.json");
+const ratchet = existsSync(ratchetFile) ? JSON.parse(readFileSync(ratchetFile, "utf8")) : {};
+const codeLines = (f) => {
+  const st = { block: false };
+  return readFileSync(f, "utf8").split("\n").map((l) => splitLine(l, st, "ts").code);
+};
+const ALLOWED_CORE = /\/(core\/moduleApi|views\/dom|views\/icons|kit\/[\w/-]+)$/;
+const stateImports = [], stateWrites = [], foreignImports = [];
+for (const m of moduleDirs) for (const f of files(join(root, "src/modules", m), [".ts"])) {
+  const lines = codeLines(f), code = lines.join("\n");
+  for (const im of code.matchAll(/\bimport\s+(?!type\b)([^;]*?)\s+from\s+["']((?:\.\.\/)+(?:core|views|island|mochi|kit|style|settings)\/[^"']+)["']/g)) {
+    const at = { m, file: rel(f), line: code.slice(0, im.index).split("\n").length };
+    const clause = im[1].replace(/\btype\s+\w+/g, ""); // `{ type X }` is a type
+    if (/core\/state$/.test(im[2])) { if (/\bState\b/.test(clause)) stateImports.push(at); }
+    else if (!ALLOWED_CORE.test(im[2]) && /\w/.test(clause)) foreignImports.push({ ...at, what: im[2].replace(/^(\.\.\/)+/, "") });
+  }
+  lines.forEach((c, i) => { if (/\bState\.[\w.]+\s*(?:=(?!=)|\+=|-=)/.test(c)) stateWrites.push({ m, file: rel(f), line: i + 1 }); });
+}
+
+/** Field names of `interface|class name {…}`; for `nested` (IslandApi) the members of `group: { … }` come as `group.leaf`. */
+function members(file, kind, name, nested) {
+  const lines = codeLines(join(root, file));
+  const start = lines.findIndex((l) => new RegExp(`\\b${kind}\\s+${name}\\b[^{]*\\{`).test(l));
+  if (start < 0) { console.error(`lint: ${kind} ${name} not found in ${file}`); return []; }
+  const body = []; // { t, d: depth at line start }
+  let depth = 0;
+  for (let i = start; i < lines.length; i++) {
+    if (i > start) body.push({ t: lines[i], d: depth });
+    for (const ch of lines[i]) depth += ch === "{" ? 1 : ch === "}" ? -1 : 0;
+    if (depth <= 0) break;
+  }
+  const out = new Set();
+  for (let i = 0; i < body.length; i++) {
+    if (body[i].d !== 1) continue;
+    const t = body[i].t;
+    if (/^\s*(private|protected|static)\b/.test(t)) continue;
+    const grp = nested && /^\s*(\w+)\??\s*:\s*\{/.exec(t);
+    if (grp) {
+      let text = t.slice(t.indexOf("{") + 1);
+      for (let j = i + 1; j < body.length && body[j].d >= 2; j++) text += "\n" + body[j].t;
+      for (const l of text.matchAll(/(?:^|[;{,\n])\s*(?:readonly\s+)?(\w+)\s*[<(]/g)) out.add(`${grp[1]}.${l[1]}`);
+      continue;
+    }
+    const mm = /^\s*(?:readonly\s+)?(\w+)\??\s*(?:[:=]|<[^>]*>\s*\()/.exec(t) ?? (nested ? /^\s*(\w+)\s*\(/.exec(t) : null) ?? /^\s*get\s+(\w+)\s*\(/.exec(t);
+    if (mm && !/^\s*(return|if|for)\b/.test(t)) out.add(mm[1]);
+  }
+  return [...out];
+}
+const srcTs = files(join(root, "src"), [".ts"]);
+const coreTs = ["core", "island", "views", "mochi"].flatMap((d) => files(join(root, "src", d), [".ts"]));
+const corpus = (list) => list.map((f) => ({ f, code: codeLines(f).join("\n") }));
+const coreCode = corpus(coreTs), apiCode = corpus(srcTs.filter((f) => !/core\/(moduleApi|registry)\.ts$/.test(rel(f)))), moduleCode = corpus(srcTs.filter((f) => rel(f).startsWith("src/modules/")));
+const notWrite = String.raw`(?!\s*(?:=(?!=)|[+\-*]=|\+\+|--))`;
+const readIn = (list, path) => {
+  const dotted = path.split(".").map((p) => `\\.\\s*${p}\\b`).join("\\s*");
+  const re = new RegExp(`${dotted}${notWrite}`);
+  const bare = path.includes(".") ? null : new RegExp(`\\{[^}]*\\b${path}\\b[^}]*\\}\\s*=\\s*\\w`); // const { name } = State
+  return list.some((x) => re.test(x.code) || (bare && bare.test(x.code)));
+};
+const deadFields = [];
+for (const [owner, file, kind, name, nested, scope] of [
+  ["Settings", "src/core/state.ts", "interface", "Settings", false, coreCode],
+  ["AppState", "src/core/state.ts", "class", "AppState", false, coreCode],
+  ["ViewLayout", "src/core/layout.ts", "interface", "ViewLayout", false, coreCode],
+  ["IslandApi", "src/core/moduleApi.ts", "interface", "IslandApi", true, apiCode],
+]) for (const field of members(file, kind, name, nested)) {
+  if (readIn(scope, field)) continue;
+  const leaf = field.split(".").pop();
+  const mods = moduleCode.reduce((n, x) => n + (x.code.match(new RegExp(`\\b${leaf}\\b`, "g")) ?? []).length, 0);
+  deadFields.push({ owner, field, mods });
+}
+
+const lintCounts = { stateImports: stateImports.length, stateWrites: stateWrites.length, foreignCoreImports: foreignImports.length, deadFields: deadFields.length };
+if (process.argv.includes("--write-ratchet")) {
+  const next = Object.fromEntries(Object.entries(lintCounts).map(([k, v]) => [k, Math.min(v, ratchet[k] ?? v)]));
+  writeFileSync(ratchetFile, JSON.stringify(next, null, 2) + "\n");
+  Object.assign(ratchet, next);
+}
+console.log("\nLINTS (warn; --fail-lints fails on a count above the ratchet)");
+const perModule = (list, label, extra = () => "") => {
+  const by = new Map();
+  for (const x of list) (by.get(x.m) ?? by.set(x.m, []).get(x.m)).push(`${x.file.replace(/^src\/modules\/[^/]+\//, "")}:${x.line}${extra(x)}`);
+  for (const [m, l] of [...by].sort()) console.log(`  ${label} ${m.padEnd(14)} ${l.length}  ${l.join(" ")}`);
+};
+perModule(stateImports, "State import  ");
+perModule(stateWrites, "State write   ");
+perModule(foreignImports, "core import   ", (x) => ` (${x.what})`);
+for (const d of deadFields) console.log(`  dead field    ${(d.owner + "." + d.field).padEnd(30)} ${d.mods ? `mentioned ${d.mods}x in modules` : "unused"}`);
+let lintBad = 0;
+for (const [k, v] of Object.entries(lintCounts)) {
+  const cap = ratchet[k];
+  const state = cap == null ? "no ratchet" : v > cap ? "ABOVE ratchet" : v < cap ? "below ratchet (lower it with --write-ratchet)" : "at ratchet";
+  if (cap == null || v > cap) lintBad++;
+  console.log(`  ${k.padEnd(20)} ${String(v).padStart(3)} / ${cap ?? "-"}  ${state}`);
+}
+
 const live = findings.filter((x) => !x.reason);
 const bad = fail ? live : live.filter((x) => !x.warn);
 if (process.argv.includes("--verbose"))
@@ -159,4 +263,4 @@ for (const x of live) {
 console.log("file".padEnd(40) + "findings  warnings");
 for (const [f, e] of [...per].sort()) console.log(f.padEnd(40) + String(e.f).padStart(8) + String(e.w).padStart(10));
 console.log(`\nTOTAL findings ${bad.length}, warnings ${live.length - bad.length}, allowlisted ${findings.length - live.length}`);
-process.exit(fail && bad.length ? 1 : 0);
+process.exit((fail && bad.length) || (process.argv.includes("--fail-lints") && lintBad) ? 1 : 0);
