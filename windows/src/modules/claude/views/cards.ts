@@ -16,7 +16,8 @@ import { ICONS } from "../icons";
 import { COLOR } from "../../../kit/palette";
 import { CARD_AIR_MIN, fittedHeight } from "../fit";
 import { CLAUDE_ID, TURN_DONE, turnSteps, type ClaudeSession, type SessionStep } from "../types";
-import { diffBlock, diffLine, fileKind, plusMinus, readPatch } from "../../../kit/code";
+import { paneCodeLead } from "../../../kit/panel";
+import { diffBlock, diffHunk, diffLine, fileKind, plusMinus, readPatch } from "../../../kit/code";
 import { markdown } from "./markdown";
 import { sessionName, sessionsChip } from "./session";
 import { hasPreview, stepIcon, stepName, stepPreview } from "./step";
@@ -352,7 +353,7 @@ function buildApproval(c: Claude, ctx: ViewContext): ViewHost {
   const who = h("div");
   const code = h("div", { class: "code" });
   // For an edit: the diff it would make, between what is asked and the answer.
-  const proposed = h("div", { class: "proposed pane-code" });
+  const proposed = paneCodeLead("proposed");
   const row = h("div", { class: "actions" });
   const lines = stack(116, 16, who, code, proposed, row);
   const el = view(card("amber", lines));
@@ -403,9 +404,7 @@ function buildApproval(c: Claude, ctx: ViewContext): ViewHost {
             if (!("hunk" in line)) diff.append(diffLine(line.new ?? line.old, line.sign, line.text, kind));
           }
           if (proposal.truncated) {
-            diff.append(
-              h("div", { class: "diff-line hunk" }, h("span", { class: "n", text: "⋯" }), h("span", { class: "s" }), h("span", { class: "t", text: "O resto desta edição está no Claude Code" })),
-            );
+            diff.append(diffHunk("O resto desta edição está no Claude Code"));
           }
           proposed.append(diff);
           // Open on the first line that changes, a line of context above it.

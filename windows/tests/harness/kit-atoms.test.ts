@@ -5,11 +5,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { card, view } from "../../src/kit/card";
-import { diffBlock, plusMinus } from "../../src/kit/code";
+import { diffBlock, diffHunk, plusMinus } from "../../src/kit/code";
 import { dot, h, svg } from "../../src/kit/dom";
 import { homeBody, homeLayout, setSolo } from "../../src/kit/home";
-import { ago, empty, fileStatus, right, rowIcon, rowOf, rowTitle, rowWhere } from "../../src/kit/list";
-import { PANE_MOTION, paneAside, paneBadge, paneCode, paneEdge, paneHead, paneIcon, paneList, paneMain, paneSub, paneTab } from "../../src/kit/panel";
+import { ago, empty, fileRowOf, fileStatus, right, rowIcon, rowOf, rowTitle, rowWhere } from "../../src/kit/list";
+import { PANE_MOTION, paneAside, paneBadge, paneCode, paneCodeLead, paneEdge, paneHead, paneIcon, paneList, paneMain, paneSub, paneTab } from "../../src/kit/panel";
 import { tileActions, tileCard, tileHead, tileStatus } from "../../src/kit/tile";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -53,6 +53,9 @@ describe("kit atoms = module literals", () => {
     expect(paneCode(undefined, h("div")).outerHTML).toBe(h("div", { class: "pane-code" }, h("div")).outerHTML);
     // claude's literal is "proposed pane-code" (module class first): the atom puts the kit class first, so that one differs
     expect(paneCode("proposed").className).toBe("pane-code proposed");
+    expect(paneCodeLead("proposed").outerHTML).toBe(h("div", { class: "proposed pane-code" }).outerHTML);
+    expect(fileRowOf({ title: "f" }, rowWhere("")).outerHTML).toBe(h("button", { class: "pane-row pane-file", title: "f" }, h("span", { class: "pane-row-where", text: "" })).outerHTML);
+    expect(diffHunk("x").outerHTML).toBe(h("div", { class: "diff-line hunk" }, h("span", { class: "n", text: "⋯" }), h("span", { class: "s" }), h("span", { class: "t", text: "x" })).outerHTML);
     const l = paneList();
     paneEdge(l, true);
     expect(l.className).toBe("pane-list pane-edge");

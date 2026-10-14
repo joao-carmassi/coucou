@@ -6,8 +6,8 @@
 
 import { h, svg, clear, dot } from "../../../kit/dom";
 import { PANE_MOTION, paneAside, paneBadge, paneCode, paneEdge, paneHead, paneIcon, paneList, paneMain, paneSub, paneTab, panel } from "../../../kit/panel";
-import { ago as agoAtom, empty, fileStatus, right, rowIcon, rowOf, rowTitle, rowWhere } from "../../../kit/list";
-import { diffBlock, diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath } from "../../../kit/code";
+import { ago as agoAtom, empty, fileRowOf, fileStatus, right, rowIcon, rowOf, rowTitle, rowWhere } from "../../../kit/list";
+import { diffBlock, diffHunk, diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath } from "../../../kit/code";
 import { ICONS } from "../icons";
 import { COLOR, wear } from "../../../kit/palette";
 import { ACTIVITY_STYLE, GITHUB_LEVELS, compact, githubData, repoName, type GithubOpening } from "./integrations";
@@ -1238,9 +1238,8 @@ export function newsFacts(news: IntegrationNews): Node[] {
 /** One file touched, under its extension's badge; it opens the file's diff. */
 function fileRow(file: GithubFile, url: string): HTMLElement {
   const { dir, base } = splitPath(file.path);
-  return h(
-    "button",
-    { class: "pane-row pane-file", onclick: () => openDiff(file, url) },
+  return fileRowOf(
+    { onclick: () => openDiff(file, url) },
     rowIcon(extBadge(file.path)),
     rowTitle(base),
     rowWhere(dir),
@@ -2026,9 +2025,7 @@ function diffView(file: GithubFile, url: string, thread?: GithubThread): HTMLEle
       // Where lines were skipped: a quiet break, with the function GitHub
       // says the next lines sit in. The very first needs one only for that.
       if (!first || line.hunk) {
-        diff.append(
-          h("div", { class: "diff-line hunk" }, h("span", { class: "n", text: "⋯" }), h("span", { class: "s" }), h("span", { class: "t", text: line.hunk })),
-        );
+        diff.append(diffHunk(line.hunk));
       }
       first = false;
       continue;

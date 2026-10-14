@@ -13,6 +13,10 @@
 //      only `import type`.
 //   K2. kit CSS: kit stylesheets use only kit class prefixes (pane-, tile-, diff-, code-, file-, hl-, plus the kit-owned home layout names overview/left/solo), and no module stylesheet
 //      defines a NEW pane-/tile-/diff- class (it may refine one the kit defines, e.g. `.tile-card.detail`).
+//   K3. kit class literals (ZERO allowlist): in src/modules/**/*.ts (comments stripped) no string/template token may be a class the
+//      kit CSS defines (pane-*, tile-*, diff-*, code-*, file-*, hl*, home*, solo, left-body) nor, in a class context (`class:` /
+//      `className:` / `cls:` values, classList.add|remove|toggle|contains args, querySelector(All) strings), `card` / `wash` / `view`.
+//      Build those elements with the kit atoms instead.
 //   B. dead fields: every field of Settings, AppState, ViewLayout and IslandApi must be READ in src/{core,island,views,mochi,kit}
 //      (Settings: also src/settings/** and src/main.ts; IslandApi: used by any src file but moduleApi.ts/registry.ts, since modules are its readers).
 // scripts/neutrality-ratchet.json holds the counts; they may only go down (zero is enforced regardless).
@@ -40,15 +44,7 @@ const root = join(fileURLToPath(import.meta.url), "..", "..");
 const fail = !process.argv.includes("--warn");
 const failLints = !process.argv.includes("--warn-lints") && !process.argv.includes("--warn");
 
-const ALLOWLIST = [
-  ["src/core/registry.ts", "modules/index", "the only core file that loads the module list"],
-  ["src/core/registry.ts", "modules/catalog", "registry reads the catalog"],
-  ["src/settings/main.ts", "modules/settings", "settings window loads the sections only (no island code or CSS)"],
-  ["src/settings/main.ts", "modules/catalog", "settings window lists the modules"],
-  ["src/kit/home.css", "overview", "`overview` is the kit-owned class name of the home layout (a CSS name, not the board concept)"],
-  ["src/kit/home.ts", "overview", "same class name, set by the kit builder"],
-  ["src-tauri/src/core/drop_target.rs", "self.emit(", "generic enter/leave/drop of the OS drag, relayed as `file-drag`: not module events"],
-];
+const ALLOWLIST = []; // must stay empty (tests/audits.test.ts); a stale entry would fail below
 const CORE_EVENTS = ["cursor", "tray", "screen-changed", "settings-changed", "settings-shown", "modules-changed", "file-drag", "hotkey-error", "inbox-added"];
 const CONCEPTS = ["approval", "session", "overview", "github", "wsl", "transcript", "claude", "voice", "media"];
 
@@ -63,7 +59,8 @@ const files = (dir, ext) => {
   return out;
 };
 const rel = (p) => relative(root, p).split(sep).join("/");
-const allowed = (file, line) => ALLOWLIST.find(([f, s]) => file.endsWith(f) && line.includes(s));
+const usedEntries = new Set();
+const allowed = (file, line) => { const e = ALLOWLIST.find(([f, s]) => file.endsWith(f) && line.includes(s)); if (e) usedEntries.add(e); return e; };
 
 // Names: folder ids + ids/labels/groups from the manifests.
 const moduleDirs = readdirSync(join(root, "src/modules")).filter((n) => statSync(join(root, "src/modules", n)).isDirectory());
@@ -204,6 +201,34 @@ for (const f of files(join(root, "src/kit"), [".ts"])) {
   }
 }
 
+// K3: modules never spell a kit class. ZERO allowlist (findings are never allowlisted).
+{
+  const kitClasses = new Set();
+  for (const f of files(join(root, "src/kit"), [".css"])) {
+    const text = readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const m of text.matchAll(/([^{};]*)\{/g)) {
+      if (/^\s*@(keyframes|font-face|property)/.test(m[1])) continue;
+      for (const c of m[1].matchAll(/\.([a-zA-Z][\w-]*)/g)) kitClasses.add(c[1]);
+    }
+  }
+  const isKit = (c) => /^(pane-|tile-|diff-|code-|file-|hl|home)/.test(c) || c === "solo" || c === "left-body" || c === "pane-file";
+  // bare `home` / `card` / `wash` / `view` are also plain words (view names, state values): checked in class contexts only
+  const BARE = new Set(["card", "wash", "view", "home"]);
+  const kitSet = new Set([...kitClasses].filter((c) => isKit(c) && !BARE.has(c)));
+  const lit = /(["'`])((?:\\.|(?!\1).)*)\1/g;
+  const toks = (str) => str.split(/[\s.,>+~]+/).filter(Boolean);
+  const ctx = [/\b(?:class|className|cls)\s*:\s*/g, /\bclassList\s*\.\s*(?:add|remove|toggle|contains)\s*\(/g, /\bquerySelector(?:All)?\s*\(/g];
+  for (const m of moduleDirs) for (const f of files(join(root, "src/modules", m), [".ts"])) {
+    codeLines(f).forEach((c, i) => {
+      for (const l of c.matchAll(lit)) for (const t of toks(l[2])) if (kitSet.has(t)) add(rel(f), i + 1, `K3 kit class "${t}" in a module`, c, false);
+      for (const re of ctx) for (const cm of c.matchAll(re)) {
+        const tail = c.slice(cm.index + cm[0].length).split(/[)}]/)[0];
+        for (const l of tail.matchAll(lit)) for (const t of toks(l[2])) if (BARE.has(t)) add(rel(f), i + 1, `K3 kit class "${t}" in a module`, c, false);
+      }
+    });
+  }
+}
+
 const ALLOWED_CORE = /\/(core\/moduleApi|kit\/[\w/-]+)$/;
 const stateImports = [], stateWrites = [], foreignImports = [], crossImports = [];
 for (const m of moduleDirs) for (const f of files(join(root, "src/modules", m), [".ts"])) {
@@ -326,6 +351,7 @@ for (const m of moduleDirs) for (const f of files(join(root, "src/modules", m), 
   });
 }
 
+ALLOWLIST.forEach((e) => { if (!usedEntries.has(e)) findings.push({ file: e[0], n: 0, rule: "unused ALLOWLIST entry", line: e[1], warn: false, reason: null }); });
 const live = findings.filter((x) => !x.reason);
 const bad = fail ? live : live.filter((x) => !x.warn);
 if (process.argv.includes("--verbose"))

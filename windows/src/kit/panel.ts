@@ -15,7 +15,7 @@
 //   panel({cls?, side?, main})  the whole frame
 //   paneHead(...kids) paneTab(...kids) paneSub(cls?) paneBadge() paneAside() paneMain(...kids)
 //   paneIcon(attrs, ...kids)  header button; attrs.class is appended to `pane-icon`
-//   paneList(cls?) paneCode(cls?, ...kids)  cls is appended after the kit class
+//   paneList(cls?) paneCode(cls?, ...kids)  cls is appended after the kit class;  paneCodeLead(lead, ...kids)  lead goes first
 //   paneEdge(el, on)  toggles `.pane-edge` on a list;  PANE_MOTION  the entrance classes for replay()
 // Rows (.pane-row, .pane-row-*, .pane-ago, .pane-right, .pane-file, .pane-file-status) are built by kit/list.ts.
 import { h } from "./dom";
@@ -46,5 +46,7 @@ export const paneIcon = (attrs: Record<string, string | number | boolean | Event
 export const paneList = (cls?: string): HTMLElement => h("div", { class: withCls("pane-list", cls) });
 export const paneMain = (...kids: Kid[]): HTMLElement => h("div", { class: "pane-main" }, ...kids);
 export const paneCode = (cls?: string, ...kids: Kid[]): HTMLElement => h("div", { class: withCls("pane-code", cls) }, ...kids);
+/** `pane-code` with the module's own class in front: `<lead> pane-code`. */
+export const paneCodeLead = (lead: string, ...kids: Kid[]): HTMLElement => h("div", { class: `${lead} pane-code` }, ...kids);
 export const paneEdge = (el: Element, on: boolean): void => void el.classList.toggle("pane-edge", on);
 export const PANE_MOTION = { right: "pane-from-right", left: "pane-from-left" } as const;

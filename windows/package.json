@@ -1,13 +1,13 @@
 {
   "name": "coucou-windows",
   "private": true,
-  "version": "0.6.1",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node --test tests/catalog.test.ts tests/resolvers.test.ts tests/timer.test.ts tests/upload.test.ts tests/providers.test.ts tests/requests.test.ts tests/moods.test.ts tests/sound.test.ts",
+    "test": "node --test tests/catalog.test.ts tests/resolvers.test.ts tests/timer.test.ts tests/upload.test.ts tests/providers.test.ts tests/requests.test.ts tests/moods.test.ts tests/sound.test.ts tests/audits.test.ts",
     "test:harness": "vitest run --config vitest.config.ts",
     "icons": "node scripts/gen-icons.mjs",
     "idle-audit": "node scripts/idle-audit.mjs",

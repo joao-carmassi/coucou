@@ -269,7 +269,7 @@ src/views/views.ts                             4         0
 TOTAL findings 172, warnings 99, allowlisted 4
 ```
 
-After M1 (bridge split) the comment-only warnings dropped 99 -> 56 (findings unchanged: the typed calls only moved, `src/core/bridge.ts` is now clean). After M2 (CSS) and the audit allowlist update: see the latest `npm run neutrality-audit` output.
+Historical (M0 baseline). Final state (0.7.0): `TOTAL findings 0, warnings 0, allowlisted 0` and `idle-audit` `0 finding(s), 0 not allowlisted`; both allowlists are empty (see "Final state (0.7.0)").
 
 ## Module CSS (M2)
 
@@ -293,7 +293,7 @@ Services are module-to-module and invisible to the core: `api.provide("<module>.
 | `board.focus` | every module, for the pills it owns | board list (a click on a pill) | `(taskId) => void` (the owner calls `api.pills.focus`) |
 | `board.host` | board | integrations (github: home is its panel while the board is absent) | `true` |
 
-The board (`modules/board`, types in `board/api.ts`) owns the home. It draws the pill list and the empty note itself and nothing pill-specific: the left card of a pill is asked of the modules (`useAll`, lazy, first non-null; a pill nobody answers for gets a plain name card). Providers `import type` from `board/api`; the board imports no module. Without claude the board, the integrations and any module with pills work; with only the board on, home shows the empty note. `BoardCard` carries `key`, `build(actions)`, and optionally `sync`, `open` (the whole card is a button; the board plays the blip), `hint`, `room` (extra island height) and `target` (the arrow works). `askPill` lives in `kit/ask.ts`. Home tab and `overview` layout are the board's; `tabOf`/`lightsHome` keep lighting the tab flagged `home`.
+The board (`modules/board`, types in `board/api.ts`) owns the home. It draws the pill list and the empty note itself and nothing pill-specific: the left card of a pill is asked of the modules (`useAll`, lazy, first non-null; a pill nobody answers for gets a plain name card). Providers `import type` from `board/api`; the board imports no module. Without claude the board, the integrations and any module with pills work; with only the board on, home shows the empty note. `BoardCard` carries `key`, `build(actions)`, and optionally `sync`, `open` (the whole card is a button; the board plays the blip), `hint`, `room` (extra island height) and `target` (the arrow works). `askPill` lives in `kit/ask.ts`. Home tab and the `overview` view (a view name; its kit layout class is `.home`) are the board's; `tabOf`/`lightsHome` keep lighting the tab flagged `home`.
 
 ## M6/M7 - settings, events and commands leave the core
 
@@ -404,16 +404,16 @@ Home is the strongest `homeView` request, else the tab flagged `home`, else the 
 Goal: a module is one folder, `src/modules/<id>/`. Nothing in `core/`, `island/`, `settings/` or `lib.rs` changes.
 
 1. `manifest.json`: `{ "id", "label", "default", "requires"?, "group"?, "order", "devOnly"?, "settingsDefaults"? }` (an array when a folder holds several modules, as `integrations/`). `order` is start order and settings order (a requirement needs a lower `order`; ties break by id). `devOnly: true` = debug builds only (TS: `import.meta.env.DEV`; Rust: `#[cfg(debug_assertions)]` in the generated catalog), so release catalogs and `settings.json` never list it.
-2. `index.ts`: exports a `ModuleDef` (`{ id, views?, tabs?, start(api) }`). `modules/index.ts` finds it by `import.meta.glob("./*/index.ts")` and takes every export that has `id` and a `start` function. Import the module's own CSS here. Use only `core/moduleApi` types and what `api` gives; never import another module (share through `api.provide` / `api.use`).
+2. `index.ts` (found by `modules/index.ts`; only `src/boot/*.ts` import `modules/`): exports a `ModuleDef` (`{ id, views?, tabs?, start(api) }`). `modules/index.ts` finds it by `import.meta.glob("./*/index.ts")` and takes every export that has `id` and a `start` function. Import the module's own CSS here. Use only `core/moduleApi` types and what `api` gives; never import another module (share through `api.provide` / `api.use`).
 3. Optional `settings.ts`: `export const settingsSections = { <id>: (settings) => ({ el, dispose? }) }`; the settings window renders it while the module is on. Settings values live in the flat `settings.json` (unknown keys travel in `extra`): declare them in the manifest as `settingsDefaults` with keys prefixed by the module id, read with `settings.get<T>()` / `api.settings<T>()`, write with `settings.save(patch)` / `api.saveSettings(patch)`.
 4. Optional Rust side, only if the module needs native code: create `src-tauri/src/modules/<id>/mod.rs` with `PREFIXES`, `modules()` and `handler()` (see "Rust modules are zero-edit"). Nothing else changes. A catalog id with no folder is fine: the host treats it as on/off by setting, with no start/stop.
 
 ### Recipe: a TypeScript-only module
 
 1. `src/modules/<id>/manifest.json` (`id`, `label`, `default`, `order`, ...).
-2. `src/modules/<id>/index.ts` exporting a `ModuleDef`: views (build them with `panel()`, `tile()`, `row()`), tabs, `start(api)`. Define moods/emotes/sounds with `api.avatar.defineMood/defineEmote` and `api.sound.register`. To be home when there is no board, provide a `homeView` hook gated on `api.use("board.host") === undefined`.
+2. `src/modules/<id>/index.ts` exporting a `ModuleDef`: views (build them with the kit atoms: `panel()`, `tile()`, `row()`, `rowOf`, `paneHead`, `diffHunk`, ...; never type a kit class), tabs, `start(api)`. Define moods/emotes/sounds with `api.avatar.defineMood/defineEmote` and `api.sound.register`. To be home when there is no board, provide a `homeView` hook gated on `api.use("board.host") === undefined`.
 3. Its CSS next to it, with the module's own prefix; reuse kit classes, never redefine them.
-4. `npm run check` (tsc, unit tests, harness, idle-audit, neutrality-audit) must stay green; ratchet counts stay 0.
+4. `npm run check` (tsc, unit tests incl. `tests/audits.test.ts`, harness, idle-audit, neutrality-audit) must stay green; ratchet counts stay 0 and the allowlists stay empty. Timers in a settings section go through the `ui` argument (`ui.timeout`); Rust threads/tasks through `ctx.spawn` / `ctx.spawn_async` / `ctx.spawner()`.
 
 ### Recipe: a module with Rust code
 
@@ -425,7 +425,8 @@ Steps 1 to 4 above, plus `src-tauri/src/modules/<id>/mod.rs`: `pub const PREFIXE
 - Names: no module names or prefixes in core code, core CSS or core comments; no legacy mood/badge/sound aliases.
 - K: the kit imports only kit and `@tauri-apps/*`. K2: kit CSS uses only kit prefixes, and no module stylesheet defines a class in a kit namespace (`pane-`, `tile-`, `diff-`, `code-`, `file-`, `hl-`).
 - R: every command a module bridge calls starts with a prefix some Rust folder declares.
-- `idle-audit`: no raw timers, top-level listeners or thread spawns outside the allowlist.
+- K3: no kit class spelled in a module (see "Final state (0.7.0)"). Zero allowlist.
+- `idle-audit`: no raw timers, top-level listeners or thread spawns in modules. Zero allowlist.
 
 Catalog: `build.rs` generates Rust `CATALOG` from the manifests; TS builds `MODULE_INFO` from the same files. Node tests cannot use `import.meta.glob`: `modules/resolve.ts` (`buildCatalog`, `collectDefs`) is pure and `tests/catalog.ts` feeds it manifests read from disk.
 
@@ -440,9 +441,25 @@ Honest limits: (a) glob order is alphabetical by folder, so module CSS must not 
 
 ## Behavioural neutrality
 
-`neutrality-audit` checks names; these checks look at behaviour. Both are in `windows/`.
+`neutrality-audit` checks names; these checks look at behaviour. (happy-dom does no layout, so geometry is never asserted.) Both are in `windows/`.
 
 - **Headless harness** (`npm run test:harness`, part of `npm run check`): vitest + happy-dom (`vitest.config.ts`, `tests/harness/`). `modules/index` and `modules/catalog` are mocked so the island boots with only `clock` (dev module) and `tests/harness/dummyModule.ts` (2 views, a pill, an overlay, a pin request; no Rust). Canvas, Path2D, `@tauri-apps/api` invoke/listen are stubbed and recorded; timers and rAF are fake. It asserts: greeting ends in compact, a status line shows, a click opens the home tab and the header lists every registered tab, `api.avatar.emote` reaches the engine, hovering the bot 1.9 s triggers `love` and `ensureRunning`, `Registry.apply` with no modules lands on `empty`, zero `console.error`, and no recorded command or event named `claude_`, `github_`, `voice_`, `media_` or `integrations_`. happy-dom does no layout, so geometry is not asserted. `tests/harness/requests.test.ts` drives the request queue through the island (two modules, priorities, `ms`, module stop, Aguardar + hover reopen).
 - **Lints** (in `scripts/neutrality-audit.mjs`, FAIL by default when any count is above zero; `scripts/neutrality-ratchet.json` stays at 0/0/0/0/0 with `reasons` of "Zero is the rule"; `--warn-lints` only prints; `--write-ratchet` rewrites it keeping `reasons`):
   - *Boundary*: `src/modules/**` must not value-import `State` from `core/state` (`stateImports`), write `State.<field> =` (`stateWrites`), or value-import core other than `core/moduleApi`, `kit/*` (`foreignCoreImports`). `import type` is always fine. Offenders are printed per module.
   - *Dead fields*: every field of `Settings`, `AppState`, `ViewLayout` and `IslandApi` must be read in `src/{core,island,views,mochi}` (`deadFields`). `IslandApi` is implemented by the core and read by modules, so its fields count as used when any file except `moduleApi.ts` and `registry.ts` reads them. A field only written, or only read by modules, is listed with how often modules mention it.
+
+## Final state (0.7.0)
+
+- **Composition root.** Only `src/boot/island.ts` and `src/boot/settings.ts` import `modules/` (`modules/index`, `modules/catalog`, `modules/settings`); they pass the module list to `startIsland(MODULES, MODULE_INFO)` / `startSettings(MODULE_INFO, SETTINGS_SECTIONS)`. `index.html` / `settings.html` load the boot files. Core and settings code import no module (rule 1 has no exception).
+- **SettingsUi.** A settings section is `(settings, ui: SettingsUi) => { el, dispose? }`; `ui.timeout(fn, ms)` is the only timer a section may use: the settings window clears them when the section is rebuilt or the window unloads. Modules never call `setTimeout` themselves.
+- **Rust tasks.** `ctx.spawn(|stop| ..)` / `ctx.spawn_async(fut)` / `ctx.spawner()` (a cloneable `Spawner`, for code that starts work later, e.g. per connection) register every thread/task with the module's `TaskSet`; stopping the module sets the stop flag, joins threads and aborts tasks. `SharedTask::new()` / `.ensure(fut)` is one async task shared by several modules (the integrations scheduler), alive only while a caller needs it. Consequence: the Claude hook pipe's in-flight connections are aborted when claude stops. Raw `thread::spawn`, `async_runtime::spawn`, `spawn_blocking` and `thread::Builder` are flagged by `idle-audit` anywhere in `src-tauri/src/modules/`.
+- **Kit atoms** (one fixed tag + class each; the outerHTML equals the literal it replaces, checked in `tests/harness/kit-atoms.test.ts` and, for whole screens, by the `tests/harness/__markup__` snapshots in `markup.test.ts`). Kit classes (`.pane-*`, `.tile-*`, `.diff-*`, `.code-*`, `.file-*`, `.hl*`, `.home`, `.left`, `.right`, `.solo`, `.left-body`, `.card`, `.wash`, `.view`) are spelled only in the kit:
+  - `kit/card.ts`: `card(wash | {wash?, cls?}, ...kids)`, `view(...kids)`, `washRGBA`
+  - `kit/panel.ts`: `panel({cls?, side?, main})`, `paneHead`, `paneTab`, `paneSub(cls?)`, `paneBadge()`, `paneAside()`, `paneIcon(attrs, ...kids)`, `paneList(cls?)`, `paneMain`, `paneCode(cls?, ...kids)`, `paneCodeLead(lead, ...kids)` (module class first), `paneEdge(el, on)`, `PANE_MOTION`
+  - `kit/list.ts`: `rowOf(tag, {cls?, attrs?}, ...kids)`, `fileRowOf(attrs, ...kids)`, `rowIcon`, `rowTitle`, `rowWhere`, `right`, `ago`, `fileStatus`, `empty`, `row({icon, title, where?, ago?, status?, cls?, file?, attrs?})`
+  - `kit/tile.ts`: `tile({...})`, `tileCard(cls?, ...kids)`, `tileHead`, `tileStatus`, `tileActions`
+  - `kit/code.ts`: `diffBlock(cls?, ...lines)`, `diffLine(n, sign, text, kind)`, `diffHunk(text)`, `plusMinus(add, del, bare?)`, `extBadge`, `fileKind`, `readPatch`, `splitPath`, `highlight`
+  - `kit/home.ts`: `homeLayout({left, right?, solo?})`, `homeBody()`, `setSolo(el, on)`
+- **Rule K3** (`neutrality-audit`, no allowlist). In `src/modules/**/*.ts`, comments stripped: (a) any string/template token (split on whitespace, `.`, `,`, `>`, `+`, `~`) equal to a class the kit CSS defines with prefix `pane-`/`tile-`/`diff-`/`code-`/`file-`/`hl`/`home` (or `solo`, `left-body`) fails; the set is parsed from `src/kit/*.css`, nothing is hard-coded; (b) `card`, `wash`, `view` and bare `home` fail only in class contexts: `class:` / `className:` / `cls:` values, `classList.add|remove|toggle|contains(...)` arguments, `querySelector(All)(...)` strings (so `view("approval")` or `state === "home"` are fine).
+- **Empty allowlists.** `ALLOWLIST` is `[]` in `scripts/neutrality-audit.mjs` and `scripts/idle-audit.mjs`; a stale entry would itself fail ("unused ALLOWLIST entry"). `tests/audits.test.ts` (in `npm test`) asserts `const ALLOWLIST = [];` in both scripts and runs both, expecting exit 0 and `allowlisted 0` / `0 not allowlisted`. Adding an exception means changing that test on purpose.
+- **Remaining limits.** The Mochi eye shapes and animation presets are a closed set in the engine (modules pick, they cannot add new ones). The island size is fixed and the compact grid holds 4 minis. `build.rs` finds Rust commands by a textual scan (`PREFIXES` + command names), so macro-generated commands are not seen. The happy-dom harness has no layout, so pixel geometry (island height, bot position) is checked by hand. Glob order, `devOnly` bundling and `order` uniqueness are as listed under the recipe.

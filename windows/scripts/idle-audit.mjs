@@ -27,15 +27,7 @@ import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(fileURLToPath(import.meta.url), "..", "..");
-const ALLOWLIST = [
-  ["modules/claude/settings.ts", "window.setTimeout(ops.done", "settings panel: 2.6 s UI feedback after a user click; panel only exists while open"],
-  ["modules/voice/settings.ts", "setTimeout(() => void refresh()", "settings panel: one-shot refresh 300 ms after a user save; panel only exists while open"],
-  ["modules/claude/pipe.rs", "async_runtime::spawn(async move {", "accept loop: handle returned to mod.rs and registered via ctx.adopt; blocked on pipe accept"],
-  ["modules/claude/pipe.rs", "spawn(async move { handle(", "per-connection handler: finishes with the connection, parked in I/O otherwise"],
-  ["modules/integrations/scheduler.rs", "async_runtime::spawn(run(", "scheduler service shared by provider modules; exists only while >=1 provider is on AND configured"],
-  ["modules/media/media.rs", "std::thread::spawn(move || settle_and_add", "on-demand settle thread: short-lived (file settle wait), ends by itself or on stop flag"],
-  ["modules/voice/voice.rs", "std::thread::spawn(move || {", "recorder reader thread: lives only while recording, ends with the child process"],
-];
+const ALLOWLIST = []; // must stay empty (tests/audits.test.ts)
 
 const files = (dir, ext) => {
   const out = [];
@@ -47,7 +39,8 @@ const files = (dir, ext) => {
   return out;
 };
 const rel = (p) => relative(root, p).split(sep).join("/");
-const allowed = (file, line) => ALLOWLIST.find(([f, s]) => file.endsWith(f) && line.includes(s));
+const usedEntries = new Set();
+const allowed = (file, line) => { const e = ALLOWLIST.find(([f, s]) => file.endsWith(f) && line.includes(s)); if (e) usedEntries.add(e); return e; };
 
 const findings = [];
 const add = (file, n, rule, line, reason) => findings.push({ file, n, rule, line: line.trim().slice(0, 70), reason });
@@ -85,6 +78,7 @@ for (const f of files(join(root, "src-tauri/src/modules"), [".rs"])) {
   });
 }
 
+for (const e of ALLOWLIST) if (!usedEntries.has(e)) add(e[0], 0, "unused ALLOWLIST entry", e[1], null);
 console.log("file:line".padEnd(46) + "rule".padEnd(20) + "status");
 for (const x of findings)
   console.log(`${x.file}:${x.n}`.padEnd(46) + x.rule.padEnd(20) + (x.reason ? `allowed - ${x.reason}` : "FAIL  " + x.line));

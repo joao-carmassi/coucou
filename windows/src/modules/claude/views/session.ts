@@ -19,7 +19,7 @@
 import { h, svg, clear, dot, replay } from "../../../kit/dom";
 import { panel, paneHead, paneTab, paneSub, paneBadge, paneAside, paneIcon, paneList, paneMain, paneCode, paneEdge, PANE_MOTION } from "../../../kit/panel";
 import { row, fileStatus, empty as emptyLine } from "../../../kit/list";
-import { diffBlock, diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath, type FileKind } from "../../../kit/code";
+import { diffBlock, diffHunk, diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath, type FileKind } from "../../../kit/code";
 import { ICONS } from "../icons";
 import { COLOR } from "../../../kit/palette";
 import { timeAgo } from "../../../kit/format";
@@ -133,13 +133,13 @@ function fileRow(file: ChangedFile): HTMLElement {
   const { dir, base } = splitPath(file.path);
   return row({
     icon: extBadge(file.path), title: base, where: dir, status: [statusWord(file), plusMinus(file.additions, file.deletions)], ago: timeAgo(file.at),
-    cls: "pane-file", attrs: { title: file.path, onclick: () => go({ kind: "file", path: file.path }) },
+    file: true, attrs: { title: file.path, onclick: () => go({ kind: "file", path: file.path }) },
   });
 }
 
 /** A quiet line across a diff: lines skipped, or the start of another edit. */
 function diffBreak(text: string): HTMLElement {
-  return h("div", { class: "diff-line hunk" }, h("span", { class: "n", text: "⋯" }), h("span", { class: "s" }), h("span", { class: "t", text }));
+  return diffHunk(text);
 }
 
 /** Every edit to the file, oldest first, a quiet break between two of them. */

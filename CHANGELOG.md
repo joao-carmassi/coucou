@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0
+
+- Both audits have empty allowlists (`neutrality-audit`: 0 findings, allowlisted 0; `idle-audit`: 0 not allowlisted). `tests/audits.test.ts` (in `npm test`) fails if either list is not `[]` or an audit fails; a stale entry fails the audit.
+- Composition root: only `src/boot/island.ts` and `src/boot/settings.ts` import `modules/`; core and settings import no module.
+- `SettingsUi`: settings sections get `ui.timeout`, cleared when the section is rebuilt or the window unloads; no raw timers in modules.
+- Rust `Spawner` / `SharedTask` (`ctx.spawner()`): every module thread and task is owned by the module and stops with it; the Claude hook pipe's in-flight connections are aborted when claude stops; the integrations scheduler is a `SharedTask`.
+- Kit atoms for every kit class: new `paneCodeLead`, `fileRowOf`, `diffHunk` (and `row({file})`) replace the last literals; markup is byte-identical.
+- Audit rule K3: modules may not spell kit classes (`pane-`, `tile-`, `diff-`, `code-`, `file-`, `hl`, `home`, `solo`, `left-body`, and `card`/`wash`/`view` as classes). Zero allowlist.
+- Markup snapshot net: 105 tests in the harness.
+
 ## 0.6.1
 
 - Removed `claude-home`: with the board off there is no Início (it looked like the board still being loaded). Home is the first tab (Sessões, timer, media...) or the "Nenhum módulo ativo" card.

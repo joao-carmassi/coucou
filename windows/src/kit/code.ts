@@ -238,6 +238,10 @@ export function* readPatch(patch: string): Generator<PatchLine> {
 export const diffBlock = (cls?: string, ...lines: (Node | null | undefined | false)[]): HTMLElement =>
   h("div", { class: cls ? `code-diff ${cls}` : "code-diff" }, ...lines);
 
+/** The quiet break of a diff: `⋯` in the number column, `text` (skipped lines, next hunk) in the code column. */
+export const diffHunk = (text: string): HTMLElement =>
+  h("div", { class: "diff-line hunk" }, h("span", { class: "n", text: "⋯" }), h("span", { class: "s" }), h("span", { class: "t", text }));
+
 export function diffLine(number: number | null, sign: string, text: string, kind: FileKind): HTMLElement {
   const change = sign === "+" ? "add" : sign === "-" ? "del" : "ctx";
   return h(
