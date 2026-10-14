@@ -1723,7 +1723,8 @@ function crewMember(runId: number, job: GithubJob): HTMLElement {
   const look = crewLook(job);
   let member = crew.get(key);
   if (!member) {
-    member = rt.api!.mochi.free(look.color, look.state, CREW_SIZE, CREW_EYES);
+    if (!rt.api) return document.createElement("span");
+    member = rt.api.mochi.free(look.color, look.state, CREW_SIZE, CREW_EYES);
     crew.set(key, member);
   } else {
     member.set(look.color, look.state);

@@ -57,7 +57,7 @@ export function armMochiDrop(api: IslandApi, ctl: MediaCtl): Disposer {
     const body = api.avatar.bodyColor();
     engine.color(body ?? null); // inherits the island Mochi's color
     engine.setState("idle", true);
-    engine.emote("surprised", 60);
+    engine.emote("surprised", 60_000);
     api.sound.play("pop");
     last = 0;
     move();
