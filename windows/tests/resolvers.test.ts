@@ -47,7 +47,7 @@ test("avatar: override > signal > fallback", () => {
 
 test("resolveEnabled: defaults and requirements", () => {
   assert.deepEqual(resolveEnabled(MODULE_INFO, {}), {
-    claude: true, media: true, upload: true, timer: false, voice: false, integrations: false,
+    claude: true, media: true, upload: true, timer: false, voice: false, github: false, vercel: false, stripe: false, n8n: false, resend: false, calcom: false, notion: false,
   });
   const r = resolveEnabled(MODULE_INFO, { claude: false, voice: true });
   assert.equal(r.voice, false);

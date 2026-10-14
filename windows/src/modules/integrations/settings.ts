@@ -1,14 +1,11 @@
-// The Integrações section of the settings window: which pills are on (up to four), their keys in
+// The Integrações section of the settings window: the keys of each integration in
 // the Windows Credential Manager (never on disk), and GitHub's token with a connection test.
 // Port of the integrations part of settings/main.ts at m3-ok. The window renders it only while
 // the module is on (ModuleDef.settings).
 
 import { Bridge, type GithubAccount } from "../../core/bridge";
-import { State } from "../../core/state";
 import { h, clear } from "../../views/dom";
-import { GITHUB, MAX_ACTIVE, PROVIDERS, integrationSettings, type Provider } from "./store";
-
-const save = () => void Bridge.saveSettings(State.settings);
+import { GITHUB, type Provider } from "./providers";
 
 /** Green for what is in place, red for what is missing. */
 const statusColor = (ok: boolean) => (ok ? "var(--green)" : "var(--red)");
@@ -160,88 +157,49 @@ function tokenExpiry(raw: string | null): string {
 
 // ── The section ───────────────────────────────────────────────────────────────
 
-function providerLine(def: Provider, present: Record<string, boolean>, onToggle: () => void): HTMLElement {
-  const mine = integrationSettings();
-  const active = mine.activeIntegrations.includes(def.id);
-  const setup = def.id === GITHUB ? githubSetup(present) : null;
-  const drawer = setup ? h("div", { class: "drawer" }, h("div", {}, setup.panel)) : null;
-  const open = (on: boolean) => {
-    drawer?.classList.toggle("open", on);
-    // Folded away, its fields are out of reach of the keyboard too.
-    if (setup) setup.panel.inert = !on;
-  };
-  open(active);
+/** One provider's section, shown while its module is on: its secret fields (GitHub: token, test, help). */
+export function providerSettingsSection(def: Provider): { el: HTMLElement; dispose(): void } {
+  const present: Record<string, boolean> = {};
+  const list = h("div", { style: "display:flex;flex-direction:column;gap:6px;min-width:0" });
+  const el = h("section", { id: `integration-${def.id.slice("integration_".length)}` },
+    h("h2", {}, h("span", { text: def.name })), list);
 
-  const sw = h("button", { class: active ? "switch on" : "switch", "aria-pressed": active });
-  sw.addEventListener("click", () => {
-    const list = integrationSettings().activeIntegrations;
-    const on = list.includes(def.id);
-    if (!on && list.length >= MAX_ACTIVE) return;
-    integrationSettings().activeIntegrations = on ? list.filter((x) => x !== def.id) : [...list, def.id];
-    sw.classList.toggle("on", !on);
-    sw.setAttribute("aria-pressed", String(!on));
-    open(!on);
-    onToggle();
-    save();
-  });
-
-  const rows = h("div", { style: "display:flex;flex-direction:column;gap:6px;flex:1 1 auto;min-width:0" });
-  if (setup) rows.append(setup.status);
-  for (const field of def.fields) {
-    const input = h("input", {
-      type: field.secret ? "password" : "text",
-      placeholder: present[field.key] ? "••••••••  (salva)" : field.placeholder,
-      autocomplete: "off",
-      spellcheck: "false",
-      style: "flex:1 1 auto;min-width:0",
-    }) as HTMLInputElement;
-    const saveBtn = h("button", { text: "Salvar" });
-    const dotEl = statusDot(present[field.key] ?? false);
-    saveBtn.addEventListener("click", async () => {
-      const value = input.value.trim();
-      try {
-        await Bridge.secretSet(field.key, value);
-        present[field.key] = value.length > 0;
-        input.value = "";
-        input.placeholder = value ? "••••••••  (salva)" : field.placeholder;
-        dotEl.style.background = statusColor(value.length > 0);
-      } catch {
-        dotEl.style.background = "#f5a524";
-      }
-    });
-    rows.append(h("div", { class: "row" }, h("label", { style: "min-width:104px", text: field.label }), input, saveBtn, dotEl));
-  }
-
-  const line = h("div", { style: "display:flex;gap:12px;align-items:flex-start" },
-    h("div", { style: "display:flex;align-items:center;gap:8px;min-width:132px;padding-top:4px" },
-      sw,
-      h("i", { class: "dot", style: `background:${def.color}` }),
-      h("span", { style: "font-size:12.5px", text: def.name }),
-    ),
-    rows,
-  );
-  return drawer ? h("div", {}, line, drawer) : line;
-}
-
-export function integrationsSettingsSection(): { el: HTMLElement; dispose(): void } {
-  const note = h("div", { class: "hint" });
-  const list = h("div", { style: "display:flex;flex-direction:column;gap:14px" });
-  const updateNote = () => {
-    const used = integrationSettings().activeIntegrations.length;
-    note.textContent = `Escolha até ${MAX_ACTIVE} pílulas para mostrar ao lado do Mochi — ${used}/${MAX_ACTIVE} em uso. As chaves ficam no Gerenciador de Credenciais do Windows, nunca no disco.`;
-  };
-  updateNote();
-  const el = h("section", { id: "integrations" }, h("h2", {}, h("span", { text: "Integrações" })), note, list);
-
-  // Which keys exist is asked of Rust: the list is drawn once it answers.
   let gone = false;
   void (async () => {
-    const present: Record<string, boolean> = {};
-    for (const p of PROVIDERS) for (const f of p.fields) present[f.key] = (await Bridge.secretPresent(f.key)) ?? false;
+    for (const f of def.fields) present[f.key] = (await Bridge.secretPresent(f.key)) ?? false;
     present[GITHUB_KEY] = (await Bridge.secretPresent(GITHUB_KEY)) ?? false;
     if (gone) return;
-    list.replaceChildren(...PROVIDERS.map((p) => providerLine(p, present, updateNote)));
+    if (def.id === GITHUB) {
+      const setup = githubSetup(present);
+      list.replaceChildren(setup.status, setup.panel);
+    }
+    for (const field of def.fields) list.append(fieldRow(field, present));
   })();
 
   return { el, dispose: () => { gone = true; } };
+}
+
+function fieldRow(field: Provider["fields"][number], present: Record<string, boolean>): HTMLElement {
+  const input = h("input", {
+    type: field.secret ? "password" : "text",
+    placeholder: present[field.key] ? "••••••••  (salva)" : field.placeholder,
+    autocomplete: "off",
+    spellcheck: "false",
+    style: "flex:1 1 auto;min-width:0",
+  }) as HTMLInputElement;
+  const saveBtn = h("button", { text: "Salvar" });
+  const dotEl = statusDot(present[field.key] ?? false);
+  saveBtn.addEventListener("click", async () => {
+    const value = input.value.trim();
+    try {
+      await Bridge.secretSet(field.key, value);
+      present[field.key] = value.length > 0;
+      input.value = "";
+      input.placeholder = value ? "••••••••  (salva)" : field.placeholder;
+      dotEl.style.background = statusColor(value.length > 0);
+    } catch {
+      dotEl.style.background = "#f5a524";
+    }
+  });
+  return h("div", { class: "row" }, h("label", { style: "min-width:104px", text: field.label }), input, saveBtn, dotEl);
 }

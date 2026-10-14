@@ -6,9 +6,8 @@ import { Bridge, type GithubData, type IntegrationUpdate } from "../../core/brid
 import type { Disposer, HomeRequest, IslandApi, TaskCard, TaskNews } from "../../core/moduleApi";
 import { Sound } from "../../core/sound";
 import { State, type AgentTask } from "../../core/state";
-import {
-  GITHUB, PROVIDERS, cleanups, info, integrationSettings, providerOf, resetStore, rt, steps, type IntegrationInfo,
-} from "./store";
+import { GITHUB, PROVIDERS, cleanups, info, rt, steps, type IntegrationInfo, type Provider } from "./store";
+import { pillPresent } from "./providers";
 import { renderIntegrationCard, githubData, type GithubOpening, type IntegrationCardHooks } from "./views/integrations";
 import { enterGithubPanel, newsFacts, resetGithub, sawRunEnd } from "./views/github";
 
@@ -19,26 +18,25 @@ const SETTLE_MS = 60_000;
  * the screen for a minute must still find it there. Opening it ends it sooner.
  */
 const NEWS_MS = 5 * 60_000;
-/** Integrations whose news opens the island, as a Claude Code session's result does. */
-const SPEAKS_UP = new Set([GITHUB]);
 /** States that are waiting for the user: nothing takes the front from those. */
 const WAITING = new Set(["approval", "question"]);
 
 const empty = (configured: boolean): IntegrationInfo => ({ data: {}, error: null, loaded: false, configured });
 
-export function startIntegrations(api: IslandApi): Disposer {
-  rt.api = api;
-  resetStore();
-  resetGithub();
+/** One provider's run: its pill, its news, the hooks answering only for its own id. */
+export function startProvider(api: IslandApi, def: Provider): Disposer {
+  const id = def.id;
+  const isGithub = id === GITHUB;
+  if (isGithub) {
+    rt.api = api;
+    resetGithub();
+  }
 
-  const clearTimers = new Map<string, Disposer>();
-  /** The pill each news took the front from, to hand it back. */
-  const borrowedFrom = new Map<string, string>();
-  const configured: Record<string, boolean> = {};
-  /** Pills this run of the module put among the tasks. */
-  const owned = new Set<string>();
+  let clearTimer: Disposer | null = null;
+  /** The pill the news took the front from, to hand it back. */
+  let borrowedFrom: string | null = null;
+  let owned = false;
   let detailOpen = false;
-  let detailFor: string | null = null;
   let alive = true;
 
   const redraw = () => {
@@ -46,66 +44,56 @@ export function startIntegrations(api: IslandApi): Disposer {
     api.island.redraw();
   };
 
-  // ── Pills ──────────────────────────────────────────────────────────────────
+  // ── Pill ───────────────────────────────────────────────────────────────────
 
-  /** Active = switched on in Settings AND configured (its key is in the Credential Manager). */
-  function wanted(): string[] {
-    const on = new Set(integrationSettings().activeIntegrations);
-    return PROVIDERS.filter((p) => on.has(p.id) && configured[p.id]).map((p) => p.id);
-  }
-
-  function syncPills() {
+  /** On while its module is on (we are running) AND its key is in the Credential Manager. */
+  function syncPill(keyPresent: boolean) {
     if (!alive) return;
-    const want = new Set(wanted());
-    for (const id of [...owned]) {
-      if (want.has(id)) continue;
-      owned.delete(id);
-      settle(id, true);
+    const want = pillPresent(true, keyPresent);
+    if (!want && owned) {
+      owned = false;
+      settle(true);
       State.tasks = State.tasks.filter((t) => t.id !== id);
       delete info[id];
       steps.delete(id);
-    }
-    const order = PROVIDERS.map((x) => x.id);
-    for (const p of PROVIDERS) {
-      if (!want.has(p.id) || owned.has(p.id)) continue;
-      owned.add(p.id);
-      // In declaration order, after Claude's pill and the agents, as at m3-ok.
-      const at = State.tasks.findIndex((t) => order.indexOf(t.id) > order.indexOf(p.id));
-      const task: AgentTask = { id: p.id, name: p.name, color: p.color, state: "idle" };
+    } else if (want && !owned) {
+      owned = true;
+      const order = PROVIDERS.map((x) => x.id);
+      // In catalog order, after Claude's pill and the agents.
+      const at = State.tasks.findIndex((t) => order.indexOf(t.id) > order.indexOf(id));
+      const task: AgentTask = { id, name: def.name, color: def.color, state: "idle" };
       State.tasks.splice(at < 0 ? State.tasks.length : at, 0, task);
-      info[p.id] ??= empty(true);
-      info[p.id].configured = true;
-      steps.set(p.id, []);
-      void Bridge.refreshIntegration(p.id);
+      info[id] ??= empty(true);
+      info[id].configured = true;
+      steps.set(id, []);
+      void Bridge.refreshIntegration(id);
     }
     if (!State.tasks.some((t) => t.id === State.focusId)) State.focusId = State.tasks[0]?.id ?? null;
     redraw();
   }
 
-  /** Asks Rust which keys exist: only a configured integration gets a pill. */
   async function refreshConfigured() {
-    for (const p of PROVIDERS) configured[p.id] = (await Bridge.secretPresent(p.key)) ?? false;
-    syncPills();
+    syncPill((await Bridge.secretPresent(def.key)) ?? false);
   }
 
   // ── News ───────────────────────────────────────────────────────────────────
 
-  function giveBack(id: string) {
-    const previous = borrowedFrom.get(id);
-    borrowedFrom.delete(id);
+  function giveBack() {
+    const previous = borrowedFrom;
+    borrowedFrom = null;
     if (previous && State.focusId === id && State.tasks.some((t) => t.id === previous)) State.focusId = previous;
   }
 
   /**
-   * A pill's news is over: it got old, or it was opened, and news that was opened is not news any
+   * The pill's news is over: it got old, or it was opened, and news that was opened is not news any
    * more. Unless the user is being taken to what it was about (`stay`), the front goes back.
    */
-  function settle(id: string, stay = false) {
-    clearTimers.get(id)?.();
-    clearTimers.delete(id);
+  function settle(stay = false) {
+    clearTimer?.();
+    clearTimer = null;
     if (info[id]) info[id].news = null;
-    if (stay) borrowedFrom.delete(id);
-    else giveBack(id);
+    if (stay) borrowedFrom = null;
+    else giveBack();
     const task = State.tasks.find((t) => t.id === id);
     if (task && (task.state === "finished" || task.state === "error")) {
       task.state = "idle";
@@ -114,26 +102,19 @@ export function startIntegrations(api: IslandApi): Disposer {
     State.notify();
   }
 
-  /** The pill whose news the user is looking at: the one at the front, else GitHub's. */
-  function newsId(): string | null {
-    const telling = (id: string | null) => id != null && SPEAKS_UP.has(id) && info[id]?.news != null;
-    return telling(State.focusId) ? State.focusId : telling(GITHUB) ? GITHUB : null;
-  }
-
   /** Straight to what the news is about: from its card, from the panel's line, or from a click on Mochi. */
   function followNews(): boolean {
-    const id = newsId();
-    const news = id ? info[id]?.news : null;
-    if (!id || !news) return false;
+    const news = info[id]?.news;
+    if (!news) return false;
     Sound.play("blip");
     enterGithubPanel(news.open);
-    settle(id, true);
+    settle(true);
     api.island.setView("github");
     return true;
   }
 
   function handle(update: IntegrationUpdate) {
-    if (State.paused || !owned.has(update.id)) return;
+    if (State.paused || update.id !== id || !owned) return;
     const previous = info[update.id];
     // A failed poll carries no data and keeps what was there. GitHub's carries its last good
     // snapshot, so the panel can go on showing it next to the reason it isn't fresh.
@@ -147,7 +128,7 @@ export function startIntegrations(api: IslandApi): Disposer {
     };
 
     // A run going on one of the projects: GitHub's Mochi is at work until it ends.
-    if (update.id === GITHUB && hasData) {
+    if (isGithub && hasData) {
       const repos = (update.data as Partial<GithubData>).repos ?? [];
       const going = repos.some((r) => r.build?.state === "running");
       const task = State.tasks.find((t) => t.id === update.id);
@@ -164,10 +145,10 @@ export function startIntegrations(api: IslandApi): Disposer {
       const front = State.focusTask;
       let opened = false;
       if (
-        SPEAKS_UP.has(update.id) && State.mode !== "expanded" && State.focusId !== update.id &&
+        isGithub && State.mode !== "expanded" && State.focusId !== update.id &&
         State.focusId && !(front && WAITING.has(front.state))
       ) {
-        if (!borrowedFrom.has(update.id)) borrowedFrom.set(update.id, State.focusId);
+        borrowedFrom ??= State.focusId;
         State.focusId = update.id;
         opened = true;
       }
@@ -180,8 +161,8 @@ export function startIntegrations(api: IslandApi): Disposer {
       if (opened) api.island.open(event.success ? "finished" : "error");
       else api.island.wake();
 
-      clearTimers.get(update.id)?.();
-      clearTimers.set(update.id, api.timeout(() => settle(update.id), SPEAKS_UP.has(update.id) ? NEWS_MS : SETTLE_MS));
+      clearTimer?.();
+      clearTimer = api.timeout(() => settle(), isGithub ? NEWS_MS : SETTLE_MS);
     }
     redraw();
   }
@@ -202,18 +183,16 @@ export function startIntegrations(api: IslandApi): Disposer {
     },
   };
 
-  function taskCard(id: string): TaskCard | null {
-    const task = State.tasks.find((t) => t.id === id);
-    if (!task || !owned.has(id)) return null;
-    // The detail of a card belongs to the pill in front: another pill starts closed.
-    if (detailFor !== id) { detailFor = id; detailOpen = false; }
+  function taskCard(taskId: string): TaskCard | null {
+    const task = State.tasks.find((t) => t.id === taskId);
+    if (taskId !== id || !task || !owned) return null;
     const own = info[id];
     const key = [id, detailOpen, task.state, steps.get(id)?.join("|"), own?.loaded, own?.error, own?.configured, JSON.stringify(own?.data ?? {})].join("~");
     return { key, build: () => renderIntegrationCard(task, cardHooks) };
   }
 
-  function taskNews(id: string): TaskNews | null {
-    const news = owned.has(id) ? info[id]?.news : null;
+  function taskNews(taskId: string): TaskNews | null {
+    const news = taskId === id && owned ? info[id]?.news : null;
     if (!news) return null;
     return {
       says: news.open?.says ?? (news.success ? "pull request mesclado" : "um build quebrou"),
@@ -223,51 +202,55 @@ export function startIntegrations(api: IslandApi): Disposer {
   }
 
   /** The ↗ button: same targets as openAgentTarget() on macOS. */
-  function openTarget(id: string): boolean {
-    const p = providerOf(id);
-    if (!p || !owned.has(id)) return false;
+  function openTarget(taskId: string): boolean {
+    if (taskId !== id || !owned) return false;
     if (id === "integration_n8n") void Bridge.openN8n();
-    else if (id === GITHUB && githubData()) void Bridge.openUrl(githubData()!.profileUrl);
-    else if (p.url) void Bridge.openUrl(p.url);
+    else if (isGithub && githubData()) void Bridge.openUrl(githubData()!.profileUrl);
+    else if (def.url) void Bridge.openUrl(def.url);
     return true;
   }
 
   /** Without the Claude module there is no overview: the GitHub panel is home. */
   function homeView(): HomeRequest | null {
-    return State.modules.claude !== true && owned.has(GITHUB) ? { view: "github", pin: false, priority: 5 } : null;
+    return State.modules.claude !== true && owned ? { view: "github", pin: false, priority: 5 } : null;
   }
 
   const offs: Disposer[] = [
     api.listen<IntegrationUpdate>("integration", handle),
     api.listen("secrets-changed", () => void refreshConfigured()),
-    // After the core has taken the new settings in (its own listener may run second).
-    api.listen("settings-changed", () => void api.timeout(syncPills, 0)),
     api.provide("openTarget", openTarget),
-    api.provide("followNews", followNews),
     api.provide("taskCard", taskCard),
     api.provide("taskNews", taskNews),
-    api.provide("homeView", homeView),
-    // The panel's own look for Mochi (a run going) lasts while the panel is on screen.
-    State.subscribe(() => {
-      if (State.mode !== "expanded" || State.view !== "github") api.avatar.publish(null);
-    }),
   ];
+  if (isGithub) {
+    offs.push(
+      api.provide("followNews", followNews),
+      api.provide("homeView", homeView),
+      // The panel's own look for Mochi (a run going) lasts while the panel is on screen.
+      State.subscribe(() => {
+        if (State.mode !== "expanded" || State.view !== "github") api.avatar.publish(null);
+      }),
+    );
+  }
   void refreshConfigured();
 
   return () => {
     alive = false;
     for (const off of offs.reverse()) off();
-    for (const clean of [...cleanups]) clean();
-    cleanups.clear();
-    api.avatar.publish(null);
-    api.avatar.tint(null);
-    for (const id of [...borrowedFrom.keys()]) giveBack(id);
-    State.tasks = State.tasks.filter((t) => !owned.has(t.id));
-    owned.clear();
+    giveBack();
+    State.tasks = State.tasks.filter((t) => t.id !== id);
+    owned = false;
+    delete info[id];
+    steps.delete(id);
+    if (isGithub) {
+      for (const clean of [...cleanups]) clean();
+      cleanups.clear();
+      api.avatar.publish(null);
+      api.avatar.tint(null);
+      resetGithub();
+      rt.api = null;
+    }
     if (!State.tasks.some((t) => t.id === State.focusId)) State.focusId = State.tasks[0]?.id ?? null;
-    resetGithub();
-    resetStore();
-    rt.api = null;
     State.notify();
   };
 }

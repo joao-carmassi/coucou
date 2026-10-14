@@ -149,7 +149,7 @@ function renderSections(effective: Record<string, boolean>) {
 
 /** `effective` comes from Rust (modules-changed); until then it is computed from the stored switches. */
 function renderModules(effective: Record<string, boolean> = resolveEnabled(MODULE_INFO, settings.modulesEnabled)) {
-  const rows = MODULE_INFO.map((m) => {
+  const row = (m: (typeof MODULE_INFO)[number]) => {
     const missing = (m.requires ?? []).find((r) => effective[r] !== true);
     const sw = toggle(effective[m.id] === true, (v) => {
       settings.modulesEnabled = { ...settings.modulesEnabled, [m.id]: v };
@@ -165,7 +165,12 @@ function renderModules(effective: Record<string, boolean> = resolveEnabled(MODUL
       sw,
       missing ? h("span", { class: "hint", text: `Requer ${need}` }) : "",
     );
-  });
+  };
+  const rows: HTMLElement[] = MODULE_INFO.filter((m) => !m.group).map(row);
+  // Grouped modules sit under their group's heading, in catalog order.
+  for (const g of [...new Set(MODULE_INFO.flatMap((m) => (m.group ? [m.group] : [])))]) {
+    rows.push(h("h3", { class: "hint", text: g }), ...MODULE_INFO.filter((m) => m.group === g).map(row));
+  }
   modulesBox.replaceChildren(h("section", { id: "modules" }, h("h2", {}, h("span", { text: "Módulos" })), ...rows));
   renderSections(effective);
 }
