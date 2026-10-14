@@ -10,9 +10,9 @@ use crate::core::host::{Module, ModuleInfo};
 pub const CATALOG: &[ModuleInfo] = &[
     ModuleInfo { id: "claude", label: "Claude Code", default_enabled: true, requires: &[], group: None },
     ModuleInfo { id: "media", label: "Mídia", default_enabled: true, requires: &[], group: None },
-    ModuleInfo { id: "upload", label: "Soltar arquivo", default_enabled: true, requires: &["claude"], group: None },
     ModuleInfo { id: "timer", label: "Timer", default_enabled: false, requires: &[], group: None },
-    ModuleInfo { id: "voice", label: "Voz", default_enabled: false, requires: &["claude"], group: None },
+    ModuleInfo { id: "upload", label: "Soltar arquivo", default_enabled: true, requires: &["claude"], group: Some("Precisam do Claude Code") },
+    ModuleInfo { id: "voice", label: "Voz", default_enabled: false, requires: &["claude"], group: Some("Precisam do Claude Code") },
     ModuleInfo { id: "github", label: "GitHub", default_enabled: false, requires: &[], group: Some("Integrações") },
     ModuleInfo { id: "vercel", label: "Vercel", default_enabled: false, requires: &[], group: Some("Integrações") },
     ModuleInfo { id: "stripe", label: "Stripe", default_enabled: false, requires: &[], group: Some("Integrações") },

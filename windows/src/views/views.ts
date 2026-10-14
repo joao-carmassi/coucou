@@ -65,6 +65,7 @@ export function buildHeader(actions: ViewActions, tabOf: (view: string) => strin
     sync() {
       const v = State.view;
       const own = tabOf(v);
+      tabHome.style.display = State.modules.claude ? "" : "none"; // Home needs the claude module
       tabHome.classList.toggle("on", v === "overview" || v === "empty" || own === "overview");
       for (const t of tabs) t.btn.classList.toggle("on", v === t.def.view || own === t.def.view);
       gearBtn.classList.toggle("on", v === "settings");

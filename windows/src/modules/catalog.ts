@@ -4,9 +4,9 @@ import type { ModuleInfo } from "../core/moduleApi";
 export const MODULE_INFO: ModuleInfo[] = [
   { id: "claude", label: "Claude Code", defaultEnabled: true },
   { id: "media", label: "Mídia", defaultEnabled: true },
-  { id: "upload", label: "Soltar arquivo", defaultEnabled: true, requires: ["claude"] },
   { id: "timer", label: "Timer", defaultEnabled: false },
-  { id: "voice", label: "Voz", defaultEnabled: false, requires: ["claude"] },
+  { id: "upload", label: "Soltar arquivo", defaultEnabled: true, requires: ["claude"], group: "Precisam do Claude Code" },
+  { id: "voice", label: "Voz", defaultEnabled: false, requires: ["claude"], group: "Precisam do Claude Code" },
   { id: "github", label: "GitHub", defaultEnabled: false, group: "Integrações" },
   { id: "vercel", label: "Vercel", defaultEnabled: false, group: "Integrações" },
   { id: "stripe", label: "Stripe", defaultEnabled: false, group: "Integrações" },
