@@ -10,8 +10,6 @@ export interface PrimarySettings { boardPrimary: string; focusHoldMinutes: numbe
 /** Moods that carry something to read: the user's default never takes the tile from these. */
 const EXPLICIT = new Set(["alert", "ask", "error", "done"]);
 
-export const DEFAULT_PRIMARY = "claude";
-
 /** Set while the board runs: the view clicks through it. */
 export const rt: { choose: ((id: string) => void) | null } = { choose: null };
 
@@ -23,7 +21,7 @@ export function startPrimary(api: IslandApi): Disposer {
   const settings = () => {
     const s = api.settings<PrimarySettings>();
     const hold = Number(s.focusHoldMinutes);
-    return { primary: typeof s.boardPrimary === "string" && s.boardPrimary ? s.boardPrimary : DEFAULT_PRIMARY, holdMs: (Number.isFinite(hold) ? hold : 1) * 60_000 };
+    return { primary: typeof s.boardPrimary === "string" && s.boardPrimary ? s.boardPrimary : "", holdMs: (Number.isFinite(hold) ? hold : 1) * 60_000 };
   };
   const front = () => api.pills.front();
   const put = (id: string) => { for (const f of api.useAll<BoardFocus>("board.focus")) { try { f(id); } catch (err) { console.error("[coucou] pill service failed", err); } } };
@@ -43,7 +41,6 @@ export function startPrimary(api: IslandApi): Disposer {
   rt.choose = (id) => {
     put(id);
     pick = front()?.id === id ? id : null;
-    if (pick && !api.pills.get(id)) pick = null;
   };
 
   const offs = [

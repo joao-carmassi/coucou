@@ -88,9 +88,7 @@ describe("timer hold after expiry", () => {
     vi.setSystemTime(Date.now() + 61_000); // hold expired while unseen
     reopen();
     expect(State.view).toBe(State.defaultView());
-    folded();
-    expect(landsOn("timer")).toBe(false);
-    api().island.open("timer"); tick(1100); // visit: fresh hold
+    api().island.open("timer"); tick(10); // visit: fresh hold, noticed at once
     expect(landsOn("timer")).toBe(true);
     api().island.open("timer"); tick(10);
     click("button", "Cancelar");
@@ -105,6 +103,12 @@ describe("media hold", () => {
 
   it("held while the view is on; reopen lands on media", async () => {
     await openMedia();
+    expect(landsOn("media")).toBe(true);
+  });
+
+  it("leaving the view keeps the hold", async () => {
+    await openMedia();
+    api().island.setView("dummy-a"); tick(10);
     expect(landsOn("media")).toBe(true);
   });
 

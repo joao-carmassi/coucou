@@ -31,12 +31,12 @@ function start(api: IslandApi): Disposer {
     // A configured-but-unstarted timer is still a task in progress.
     if (Timer.status !== "idle") {
       hold ??= api.island.hold("timer");
-      // The core drops a hold unseen for too long: take a fresh one on each visit. Polled only while a task exists.
-      visit ??= api.interval(() => {
+      // The core drops a hold unseen for too long: take a fresh one on each visit. Event-driven, only while a task exists.
+      visit ??= api.island.onChange(() => {
         const on = api.island.view() === "timer";
         if (on && !wasOn) { hold?.(); hold = api.island.hold("timer"); }
         wasOn = on;
-      }, 1000, { whenVisible: true });
+      });
     } else { hold?.(); hold = null; visit?.(); visit = null; wasOn = false; }
     if (Timer.status === "running") {
       // One-shot, so the end still rings (and is shown) if the island is hidden.

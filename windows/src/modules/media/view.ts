@@ -265,13 +265,13 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
     () => { lazy.disconnect(); queue.length = 0; },
   );
 
-  // sync() only runs while the view is shown, so leaving it is noticed here.
-  api.interval(() => {
+  // sync() only runs while the view is shown, so leaving it is noticed here. The hold is kept (it ends
+  // when the task concludes or expires); the next visit takes a fresh one.
+  api.island.onChange(() => {
     if (!wasOn || api.island.view() === "media") return;
     wasOn = false;
     closeMenu();
-    unhold();
-  }, 1000, { whenVisible: true });
+  });
 
   return {
     el,

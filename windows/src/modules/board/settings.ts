@@ -1,34 +1,33 @@
-// The Início section of the settings window (only while the board is on): which provider is the home's
-// default primary. Only providers that are on are listed; a saved one that went off is ignored and
-// the board falls back to the existing order.
+// The Início section of the settings window (only while the board is on): which module's pill is the
+// home's default primary. The list comes from the catalog (every module but the board, so new
+// integrations show up by themselves); one that is off is ignored at runtime and the board falls back
+// to the existing order.
 import type { ModuleSettings } from "../../core/moduleSettings";
 import { h } from "../../kit/dom";
-
-/** Board-capable providers (they answer board.card for their pills), in catalog order. */
-export const BOARD_PROVIDERS: { id: string; label: string }[] = [
-  { id: "claude", label: "Claude Code" },
-  { id: "github", label: "GitHub" },
-  { id: "vercel", label: "Vercel" },
-  { id: "stripe", label: "Stripe" },
-  { id: "n8n", label: "n8n" },
-  { id: "resend", label: "Resend" },
-  { id: "calcom", label: "Cal.com" },
-  { id: "notion", label: "Notion" },
-];
+import { MODULE_INFO } from "../catalog";
 
 interface Own { boardPrimary: string; modulesEnabled: Record<string, boolean> }
 
 function boardSettingsSection(ms: ModuleSettings): { el: HTMLElement } {
-  const { boardPrimary, modulesEnabled } = ms.get<Own>();
-  const on = BOARD_PROVIDERS.filter((p) => modulesEnabled?.[p.id] === true || (p.id === "claude" && modulesEnabled?.claude !== false));
-  const sel = h("select", {}, ...on.map((p) => h("option", { value: p.id, text: p.label }))) as HTMLSelectElement;
-  sel.value = on.some((p) => p.id === boardPrimary) ? boardPrimary : "claude";
+  const sel = h("select", {}) as HTMLSelectElement;
+  // Rebuilt from a fresh read each time the list is about to open; the saved value is always an option.
+  const fill = () => {
+    const { boardPrimary: saved, modulesEnabled } = ms.get<Own>();
+    const on = MODULE_INFO.filter((m) => m.id !== "board" && (modulesEnabled?.[m.id] ?? m.defaultEnabled));
+    const opts = on.map((m) => ({ id: m.id, label: m.label }));
+    if (!opts.some((o) => o.id === saved)) opts.push({ id: saved, label: MODULE_INFO.find((m) => m.id === saved)?.label ?? saved });
+    sel.replaceChildren(...opts.map((o) => h("option", { value: o.id, text: o.label })));
+    sel.value = saved;
+  };
+  fill();
+  sel.addEventListener("focus", fill);
+  sel.addEventListener("pointerdown", fill);
   sel.addEventListener("change", () => void ms.save({ boardPrimary: sel.value }));
   return {
     el: h("section", { id: "board" },
       h("h2", {}, h("span", { text: "Início" })),
-      h("div", { class: "row" }, h("label", { text: "Principal da Início" }), sel),
-      h("div", { class: "hint", text: "O que fica na área grande da Início. Clicar numa pílula a traz para a frente até o tempo de foco passar." }),
+      h("div", { class: "row" }, h("label", { text: "Principal do Início" }), sel),
+      h("div", { class: "hint", text: "O que fica na área grande do Início. Clicar numa pílula a traz para a frente até o tempo de foco passar." }),
     ),
   };
 }

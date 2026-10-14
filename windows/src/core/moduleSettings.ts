@@ -9,6 +9,9 @@ export interface ModuleSettings {
   save(patch: Record<string, unknown>): Promise<void>;
 }
 
+/** Core-owned keys a module may read (declared in its manifest) but never write. */
+const CORE_KEYS = new Set(["focusHoldMinutes", "modulesEnabled"]);
+
 export function moduleSettings(id: string, defaults: Readonly<Record<string, unknown>> = {}): ModuleSettings {
   return {
     get<T extends object>() {
@@ -20,6 +23,8 @@ export function moduleSettings(id: string, defaults: Readonly<Record<string, unk
     async save(patch) {
       const bad = Object.keys(patch).filter((k) => !(k in defaults));
       if (bad.length) throw new Error(`module ${id}: settings key(s) not declared in its manifest: ${bad.join(", ")}`);
+      const core = Object.keys(patch).filter((k) => CORE_KEYS.has(k));
+      if (core.length) throw new Error(`module ${id}: core settings key(s) are read-only: ${core.join(", ")}`);
       Object.assign(State.settings, patch);
       return Bridge.saveSettings(patch).then(() => undefined);
     },

@@ -473,3 +473,11 @@ Honest limits: (a) glob order is alphabetical by folder, so module CSS must not 
 - Kit `setSlim(el, on)` / `.home.slim`: narrow right card (150px) for 1-3 pills; board sets `data-cols` 1 or 2; cap 6.
 - Hold rule (0.8.1): hold a view from the moment the user enters it until its task is concluded (something launched, chosen, cancelled), never merely because they left; take it anew on each fresh visit (an expired one is gone from the list). Default focus time is 1 minute. `api.island.reopen()` unfolds a folded/hidden island like a click (no-op when open).
 - Home clears holds: when the user selects the home view (`State.defaultView()`), by its header tab or any explicit navigation to it, the core drops every live hold, since home is the default and going there removes the focus. Automatic landings (a module's `setView(home)`, `setTabs` following the home, a hold-driven reopen) do not clear. Disposers returned earlier stay safe no-ops, and holds taken afterwards work as usual. A module whose task is still unfinished takes its hold anew on the next visit to its view.
+- Known limit: the board's automatic default (below) is applied through `board.focus`, which is a user-click hook, so the owning module's focus side effects (Claude's, for instance) may run when the island opens, not only on a real click.
+
+### Board primary
+
+- Default: the first pill owned by the module named in `boardPrimary` (default `claude`). A module that is off or has no pill changes nothing; the existing fallback chain stays.
+- A click on a pill in the right-hand list is a user pick. The pick ends when anything else takes the front, or when the island was closed for >= `focusHoldMinutes` (the close time is stamped through `api.onVisibility`, judged on the next open; no timers; `0` = always back to the default).
+- Explicit moods (`alert`, `ask`, `error`, `done`) or a badge on the front pill win over the default.
+- Settings section "Início": the provider list comes from the catalog (`MODULE_INFO`, every module but the board), refreshed on each focus/pointerdown of the select; the board names no module. `moduleSettings.save` refuses the core keys `focusHoldMinutes` and `modulesEnabled` (the board declares them to read only; the catalog test allows exactly those two for `board`).

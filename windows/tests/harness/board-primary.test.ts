@@ -64,9 +64,11 @@ beforeAll(async () => {
 });
 afterAll(() => vi.useRealTimers());
 beforeEach(() => {
+  Registry.apply({ ...ALL, board: false }); // a fresh board: no pick or close time from the last test
   Registry.apply(ALL);
   set({ boardPrimary: "claude", focusHoldMinutes: 1 });
-  probe.claude!.pills.focus("claude-pill");
+  for (const [id, label] of [["claude", "Claude"], ["alpha", "Alpha"], ["vercel", "Vercel"]]) probe[id]!.pills.set({ id: `${id}-pill`, label, color: "#88aaff", mood: "idle" }); // nothing leaks between tests
+  probe.vercel!.pills.focus("vercel-pill"); // not the default: the default has to be applied
   fold();
   vi.setSystemTime(new Date(2030, 0, 1));
 });
@@ -88,11 +90,12 @@ describe("board primary", () => {
   it("a default that is not running changes nothing", () => {
     set({ boardPrimary: "ghost" });
     reopen();
-    expect(front()).toBe("claude-pill");
+    expect(front()).toBe("vercel-pill");
   });
 
   it("a click on a pill makes it the primary", () => {
     reopen();
+
     clickPill("Vercel");
     expect(front()).toBe("vercel-pill");
     expect(document.body.textContent).toContain("card of Vercel");
@@ -151,15 +154,28 @@ describe("board primary", () => {
   it("an error or alert on the front keeps it over the default", () => {
     set({ boardPrimary: "alpha" });
     probe.claude!.pills.set({ id: "claude-pill", mood: "error" });
+    probe.claude!.pills.focus("claude-pill");
+    fold();
     reopen();
     expect(front()).toBe("claude-pill");
     probe.claude!.pills.set({ id: "claude-pill", mood: "idle" });
   });
 
-  it("the board stopping leaves nothing behind", () => {
-    Registry.apply({ ...ALL, board: false });
-    Registry.apply(ALL);
+  it("the board stopping leaves nothing behind: a click after stop picks nothing and nothing reverts", async () => {
     reopen();
-    expect(front()).toBe("claude-pill");
+    const vercel = [...document.querySelectorAll<HTMLElement>(".pill")].find((p) => p.textContent === "Vercel")!;
+    const { rt } = await import("../../src/modules/board/primary");
+    expect(rt.choose).toBeTypeOf("function");
+    Registry.apply({ ...ALL, board: false });
+    expect(rt.choose).toBeNull(); // nothing records a pick any more
+    vercel.click(); // a stale handler
+    tick(10);
+    expect(front()).toBe("vercel-pill");
+    fold();
+    vi.setSystemTime(Date.now() + 10 * 60_000);
+    reopen();
+    tick(1000);
+    expect(front()).toBe("vercel-pill");
+    Registry.apply(ALL);
   });
 });

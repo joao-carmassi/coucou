@@ -26,7 +26,7 @@ test("collectDefs: keeps module-looking exports only", () => {
 });
 
 test("manifests: settingsDefaults keys start with the module id (old flat keys keep their names)", () => {
-  const LEGACY = new Set(["hooksInstalled", "idleOpen", "alertHotkey", "focusHoldMinutes", "modulesEnabled"]); // claude's, shipped before the rule; the last two are core keys the board only reads
+  const LEGACY: Record<string, string[]> = { claude: ["hooksInstalled", "idleOpen", "alertHotkey"], board: ["focusHoldMinutes", "modulesEnabled"] }; // shipped before the rule; board only reads these two core keys; moduleSettings.save refuses writing them
   for (const m of manifests.flat())
-    for (const k of Object.keys(m.settingsDefaults ?? {})) assert.ok(k.startsWith(m.id) || LEGACY.has(k), `${m.id}: ${k}`);
+    for (const k of Object.keys(m.settingsDefaults ?? {})) assert.ok(k.startsWith(m.id) || LEGACY[m.id]?.includes(k), `${m.id}: ${k}`);
 });
