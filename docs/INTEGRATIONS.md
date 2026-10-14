@@ -95,7 +95,7 @@ Service results can decorate Claude cards through the `taskCard`, `taskNews` and
 
 ## 4. Voice (module `voice`)
 
-A global hotkey (default `Ctrl+Alt+V`) opens the microphone. One phrase ends on about 1 s of silence (25 s max). It is transcribed on-device by `needle.exe` with the Whistle model; the text appears on a card and is sent to Claude Code only when you press **Enter** (or click **Enviar**); there is no auto-send timer, **Esc** cancels and the text is editable first. The model files are downloaded only from the Settings button (pinned revisions, SHA-256 checked). English only.
+A global hotkey (default `Ctrl+Alt+V`) opens the microphone. One phrase ends on about 1 s of silence (25 s max). It is transcribed on-device by `needle.exe` with the Whistle model; the text appears inline on the same card that showed "listening" and is sent to Claude Code (a new session) only when you press **Enter**; there is no auto-send timer, **Esc** cancels. While the text is pending the island keeps awake, takes focus and listens for Enter/Esc (a window keydown listener that exists only then); a new capture also replaces it. The model files are downloaded only from the Settings button (pinned revisions, SHA-256 checked). English only.
 
 ## 5. Timer (module `timer`)
 
