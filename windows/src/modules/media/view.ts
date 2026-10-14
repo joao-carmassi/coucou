@@ -277,7 +277,7 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
     el,
     sync() {
       const on = api.island.view() === "media";
-      if (on && !wasOn) release ??= api.island.hold("media");
+      if (on && !wasOn) { release?.(); release = api.island.hold("media"); } // anew: the last may have expired
       if (on && (!wasOn || dirty)) void load();
       wasOn = on;
     },

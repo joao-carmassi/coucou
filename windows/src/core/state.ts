@@ -48,7 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
   soundVolume: 0.12,
   autoCloseInterval: 15,
   compactHideInterval: 60,
-  focusHoldMinutes: 10,
+  focusHoldMinutes: 1,
   screen: "primary",
   autostart: false,
   modulesEnabled: {},

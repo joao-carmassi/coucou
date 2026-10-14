@@ -150,6 +150,7 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
       setView: (v) => host.setView(v),
       close: () => host.collapse(),
       wake: () => host.reveal(),
+      reopen: () => host.reopen(),
       hide: () => host.hide(),
       keepAwake: (pred) => scope.add(Hooks.provide("keepAwake", pred)),
       mode: () => State.mode,

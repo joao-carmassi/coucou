@@ -9,7 +9,7 @@ import { EXPANDED_W, type Disposer, type IslandApi, type ModuleDef, type Overlay
 import type { FsmState } from "../../island/fsm";
 import { UploadCanvas } from "./canvas";
 import { USC, UploadSeq } from "./sequence";
-import { Up } from "./state";
+import { Up, chooseHold, concludeChoose } from "./state";
 import { ask, buildChoose, buildUpload, buildUploading } from "./view";
 
 /** The views the drop sequence owns; leaving them stops the engine. */
@@ -24,6 +24,7 @@ interface DragPayload { type: "enter" | "over" | "drop" | "leave" | "end"; paths
 /** Cancel on the drop card. The file goes with it, so the next flow doesn't carry it. */
 function cancelDrop(api: IslandApi) {
   Up.droppedFile = null;
+  concludeChoose();
   api.island.setView(api.island.home());
 }
 
@@ -81,7 +82,10 @@ function start(api: IslandApi): Disposer {
       api.avatar.emote("happy");
     }
     // The extra second is the grow-back, after which the choose card is up.
-    if (since >= PRE_PROGRESS + Up.duration + 1 && api.island.view() === "uploading") api.island.setView("choose");
+    if (since >= PRE_PROGRESS + Up.duration + 1 && api.island.view() === "uploading") {
+      api.island.setView("choose");
+      chooseHold.off ??= api.island.hold("choose"); // waiting for the choice: reopen lands here
+    }
   }
 
   const cancelAbandon = () => { abandonTimer?.(); abandonTimer = null; };
@@ -185,6 +189,7 @@ function start(api: IslandApi): Disposer {
   const offVis = api.onVisibility((mode) => { if (mode !== "expanded") UploadSeq.deactivate(); });
   return () => {
     cancelAbandon();
+    concludeChoose();
     offDrag(); offOverlay(); offVis();
     UploadSeq.deactivate();
     for (const [id, c] of [["island", "upload-on"], ["views", "hidden-by-upload"], ["content", "upload-active"]]) byId(id)?.classList.remove(c);

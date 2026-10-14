@@ -89,6 +89,7 @@ export interface IslandHost {
   hide(): void;
   collapse(): void;
   reveal(): void;
+  reopen(): void;
   setView(view: string): void;
   note(text: string): void;
   error(err: unknown): void;
@@ -185,6 +186,8 @@ export interface IslandApi {
     /** True while any pinned request exists (a note over it would be rude). */
     busy(): boolean;
     setView(view: string): void; close(): void; wake(): void; hide(): void;
+    /** Unfolds a folded or hidden island the way a click on it does (request, held task, home); an open one stays as it is. */
+    reopen(): void;
     keepAwake(pred: () => boolean): Disposer; mode(): IslandMode; fsmState(): FsmState; mouseInside(): boolean; view(): string;
     note(text: string): void; error(err: unknown): void; overlay(o: Overlay): Disposer;
     /** Fires after every change of the island's state (pills, mode, view, requests...); removed when the module stops. */

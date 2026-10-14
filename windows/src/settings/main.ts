@@ -82,7 +82,7 @@ function generalSection(): HTMLElement {
 
   const hold = h("input", {
     type: "number", min: "0", max: "120", step: "1",
-    value: String(Math.round(settings.focusHoldMinutes ?? 10)),
+    value: String(Math.round(settings.focusHoldMinutes ?? 1)),
     style: "width:72px",
   }) as HTMLInputElement;
   hold.addEventListener("change", () => {

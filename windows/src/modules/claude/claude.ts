@@ -237,6 +237,7 @@ export class Claude {
   goToAlert() {
     if (this.focusId() !== CLAUDE_ID) this.setFocus(CLAUDE_ID);
     if (this.store.hasPending()) this.afterRequest(true);
+    else if (this.api.island.mode() !== "expanded") this.api.island.reopen(); // lands on a held task, else home
     else this.api.island.open(this.api.island.home());
   }
 

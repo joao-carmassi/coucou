@@ -387,6 +387,10 @@ export class Island implements IslandHost {
     this.fsm.reveal();
   }
 
+  reopen() {
+    if (State.mode !== "expanded") this.fsm.forceHome();
+  }
+
   /** The mouse reaches a hidden island: it just peeks. */
   private mouseEnter() {
     if (this.fsm.state === "hidden" && Requests.front()?.pin) {

@@ -39,7 +39,7 @@ impl Default for Settings {
             screen: "primary".into(),
             autostart: false,
             compact_hide_interval: default_compact_hide(),
-            focus_hold_minutes: 10.0,
+            focus_hold_minutes: 1.0,
             modules_enabled: Default::default(),
             extra: Default::default(),
         }

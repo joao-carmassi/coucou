@@ -30,6 +30,10 @@ export function buildSessionsView(c: Claude, ctx: ViewContext): ViewHost {
   let seen = "";
   let drawn = "";
   let height: number | undefined;
+  /** The list is an unfinished errand until something is launched from it: the island reopens here meanwhile. */
+  let hold: (() => void) | null = null;
+  let visiting = false;
+  const conclude = () => { hold?.(); hold = null; };
 
   const chips = h("div", { class: "sess-chips" });
   const newBtn = h("button", { class: "btn secondary sess-newbtn", text: "Nova sessão", onclick: () => void newSession() });
@@ -45,6 +49,8 @@ export function buildSessionsView(c: Claude, ctx: ViewContext): ViewHost {
 
   const label = (key: string) => profiles.find((p) => p.key === key)?.label ?? key;
   const isOn = () => c.api.island.mode() === "expanded" && c.api.island.view() === "sessions";
+  // sync() only runs while this is the view: leaving it is noticed here, and the next visit is a new errand.
+  c.api.island.onChange(() => { if (!isOn()) visiting = false; });
 
   async function run(fn: () => Promise<unknown>) {
     try {
@@ -57,6 +63,7 @@ export function buildSessionsView(c: Claude, ctx: ViewContext): ViewHost {
   }
 
   async function newSession() {
+    conclude();
     const profile = filter ?? (profiles.find((p) => p.isDefault) ?? profiles[0])?.key ?? "";
     await run(() => ClaudeBridge.sessionLaunch({ profile, cwd: null, resume: null, attach: null }));
   }
@@ -104,11 +111,12 @@ export function buildSessionsView(c: Claude, ctx: ViewContext): ViewHost {
     const isArmed = armed === keyOf(s);
     const act = running
       ? h("button", { class: "btn secondary sess-act", text: "Focar", onclick: () => void run(async () => {
+          conclude();
           // The bridge reports failure as a falsy result, never by throwing.
           if (!(await ClaudeBridge.openTerminal(s.cwd, hook?.wslDistro ?? null, [l?.pid ?? s.pid, ...(hook?.terminalPids ?? [])].filter((p): p is number => !!p))))
             throw new Error("Não foi possível abrir o terminal.");
         }) })
-      : h("button", { class: "btn secondary sess-act", text: "Retomar", onclick: () => void run(() => ClaudeBridge.sessionLaunch({ profile: s.profile, cwd: s.cwd, resume: s.id, attach: null })) });
+      : h("button", { class: "btn secondary sess-act", text: "Retomar", onclick: () => void run(() => (conclude(), ClaudeBridge.sessionLaunch({ profile: s.profile, cwd: s.cwd, resume: s.id, attach: null }))) });
     // A running session can't be erased (Rust refuses): no × for it.
     const del = running ? null : h("button", {
       class: isArmed ? "sess-del armed" : "sess-del",
@@ -164,6 +172,12 @@ export function buildSessionsView(c: Claude, ctx: ViewContext): ViewHost {
     el,
     sync() {
       if (!isOn()) return stop();
+      // Each fresh visit takes the hold anew: the last one may have expired meanwhile.
+      if (!visiting) {
+        visiting = true;
+        hold?.();
+        hold = c.api.island.hold("sessions");
+      }
       // Hook activity (start, end, a turn done) changes this signature: reload.
       const sig = store.sessions.map((s) => `${s.id}:${s.state}`).join();
       if (sig !== seen) {

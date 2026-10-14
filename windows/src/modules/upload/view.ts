@@ -5,7 +5,7 @@
 
 import { h, clear } from "../../kit/dom";
 import { card, view } from "../../kit/card";
-import { Up } from "./state";
+import { Up, concludeChoose } from "./state";
 import { CLAUDE_SERVICE, type LaunchFile } from "../claude/api";
 import type { IslandApi, ViewContext, ViewHost } from "../../core/moduleApi";
 
@@ -31,6 +31,7 @@ function dashedFrame(): SVGSVGElement {
 /** Hands the dropped file to a new Claude Code session (ingested already unless the copy is still running). */
 export function ask(api: IslandApi) {
   if (!Up.droppedFile) return;
+  concludeChoose();
   // Wait for the background copy (if any), then launch the copy; ingest only if it never landed.
   void (Up.ingest ?? Promise.resolve())
     .catch(() => {})

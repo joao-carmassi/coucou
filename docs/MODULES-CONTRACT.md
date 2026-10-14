@@ -471,3 +471,4 @@ Honest limits: (a) glob order is alphabetical by folder, so module CSS must not 
 - Landing precedence on reopen: explicit open/setView > front request > live hold (most recently seen) > `homeView` hook > home-flagged tab > first tab > empty.
 - `Pill.ambient`: listed (`pills.others()`, board) but excluded from `State.gridPills`, so it never takes the compact grid nor hides the status line.
 - Kit `setSlim(el, on)` / `.home.slim`: narrow right card (150px) for 1-3 pills; board sets `data-cols` 1 or 2; cap 6.
+- Hold rule (0.8.1): hold a view from the moment the user enters it until its task is concluded (something launched, chosen, cancelled), never merely because they left; take it anew on each fresh visit (an expired one is gone from the list). Default focus time is 1 minute. `api.island.reopen()` unfolds a folded/hidden island like a click (no-op when open).

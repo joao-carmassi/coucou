@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.1
+
+- Fix: opening the sessions list, clicking outside and reopening right away landed on home. The list now takes a task hold (`api.island.hold`) when entered; opening or resuming a session, or starting a new one, concludes it. Leaving or collapsing does not.
+- Same rule for the other unfinished views: upload's choose card (held until the choice, cancel or launch) and the GitHub panel while a sheet is open (released on back to the lists, or on open-in-browser). Voice already pins its review card with a request; board and home are not held.
+- A hold is taken anew on each fresh visit, so one that expired no longer stays dropped (also fixes Mídia).
+- Default focus time is 1 minute (`focusHoldMinutes`, `focus_hold_minutes`, settings window fallback). The countdown starts when the view leaves the screen: click outside, auto-close and compact hide all count.
+- `api.island.reopen()`: unfolds a folded or hidden island like a click does (request, held task, home). The Claude "go to alert" hotkey uses it when nothing is pending.
+- Version 0.8.1.
+
 ## 0.7.0
 
 - Both audits have empty allowlists (`neutrality-audit`: 0 findings, allowlisted 0; `idle-audit`: 0 not allowlisted). `tests/audits.test.ts` (in `npm test`) fails if either list is not `[]` or an audit fails; a stale entry fails the audit.
