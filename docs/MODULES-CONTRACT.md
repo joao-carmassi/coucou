@@ -18,7 +18,7 @@ Rule for `compact.ts`, `avatar.ts`, `moduleApi.ts`, `modules/catalog.ts`: only `
 `core/host.rs` (new). Module trait, ModuleCtx, TaskSet, ModuleHost:
 
 ```rust
-pub struct ModuleInfo { pub id: &'static str, pub label: &'static str, pub default_enabled: bool, pub requires: &'static [&'static str] }
+pub struct ModuleInfo { pub id: &'static str, pub label: &'static str, pub default_enabled: bool, pub requires: &'static [&'static str], pub group: Option<&'static str> }
 
 pub trait Module: Send + Sync {
     fn id(&self) -> &'static str;
@@ -58,12 +58,18 @@ Unit test: `requires_follow_claude` (claude off => voice and upload off).
 
 ```rust
 pub const CATALOG: &[ModuleInfo] = &[
-  ModuleInfo { id: "claude", label: "Claude Code", default_enabled: true,  requires: &[] },
-  ModuleInfo { id: "media", label: "Mídia", default_enabled: true, requires: &[] },
-  ModuleInfo { id: "upload", label: "Soltar arquivo", default_enabled: true, requires: &["claude"] },
-  ModuleInfo { id: "timer", label: "Timer", default_enabled: false, requires: &[] },
-  ModuleInfo { id: "voice", label: "Voz", default_enabled: false, requires: &["claude"] },
-  ModuleInfo { id: "integrations", label: "Integrações", default_enabled: false, requires: &[] },
+  ModuleInfo { id: "claude", label: "Claude Code", default_enabled: true,  requires: &[], group: None },
+  ModuleInfo { id: "media", label: "Mídia", default_enabled: true, requires: &[], group: None },
+  ModuleInfo { id: "upload", label: "Soltar arquivo", default_enabled: true, requires: &["claude"], group: None },
+  ModuleInfo { id: "timer", label: "Timer", default_enabled: false, requires: &[], group: None },
+  ModuleInfo { id: "voice", label: "Voz", default_enabled: false, requires: &["claude"], group: None },
+  ModuleInfo { id: "github", label: "GitHub", default_enabled: false, requires: &[], group: Some("Integrações") },
+  ModuleInfo { id: "vercel", label: "Vercel", default_enabled: false, requires: &[], group: Some("Integrações") },
+  ModuleInfo { id: "stripe", label: "Stripe", default_enabled: false, requires: &[], group: Some("Integrações") },
+  ModuleInfo { id: "n8n", label: "n8n", default_enabled: false, requires: &[], group: Some("Integrações") },
+  ModuleInfo { id: "resend", label: "Resend", default_enabled: false, requires: &[], group: Some("Integrações") },
+  ModuleInfo { id: "calcom", label: "Cal.com", default_enabled: false, requires: &[], group: Some("Integrações") },
+  ModuleInfo { id: "notion", label: "Notion", default_enabled: false, requires: &[], group: Some("Integrações") },
 ];
 pub fn registry() -> Vec<Box<dyn Module>> { vec![] } // M5 adds one entry per ported module
 ```
@@ -88,7 +94,7 @@ Source of the loop to adapt: `git show m3-ok:windows/src-tauri/src/modules/voice
 - migration (voice was `voiceEnabled`, integrations were `activeIntegrations`): since the module fields live in `extra` now, read them from `extra`:
 ```rust
 /// Fills the switches a pre-module settings.json lacks; keys present are the user's. True when something was added.
-pub fn migrate_modules(s: &mut Settings) -> bool; // claude/media/upload => true; timer => false; voice => extra["voiceEnabled"] truthy; integrations => extra["activeIntegrations"] non-empty array (keyring check is done by the integrations module in M5; default false)
+pub fn migrate_modules(s: &mut Settings) -> bool; // claude/media/upload => true; timer => false; voice => extra["voiceEnabled"] truthy; one module per service (github, vercel, stripe, n8n, resend, calcom, notion) => true when extra["activeIntegrations"] contains `integration_<short>`, else false
 ```
 Tests: keep `removed_keys_round_trip`; add `migrate_installed_baseline` (same sample JSON; expected map `{claude,media,upload:true; timer,voice,integrations:false}`; every original key still equal after serialize), `migrate_keeps_user_choice` (`{"timer":true,"claude":false}` stays), `migrate_from_legacy` (`voiceEnabled:true` -> voice on).
 

@@ -77,19 +77,20 @@ pub fn load() -> (Settings, bool) {
     }
 }
 
+/// One module per service; on when the legacy `activeIntegrations` listed `integration_<short>`.
+const INTEGRATIONS: [&str; 7] = ["github", "vercel", "stripe", "n8n", "resend", "calcom", "notion"];
+
 /// Fills the switches a pre-module settings.json lacks; keys present are the user's. True when something was added.
 pub fn migrate_modules(s: &mut Settings) -> bool {
     let voice = s.extra.get("voiceEnabled").and_then(|v| v.as_bool()).unwrap_or(false);
-    let integrations = s.extra.get("activeIntegrations").and_then(|v| v.as_array()).is_some_and(|a| !a.is_empty());
+    let listed = |short: &str| {
+        let id = format!("integration_{short}");
+        s.extra.get("activeIntegrations").and_then(|v| v.as_array()).is_some_and(|a| a.iter().any(|x| x.as_str() == Some(&id)))
+    };
+    let providers = INTEGRATIONS.map(|short| (short, listed(short)));
     let mut added = false;
-    for (id, on) in [
-        ("claude", true),
-        ("media", true),
-        ("upload", true),
-        ("timer", false),
-        ("voice", voice),
-        ("integrations", integrations),
-    ] {
+    let base = [("claude", true), ("media", true), ("upload", true), ("timer", false), ("voice", voice)];
+    for (id, on) in base.into_iter().chain(providers) {
         if !s.modules_enabled.contains_key(id) {
             s.modules_enabled.insert(id.into(), on);
             added = true;
@@ -147,8 +148,9 @@ mod tests {
         assert!(migrate_modules(&mut s));
         assert!(!migrate_modules(&mut s), "second call changes nothing");
         let want: BTreeMap<String, bool> =
-            [("claude", true), ("media", true), ("upload", true), ("timer", false), ("voice", false), ("integrations", false)]
+            [("claude", true), ("media", true), ("upload", true), ("timer", false), ("voice", false)]
                 .into_iter()
+                .chain(INTEGRATIONS.map(|k| (k, false)))
                 .map(|(k, v)| (k.to_string(), v))
                 .collect();
         assert_eq!(s.modules_enabled, want);
@@ -165,9 +167,15 @@ mod tests {
 
     #[test]
     fn migrate_from_legacy() {
-        let mut s: Settings = serde_json::from_str(r#"{"voiceEnabled":true,"activeIntegrations":["github"]}"#).unwrap();
-        migrate_modules(&mut s);
+        let mut s: Settings = serde_json::from_str(
+            r#"{"voiceEnabled":true,"activeIntegrations":["integration_github","integration_vercel","integration_notion"],"modulesEnabled":{"notion":false}}"#,
+        )
+        .unwrap();
+        assert!(migrate_modules(&mut s));
         assert!(s.module_on("voice", false));
-        assert!(s.module_on("integrations", false));
+        for (id, on) in [("github", true), ("vercel", true), ("stripe", false), ("n8n", false), ("notion", false)] {
+            assert_eq!(s.module_on(id, !on), on, "{id}");
+        }
+        assert!(!migrate_modules(&mut s), "idempotent");
     }
 }

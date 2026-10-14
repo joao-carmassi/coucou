@@ -8,16 +8,24 @@ pub mod voice;
 use crate::core::host::{Module, ModuleInfo};
 
 pub const CATALOG: &[ModuleInfo] = &[
-    ModuleInfo { id: "claude", label: "Claude Code", default_enabled: true, requires: &[] },
-    ModuleInfo { id: "media", label: "Mídia", default_enabled: true, requires: &[] },
-    ModuleInfo { id: "upload", label: "Soltar arquivo", default_enabled: true, requires: &["claude"] },
-    ModuleInfo { id: "timer", label: "Timer", default_enabled: false, requires: &[] },
-    ModuleInfo { id: "voice", label: "Voz", default_enabled: false, requires: &["claude"] },
-    ModuleInfo { id: "integrations", label: "Integrações", default_enabled: false, requires: &[] },
+    ModuleInfo { id: "claude", label: "Claude Code", default_enabled: true, requires: &[], group: None },
+    ModuleInfo { id: "media", label: "Mídia", default_enabled: true, requires: &[], group: None },
+    ModuleInfo { id: "upload", label: "Soltar arquivo", default_enabled: true, requires: &["claude"], group: None },
+    ModuleInfo { id: "timer", label: "Timer", default_enabled: false, requires: &[], group: None },
+    ModuleInfo { id: "voice", label: "Voz", default_enabled: false, requires: &["claude"], group: None },
+    ModuleInfo { id: "github", label: "GitHub", default_enabled: false, requires: &[], group: Some("Integrações") },
+    ModuleInfo { id: "vercel", label: "Vercel", default_enabled: false, requires: &[], group: Some("Integrações") },
+    ModuleInfo { id: "stripe", label: "Stripe", default_enabled: false, requires: &[], group: Some("Integrações") },
+    ModuleInfo { id: "n8n", label: "n8n", default_enabled: false, requires: &[], group: Some("Integrações") },
+    ModuleInfo { id: "resend", label: "Resend", default_enabled: false, requires: &[], group: Some("Integrações") },
+    ModuleInfo { id: "calcom", label: "Cal.com", default_enabled: false, requires: &[], group: Some("Integrações") },
+    ModuleInfo { id: "notion", label: "Notion", default_enabled: false, requires: &[], group: Some("Integrações") },
 ];
 
 pub fn registry() -> Vec<Box<dyn Module>> {
-    vec![Box::new(claude::Claude), Box::new(media::Media), Box::new(voice::Voice), Box::new(integrations::Integrations)] // M5 adds one entry per ported module
+    let mut v: Vec<Box<dyn Module>> = vec![Box::new(claude::Claude), Box::new(media::Media), Box::new(voice::Voice)];
+    v.extend(integrations::providers());
+    v
 }
 
 #[cfg(test)]

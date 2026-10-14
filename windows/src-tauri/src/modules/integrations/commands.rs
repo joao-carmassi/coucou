@@ -1,14 +1,12 @@
 // Integration commands, same names and argument shapes as at m3-ok. Result-returning ones are gated
 // by the host; the unit-returning ones do nothing when the module is off.
 
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 
-use super::{github, github_detail, integrations, reeval, secrets, wake};
+use super::{github, github_detail, integrations, scheduler, secrets, wake};
 use crate::core::host::ModuleHost;
 use crate::core::island::WINDOW_LABEL;
 use crate::core::platform;
-
-const ID: &str = "integrations";
 
 /// The island may only ask whether a key exists — never read it.
 #[tauri::command]
@@ -18,7 +16,7 @@ pub fn secret_present(key: String) -> bool {
 
 #[tauri::command]
 pub fn secret_set(app: AppHandle, host: State<ModuleHost>, key: String, value: String) -> Result<(), String> {
-    host.require(ID)?;
+    host.require(secrets::provider_of(&key).ok_or_else(|| format!("chave desconhecida: {key}"))?)?;
     secrets::set(&key, &value)?;
     secrets_changed(&app, &key);
     Ok(())
@@ -26,7 +24,7 @@ pub fn secret_set(app: AppHandle, host: State<ModuleHost>, key: String, value: S
 
 #[tauri::command]
 pub fn secret_clear(app: AppHandle, host: State<ModuleHost>, key: String) -> Result<(), String> {
-    host.require(ID)?;
+    host.require(secrets::provider_of(&key).ok_or_else(|| format!("chave desconhecida: {key}"))?)?;
     secrets::clear(&key)?;
     secrets_changed(&app, &key);
     Ok(())
@@ -34,36 +32,33 @@ pub fn secret_clear(app: AppHandle, host: State<ModuleHost>, key: String) -> Res
 
 /// The island only learns which keys exist by asking: this tells it to ask again. A new GitHub
 /// token may be another account's, so what the old one fetched is forgotten first. The set of
-/// providers that have keys moved: the scheduler is re-evaluated.
+/// providers that have keys moved: the scheduler is re-evaluated. A key is gated by the provider that owns it.
 fn secrets_changed(app: &AppHandle, key: &str) {
     if key == github::TOKEN_KEY {
         github::forget();
     }
-    let settings = app.state::<crate::Shared>().settings.lock().unwrap().clone();
-    if let Some(ctx) = app.state::<ModuleHost>().ctx(ID) {
-        reeval(&ctx, &settings);
-    }
+    scheduler::reeval();
     let _ = app.emit_to(WINDOW_LABEL, "secrets-changed", ());
 }
 
 /// Settings → GitHub → Test connection. Never brings back the token.
 #[tauri::command]
 pub async fn github_test(host: State<'_, ModuleHost>) -> Result<github::Account, String> {
-    host.require(ID)?;
+    host.require("github")?;
     github::test().await
 }
 
 /// A click on a project in the GitHub panel. On demand only, cached a minute; `force` is the button.
 #[tauri::command]
 pub async fn github_project(host: State<'_, ModuleHost>, full_name: String, force: bool) -> Result<github::Project, String> {
-    host.require(ID)?;
+    host.require("github")?;
     github::project(&full_name, force).await
 }
 
 /// A click on a day of the contribution graph. On demand only, cached.
 #[tauri::command]
 pub async fn github_day(host: State<'_, ModuleHost>, from: String, to: String, today: bool) -> Result<github::Day, String> {
-    host.require(ID)?;
+    host.require("github")?;
     github::day(&from, &to, today).await
 }
 
@@ -74,14 +69,14 @@ pub async fn github_detail(
     target: github_detail::Target,
     force: bool,
 ) -> Result<github_detail::Detail, String> {
-    host.require(ID)?;
+    host.require("github")?;
     github_detail::detail(target, force).await
 }
 
 /// Opens the configured n8n instance — the URL lives in the Credential Manager.
 #[tauri::command]
 pub fn open_n8n(host: State<ModuleHost>) {
-    if !host.is_enabled(ID) {
+    if !host.is_enabled("n8n") {
         return;
     }
     if let Some(url) = secrets::get("n8n-url") {
@@ -94,7 +89,8 @@ pub fn open_n8n(host: State<ModuleHost>) {
 /// Refresh buttons in the integration cards.
 #[tauri::command]
 pub async fn refresh_integration(app: AppHandle, host: State<'_, ModuleHost>, id: String) -> Result<(), String> {
-    if !host.is_enabled(ID) {
+    // id is `integration_<short>`; the gate is that provider's module.
+    if !id.strip_prefix("integration_").is_some_and(|short| host.is_enabled(short)) {
         return Ok(());
     }
     integrations::poll_once(app, &id).await;

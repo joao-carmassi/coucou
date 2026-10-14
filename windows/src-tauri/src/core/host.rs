@@ -17,6 +17,9 @@ pub struct ModuleInfo {
     pub label: &'static str,
     pub default_enabled: bool,
     pub requires: &'static [&'static str],
+    /// Settings heading the module is listed under (None: on its own).
+    #[allow(dead_code)] // mirrored by the TS catalog (Settings grouping); Rust only declares it
+    pub group: Option<&'static str>,
 }
 
 pub trait Module: Send + Sync {
@@ -73,6 +76,7 @@ pub struct ModuleCtx {
 }
 
 impl ModuleCtx {
+    #[allow(dead_code)] // no module needs it since the scheduler became a shared service
     pub fn stopping(&self) -> bool {
         self.stop.load(Ordering::SeqCst)
     }
@@ -86,6 +90,7 @@ impl ModuleCtx {
         }
     }
 
+    #[allow(dead_code)]
     pub fn spawn_async<F: Future<Output = ()> + Send + 'static>(&self, f: F) {
         self.adopt(tauri::async_runtime::spawn(f));
     }

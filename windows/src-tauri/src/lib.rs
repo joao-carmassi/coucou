@@ -280,14 +280,8 @@ fn open_settings_window(app: AppHandle) {
 pub fn run() {
     platform::prepare_environment();
     let (mut loaded, ok) = settings::load();
-    let had_integrations = loaded.modules_enabled.contains_key("integrations");
     let migrated = settings::migrate_modules(&mut loaded);
-    let upgraded = modules::integrations::keyring_upgrade(
-        &mut loaded,
-        had_integrations,
-        modules::integrations::secrets::any_configured,
-    );
-    if (migrated || upgraded) && ok {
+    if migrated && ok {
         let _ = settings::save(&loaded);
     }
     let gate = Arc::new(PollGate::new());
