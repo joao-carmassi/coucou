@@ -8,7 +8,7 @@
 
 > This branch (`refactor/modules`) is **Windows-only**: the macOS app and Linux support were removed. The app lives in `windows/`.
 
-Approve permissions, watch your agents work, drop a file, chat with Claude — all without leaving what you're doing.
+Approve permissions, watch your agents work, answer Claude's questions, drop a file - all without leaving what you're doing.
 
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?logo=windows&logoColor=white)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=black)
@@ -32,8 +32,8 @@ Meet **Mochi**: a soft little squircle with big eyes that pops out of your notch
 
 - 🤖 **Claude Code, Gemini CLI, Antigravity and other agents, live** — see every session in your notch: what it reads, edits and runs, step by step. Tag a hook payload with `coucou_agent` to give any agent its own pill (see [`docs/AGENTS.md`](docs/AGENTS.md)). Finished? Mochi does a happy little jump. Cursor and Codex pills are coming soon.
 - ✅ **Approve from the notch** — Claude Code permission requests show up with **Allow / Deny**. One click, back to work.
-- 💬 **Chat with Claude** — using your own Anthropic API key.
-- 📎 **Drop a file on the notch** — Mochi turns into a box and swallows it, then ask a question about it.
+- **Answer from the notch**: reply to Claude Code's questions and resume sessions, no chat window.
+- 📎 **Drop a file on the notch** — Mochi turns into a box and swallows it, then attach it to your Claude Code prompt.
 - 🔌 **Integrations** — Stripe payments, n8n workflows, GitHub, Vercel deployments, Resend emails, Notion, Cal.com. Each one gets its own little colored Mochi.
 - 🎭 **A real character** — idle breathing, blinks, eyes on a sphere that follow your mouse, emotes, 28 handcrafted sounds, a greeting on launch.
 - 🫥 **Invisible when idle** — hides away when nothing is running, peeks out when you hover the top edge of the screen.
@@ -45,7 +45,6 @@ Meet **Mochi**: a soft little squircle with big eyes that pops out of your notch
 <td><img src="docs/media/stripe.png" alt="Stripe payments"></td>
 </tr>
 <tr>
-<td><img src="docs/media/chat.png" alt="Chat with Claude"></td>
 <td><img src="docs/media/dizzy.png" alt="Too many hits"></td>
 </tr>
 </table>
@@ -81,7 +80,6 @@ Click the Coucou icon in the system tray → **Settings…**
 | What | Why | Where the key goes |
 |---|---|---|
 | **Claude Code hooks** | live sessions and approvals | **Install hooks** — Coucou backs up `~/.claude/settings.json`, merges its hooks and shows you the diff before writing anything |
-| **Anthropic API key** | chat and questions about files | Settings → Anthropic API · Windows Credential Manager |
 | Stripe, n8n, GitHub, Vercel, Resend, Notion, Cal.com | the service pills | Windows Credential Manager, all optional |
 
 If Coucou isn't running, the hook exits immediately: **Claude Code is never blocked.**

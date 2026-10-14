@@ -6,7 +6,7 @@ import type { ModuleDef, ViewContext, ViewDef } from "../../core/moduleApi";
 import { PANEL_H } from "../../core/layout";
 import { svg } from "../../views/dom";
 import { claudeOf } from "./claude";
-import { ICONS } from "./icons";
+import { ICONS } from "../../views/icons";
 import { claudeSettingsSection } from "./settings";
 import { CARDS } from "./views/cards";
 import { buildSession } from "./views/session";

@@ -4,7 +4,7 @@
 // view is on screen — hidden, the island costs nothing.
 
 import { h } from "../../../views/dom";
-import { timeAgo } from "../format";
+import { timeAgo } from "../../../views/format";
 import { Bridge, type ClaudeProfile, type LiveSession, type ManagedSession } from "../../../core/bridge";
 import type { ViewContext, ViewHost } from "../../../core/moduleApi";
 import type { Claude } from "../claude";

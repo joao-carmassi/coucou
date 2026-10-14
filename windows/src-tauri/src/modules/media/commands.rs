@@ -5,14 +5,13 @@ use tauri::AppHandle;
 use super::{capture, media};
 use crate::core::host::blocking;
 use crate::core::log;
-// debt: cross-module import; files.rs (inbox, save_capture) moves to core or upload when that module is ported.
-use crate::modules::claude::files::{self, DroppedFile};
+use crate::core::inbox::{self, DroppedFile};
 
 /// Screenshots the window under the cursor into the inbox (Mochi dragged onto it).
 #[tauri::command]
 pub async fn attach_window(handle: AppHandle) -> Result<DroppedFile, String> {
     let (app, w, h, rgb) = capture::capture_under_cursor()?;
-    let file = files::save_capture(Some(&handle), &app, w, h, &rgb)?;
+    let file = inbox::save_capture(Some(&handle), &app, w, h, &rgb)?;
     log::line(format!("window attached: {app} {w}x{h}"));
     Ok(file)
 }

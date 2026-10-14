@@ -263,7 +263,7 @@ mod sys {
     /// Directory handles of the running watchers (raw values), so `stop_watchers` can cancel them.
     static WATCHED: Mutex<Vec<isize>> = Mutex::new(Vec::new());
 
-    /// Files that came onto the island (claude's ingest emits media-note-drop) join the list:
+    /// Files that came onto the island (core::inbox emits media-note-drop) join the list:
     /// registered by the module with ctx.listen, which drops it on stop.
     pub fn note_drop_event(payload: &str) {
         if let Ok(path) = serde_json::from_str::<String>(payload) {

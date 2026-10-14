@@ -8,8 +8,8 @@
 // once the session is gone.
 
 import { h, svg } from "../../../views/dom";
-import { diffLine, fileKind, readPatch } from "./code";
-import { ICONS } from "../icons";
+import { diffLine, fileKind, readPatch } from "../../../views/code";
+import { ICONS } from "../../../views/icons";
 import type { SessionStep } from "../types";
 
 /** Tools by a name short enough for a column, where their own is not. */

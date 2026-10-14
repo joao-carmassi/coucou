@@ -222,21 +222,6 @@
 }
 
 /* What Claude said to end its turn, and above it what it was asked. */
-.sess-talk {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 4px 8px 6px;
-  user-select: text;
-}
-
-.sess-talk p {
-  font: 400 12.5px/1.45 var(--font);
-  color: var(--gh-text);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
 .sess-asked {
   align-self: flex-end;
   max-width: 85%;

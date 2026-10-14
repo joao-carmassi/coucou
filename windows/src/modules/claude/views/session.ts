@@ -17,10 +17,10 @@
 // Claude app, VS Code, a terminal.
 
 import { h, svg, clear, dot, replay } from "../../../views/dom";
-import { diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath, type FileKind } from "./code";
-import { ICONS } from "../icons";
-import { COLOR } from "../palette";
-import { timeAgo } from "../format";
+import { diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath, type FileKind } from "../../../views/code";
+import { ICONS } from "../../../views/icons";
+import { COLOR } from "../../../views/palette";
+import { timeAgo } from "../../../views/format";
 import { markdown } from "./markdown";
 import { State } from "../../../core/state";
 import { CLAUDE_ID, type ChangedFile, type ClaudeSession, type SessionStep } from "../types";

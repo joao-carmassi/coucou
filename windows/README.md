@@ -187,26 +187,15 @@ session through **Remote WSL**. The relay passes `WSL_DISTRO_NAME` through
 Each hook costs about 0.3 s for the WSL → Windows hop. Its hooks stay in shell
 form (`sh "$HOME/…" <event>`): the Linux Claude Code relies on `$HOME`, and the exec form above is only for the Windows hooks.
 
-## Chat and keys
+## Claude Code and keys
 
-### Mochi on your Claude subscription
-
-Mochi's chat (Ask, and questions about a dropped file) can run on the Claude
-Code you already use instead of an API key. Turn on **Use for Mochi** under
-*Settings… → Claude Code* (Claude Code on Windows) or under a distribution in
-*Settings… → WSL*; only one can be on, and with none on the API key is used.
-
-Coucou then runs `claude -p` there, on your subscription and with Claude Code's
-own model, in Coucou's inbox folder where dropped files land. Mochi only gets
-read-only tools (Read, WebSearch, WebFetch), and its runs never show up in the
-island: hooks are switched off for them.
-
-With Claude Code behind it, the **Ask** tab becomes a **Sessions** management
-view. It lists your Claude Code sessions across every profile, running or
-offline, with their folder and title (read from each profile's own transcripts,
-`<config dir>/projects`). From there you can start a **new session** (opens in your home folder),
-**resume** an offline one, or **focus** the terminal of a running one.
-Sessions open in a real terminal, run by Coucou.
+Coucou has no chat of its own and no Anthropic API key: everything comes from
+the Claude Code you already use, through its hooks. Sessions, approvals and
+questions arrive as hook events; the **Sessions** view lists your Claude Code
+sessions across every profile (read from `<config dir>/projects`), where you can
+start a new one, resume an offline one or focus a running terminal. Dropped files
+are copied to Coucou's inbox and attached to the prompt. Integration keys go to
+Windows Credential Manager.
 
 ### Multiple Claude profiles (claude / claude-qf)
 
@@ -392,18 +381,11 @@ cargo check && cargo test
 `%LOCALAPPDATA%\Coucou\coucou.log` — hook events, permission decisions, poller
 problems. It stays on your machine.
 
-## What's different from the Mac version
+## Platform and modules
 
-- No notch, so the island lives at the top centre of the screen and retracts into
-  the top edge instead of hiding in a notch.
-- Permission approval works from **any** terminal; the Mac build only listens to
-  VS Code sessions.
-- The [session panel](#watching-a-session), answering Claude's questions and the
-  diff on a permission request are Windows-only for now.
-- Not in this version: sending a file by email, and jumping to a specific terminal window — "Open
-  terminal" opens the working folder in VS Code when `code` is on your `PATH`
-  (with WSL set up, it brings the session's terminal forward instead; see above).
-- Cal.com shows the next bookings as a list rather than the Mac's calendar.
-- GitHub goes further than the Mac's card: the [panel](#github), the news of a
-  broken build or a merged pull request, and comments are Windows-only for now.
+- Windows only. The island sits at the top centre and retracts into the top edge.
+- Approval works from any terminal, including Claude Code in WSL.
+- Features are modules (Claude Code, Mídia, integrations) that can each be turned off.
+- Not available: sending a file by email, jumping to a specific terminal window.
+- Cal.com shows the next bookings as a list; GitHub has its own panel.
 

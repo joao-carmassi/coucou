@@ -1,5 +1,5 @@
 // Screenshot of the window under the cursor: Mochi dropped on it (attach_window).
-// The pixels go through files::save_capture into the inbox, then the Mídia list.
+// The pixels go through inbox::save_capture into the inbox, then the Mídia list.
 
 use ::windows::core::PWSTR;
 use ::windows::Win32::Foundation::{CloseHandle, POINT, RECT};

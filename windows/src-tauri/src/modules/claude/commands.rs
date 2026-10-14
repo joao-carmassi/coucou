@@ -6,9 +6,9 @@ use std::process::Command;
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use super::files::DroppedFile;
+use crate::core::inbox::{self, DroppedFile};
 use super::hooks::{HookPreview, HookStatus};
-use super::{cfg, files, focus, hooks, local_claude, pipe, sessions, wsl};
+use super::{cfg, focus, hooks, local_claude, pipe, sessions, wsl};
 use crate::core::host::{blocking, ModuleHost};
 use crate::core::{log, platform, settings};
 
@@ -150,7 +150,7 @@ pub fn resume_in_terminal(app: AppHandle, id: String, cwd: Option<String>) -> Re
     let dir = cwd
         .map(std::path::PathBuf::from)
         .filter(|p| p.is_absolute() && p.is_dir())
-        .unwrap_or_else(files::inbox_dir);
+        .unwrap_or_else(inbox::inbox_dir);
     let config = cfg::claude_config_dir();
     claude_console(&cli, &["--resume".to_string(), id], &dir, config.as_deref(), None)
         .map_err(|e| format!("Não foi possível iniciar o Claude Code: {e}"))
@@ -424,7 +424,7 @@ pub async fn session_launch(
             .map(|t| t.trim().trim_start_matches('-').trim_start().chars().take(2000).collect::<String>())
             .filter(|t| !t.is_empty());
         if let Some(file) = &attach {
-            let inbox = files::inbox_dir().canonicalize().map_err(|e| e.to_string())?;
+            let inbox = inbox::inbox_dir().canonicalize().map_err(|e| e.to_string())?;
             let path = std::path::Path::new(file)
                 .canonicalize()
                 .ok()
@@ -472,7 +472,7 @@ pub async fn session_erase(profile: String, id: String) -> Result<(), String> {
 pub async fn ingest_file(handle: AppHandle, path: String) -> Result<DroppedFile, String> {
     // Off the main thread: a big copy must not freeze the webview.
     log::line("ingest start");
-    let r = blocking(move || files::ingest(Some(&handle), &path)).await?;
+    let r = blocking(move || inbox::ingest(Some(&handle), &path)).await?;
     log::line(match &r {
         Ok(f) => format!("ingest done: {} ({} bytes)", f.name, f.size),
         Err(e) => format!("ingest failed: {e}"),

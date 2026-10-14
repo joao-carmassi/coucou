@@ -1,6 +1,6 @@
 # Coucou — guide for AI coding agents
 
-This branch (`refactor/modules`) is **Windows-only**: the macOS app (`NotchBuddy/`) and Linux support were removed. Everything lives in `windows/`. Mochi, a small animated character at the top of the screen, shows AI coding agent sessions (Claude Code, Gemini CLI, Antigravity and more) and a few integrations, and lets the user approve, answer, chat and drop files from the top of the screen.
+This branch (`refactor/modules`) is **Windows-only**: the macOS app (`NotchBuddy/`) and Linux support were removed. Everything lives in `windows/`. Mochi, a small animated character at the top of the screen, shows AI coding agent sessions (Claude Code, Gemini CLI, Antigravity and more) and a few integrations, and lets the user approve, answer and drop files from the top of the screen.
 
 ## Where things are
 - `windows/sounds/` — the 28 WAV sounds (served by Vite, copied into `dist/sounds`).
@@ -29,6 +29,6 @@ cd src-tauri && cargo check && cargo test
 - Never overwrite `~/.claude/settings.json`: dated backup, merge, show the diff, write only after the user confirms.
 - Never send an email or approve a Claude Code permission without an explicit click.
 - Performance: 0 % CPU when the island is hidden.
-- Never restyle what already ships (pills, cards, Settings, chat…): existing views stay exactly as they are in `main`, which is the App Store build. Change the look of an existing view only when explicitly asked.
+- Never restyle what already ships (pills, cards, Settings…): existing views stay exactly as they are in `main`, which is the App Store build. Change the look of an existing view only when explicitly asked.
 - Pill IDs are stable contract values (Keychain, UserDefaults, hook routing): never rename an existing pill ID.
 - New views follow the existing app style. `design/prototype/notch-buddy.html` and `design/captures/` are references for new work, not a reason to change existing views.

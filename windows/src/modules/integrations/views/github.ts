@@ -5,11 +5,11 @@
 // rather than from GitHub's look.
 
 import { h, svg, clear, dot } from "../../../views/dom";
-import { diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath } from "../../claude/views/code";
-import { ICONS } from "../../claude/icons";
-import { COLOR, wear } from "../../claude/palette";
+import { diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath } from "../../../views/code";
+import { ICONS } from "../../../views/icons";
+import { COLOR, wear } from "../../../views/palette";
 import { ACTIVITY_STYLE, GITHUB_LEVELS, compact, githubData, repoName, type GithubOpening } from "./integrations";
-import { timeAgo } from "../../claude/format";
+import { timeAgo } from "../../../views/format";
 import { GITHUB, cleanups, info as infos, integrationSettings, later, redraw } from "../store";
 import {
   Bridge,

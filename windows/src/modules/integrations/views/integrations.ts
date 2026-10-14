@@ -5,9 +5,9 @@
 // (month → day → booking); here it is the list of upcoming bookings.
 
 import { h, svg, dot } from "../../../views/dom";
-import { ICONS } from "../../claude/icons";
-import { COLOR } from "../../claude/palette";
-import { timeAgo } from "../../claude/format";
+import { ICONS } from "../../../views/icons";
+import { COLOR } from "../../../views/palette";
+import { timeAgo } from "../../../views/format";
 import type { AgentTask } from "../../../core/state";
 import { Bridge, type GithubActivityKind, type GithubData, type GithubTarget } from "../../../core/bridge";
 import { GITHUB, PROVIDERS, info, steps } from "../store";

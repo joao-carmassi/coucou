@@ -2,7 +2,6 @@
 
 pub mod cfg;
 pub mod commands;
-pub mod files;
 pub mod focus;
 pub mod hooks;
 pub mod local_claude;

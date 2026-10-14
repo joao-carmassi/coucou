@@ -7,7 +7,7 @@ The core is the island + the Mochi avatar. Everything else is a module on the mo
 | Module | Default | Status | Notes |
 |---|---|---|---|
 | claude | ON | ported (M5) | backend `src-tauri/src/modules/claude`, frontend `src/modules/claude`. Integration news on its finished/error cards comes through the `taskNews` hook |
-| media | ON | ported (M5) | Mochi drag-out ghost lives in the module (core hooks: `mochiDrop`, `Overlay.cursor(down)`). `attach_window` imports claude's `save_capture` (debt) |
+| media | ON | ported (M5) | Mochi drag-out ghost lives in the module (core hooks: `mochiDrop`, `Overlay.cursor(down)`). `attach_window` and claude's `ingest_file` share `core/inbox.rs` |
 | upload | ON (requires claude) | ported (M5) | the drop animation starts AFTER the island opens (fixes the "0 %" bug) |
 | timer | OFF | ported (M5) | |
 | voice | OFF (requires claude) | ported (M5) | English only (Whistle/needle.exe); alert hotkey belongs to claude |

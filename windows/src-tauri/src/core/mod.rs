@@ -4,6 +4,7 @@
 pub mod b64;
 pub mod drop_target;
 pub mod host;
+pub mod inbox;
 pub mod hotkeys;
 pub mod island;
 pub mod log;
