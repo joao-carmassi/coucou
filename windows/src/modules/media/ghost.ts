@@ -8,7 +8,7 @@ import { MediaBridge } from "../../core/bridge";
 import type { Disposer, IslandApi } from "../../core/moduleApi";
 import { Sound } from "../../core/sound";
 import { State } from "../../core/state";
-import { BotEngine } from "../../mochi/engine";
+import { BotEngine, hexToRGB } from "../../mochi/engine";
 import type { MediaCtl } from "./view";
 
 const BOT_OVERHANG = 40;
@@ -56,6 +56,8 @@ export function armMochiDrop(api: IslandApi, ctl: MediaCtl): Disposer {
     canvas.height = Math.round(GHOST_H * dpr);
     document.body.append(canvas);
     api.avatar.emote("surprised");
+    const body = api.avatar.bodyColor();
+    engine.bodyColor = body ? hexToRGB(body) : null; // inherits the island Mochi's color
     engine.setState("idle", true);
     engine.triggerEmote("surprised", 60);
     engine.particleOverhang = BOT_OVERHANG;

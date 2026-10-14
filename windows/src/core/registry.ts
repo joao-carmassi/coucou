@@ -77,6 +77,7 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
       morph: (v) => host.avatarMorph(v),
       gulp: () => host.avatarGulp(),
       tint: (c) => host.avatarTint(c),
+      bodyColor: () => host.avatarBodyColor(),
     },
     island: {
       open: (view, opts) => host.open(view, opts?.pinMs),

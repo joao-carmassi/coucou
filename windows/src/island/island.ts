@@ -1072,6 +1072,12 @@ export class Island implements IslandHost {
     this.ensureRunning();
   }
 
+  /** Body color the island Mochi is currently drawn with (#rrggbb), or null for the default. */
+  avatarBodyColor(): string | null {
+    const c = this.engine.bodyColor;
+    return c ? "#" + c.map((v) => Math.round(v * 255).toString(16).padStart(2, "0")).join("") : null;
+  }
+
   avatarGulp() {
     this.engine.gulp();
     this.ensureRunning();
