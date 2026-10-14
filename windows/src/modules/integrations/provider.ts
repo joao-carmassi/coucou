@@ -3,9 +3,8 @@
 // `integration`, `secrets-changed`). Cards show in the board's home through the `board.card` /
 // `board.news` services, each answering only for its own pill id.
 
-import { PANEL_H } from "../../core/layout";
 import "./integrations.css";
-import type { ModuleDef } from "../../core/moduleApi";
+import { PANEL_H, type ModuleDef } from "../../core/moduleApi";
 import { startProvider } from "./controller";
 import { PROVIDERS, moduleIdOf, type Provider } from "./providers";
 import { buildGithub } from "./views/github";

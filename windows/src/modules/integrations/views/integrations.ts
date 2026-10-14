@@ -8,8 +8,8 @@ import { h, svg, dot } from "../../../kit/dom";
 import { ICONS } from "../icons";
 import { COLOR } from "../../../kit/palette";
 import { timeAgo } from "../../../kit/format";
-import type { Pill } from "../../../core/state";
-import { Bridge } from "../../../core/bridge";
+import type { Pill } from "../../../core/moduleApi";
+import { App } from "../../../kit/app";
 import { type GithubActivityKind, type GithubData, type GithubTarget, IntegrationsBridge } from "../bridge";
 import { GITHUB, PROVIDERS, info, steps } from "../store";
 
@@ -63,7 +63,7 @@ function idleCard(task: Pill, openSettings: () => void): HTMLElement {
         class: "link-btn",
         style: `color:${task.color}d9`,
         text: `Abrir ${task.label}`,
-        onclick: () => void Bridge.openUrl(OPEN_URLS[task.id]!),
+        onclick: () => void App.openUrl(OPEN_URLS[task.id]!),
       }),
     );
   }
@@ -130,7 +130,7 @@ function vercelDetail(onBack: () => void): HTMLElement {
       h("button", {
         class: "int-link",
         text: String(d.url),
-        onclick: () => void Bridge.openUrl(`https://${d.url}`),
+        onclick: () => void App.openUrl(`https://${d.url}`),
       }),
     );
   }
@@ -349,7 +349,7 @@ function notionCard(): HTMLElement {
         {
           class: "int-page",
           onclick: () => {
-            if (typeof p.url === "string") void Bridge.openUrl(p.url);
+            if (typeof p.url === "string") void App.openUrl(p.url);
           },
         },
         p.emoji

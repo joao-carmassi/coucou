@@ -12,14 +12,10 @@ import { ACTIVITY_STYLE, GITHUB_LEVELS, compact, githubData, repoName, type Gith
 import { timeAgo } from "../../../kit/format";
 import { rt } from "../store";
 import { GITHUB, cleanups, info as infos, integrationSettings, later, redraw } from "../store";
-import { Bridge } from "../../../core/bridge";
+import { App } from "../../../kit/app";
 import { type GithubActivity, type GithubBuild, type GithubCommentsDetail, type GithubCommitsDetail, type GithubContributions, type GithubData, type GithubDay, type GithubDeploy, type GithubDetail, type GithubEntry, type GithubFile, type GithubIssueDetail, type GithubJob, type GithubLabel, type GithubProject, type GithubPull, type GithubPullDetail, type GithubReleaseDetail, type GithubRemark, type GithubRepo, type GithubRunDetail, type GithubTarget, type GithubThread, type GithubTimed, type IntegrationNews, IntegrationsBridge } from "../bridge";
 import type { BotEmoteName, BotStateName } from "../../../core/layout";
-import type { Disposer, ViewContext, ViewHost } from "../../../core/moduleApi";
-import { hexToRGB, type BotEngine } from "../../../mochi/engine";
-import { createFreeBot, pruneMiniBots } from "../../../mochi/minibots";
-import { Sound } from "../../../core/sound";
-import { State } from "../../../core/state";
+import type { Disposer, FreeMochi, ViewContext, ViewHost } from "../../../core/moduleApi";
 
 const ID = GITHUB;
 /** Where a screen leads when it has no page of its own to give. */
@@ -161,14 +157,14 @@ function setTask(task: { id: string }, mood: BotStateName) {
 
 function startSearching(for_: object) {
   searchingFor = for_;
-  const task = State.pills.find((t) => t.id === ID);
+  const task = rt.api?.pills.get(ID);
   if (task?.mood === "idle") setTask(task, "searching");
 }
 
 function stopSearching(for_: object) {
   if (searchingFor !== for_) return;
   searchingFor = null;
-  const task = State.pills.find((t) => t.id === ID);
+  const task = rt.api?.pills.get(ID);
   if (task?.mood === "searching") setTask(task, "idle");
 }
 
@@ -203,7 +199,7 @@ async function load<T>(target: Pending<T>, isCurrent: () => boolean, fetch: () =
 
 /** One level deeper — with the island's small click. */
 function push(screen: Screen) {
-  Sound.play("blip");
+  rt.api?.sound.play("blip");
   stack.push(screen);
   motion = "deeper";
   touch();
@@ -322,7 +318,7 @@ function liveRun(): DetailScreen | null {
  * run is asked about again on its own. Pausing Coucou means no network at all.
  */
 function watching(): boolean {
-  return State.mode === "expanded" && State.view === "github" && !rt.api?.paused();
+  return rt.api?.island.mode() === "expanded" && rt.api.island.view() === "github" && !rt.api?.paused();
 }
 
 function armLive() {
@@ -359,7 +355,7 @@ function openProject(fullName: string) {
 /** A line of activity: its sheet in the panel when it has one, GitHub otherwise. */
 function openTarget(target: GithubTarget | null, label: string, url: string) {
   if (!target) {
-    void Bridge.openUrl(url);
+    void App.openUrl(url);
     return;
   }
   if (target.kind === "project") {
@@ -399,7 +395,7 @@ function threadFile(c: GithubCommentsDetail, thread: GithubThread): { file: Gith
 function openThread(c: GithubCommentsDetail, thread: GithubThread) {
   const found = threadFile(c, thread);
   if (found) openDiff(found.file, found.url, thread);
-  else void Bridge.openUrl(thread.remarks[0]?.url ?? c.url);
+  else void App.openUrl(thread.remarks[0]?.url ?? c.url);
 }
 
 /** A run of Actions: its jobs and how long each took. */
@@ -600,7 +596,7 @@ function repoRow(repo: GithubRepo, login: string, onOpen: () => void): HTMLEleme
       newsBell(repo.fullName),
       buildBadge(repo.build, repo.fullName),
       meta(svg(ICONS.star, 9), repo.stars),
-      meta(svg(ICONS.pullRequest, 9, { stroke: 2 }), repo.openPrs, () => void Bridge.openUrl(`${repo.url}/pulls`)),
+      meta(svg(ICONS.pullRequest, 9, { stroke: 2 }), repo.openPrs, () => void App.openUrl(`${repo.url}/pulls`)),
       h("span", { class: "pane-ago", text: repo.pushedAt ? timeAgo(repo.pushedAt) : "" }),
     ),
   );
@@ -941,7 +937,7 @@ function block(parts: BlockParts): HTMLElement {
     );
   }
   const url = parts.url;
-  const open = parts.open ?? (url ? () => void Bridge.openUrl(url) : null);
+  const open = parts.open ?? (url ? () => void App.openUrl(url) : null);
   return open
     ? h("button", { class: "gh-block", onclick: open }, parts.icon, text)
     : h("div", { class: "gh-block" }, parts.icon, text);
@@ -1136,7 +1132,7 @@ function projectSheet(p: GithubProject): HTMLElement {
   if (p.createdAt) addFact(`desde ${new Date(p.createdAt).getFullYear()}`);
   const homepage = p.homepage;
   if (homepage) {
-    facts.append(h("button", { class: "gh-host", text: hostOf(homepage), onclick: () => void Bridge.openUrl(homepage) }));
+    facts.append(h("button", { class: "gh-host", text: hostOf(homepage), onclick: () => void App.openUrl(homepage) }));
   }
 
   const el = h(
@@ -1316,7 +1312,7 @@ function remarkHead(r: GithubRemark, did?: { say: string; color?: string }): HTM
 function remarkBody(r: GithubRemark): (HTMLElement | null)[] {
   return [
     r.body ? h("div", { class: "gh-say-body", text: r.body }) : null,
-    r.cut ? h("button", { class: "gh-host", text: "O resto está no GitHub", onclick: () => void Bridge.openUrl(r.url) }) : null,
+    r.cut ? h("button", { class: "gh-host", text: "O resto está no GitHub", onclick: () => void App.openUrl(r.url) }) : null,
   ];
 }
 
@@ -1356,7 +1352,7 @@ function threadTalk(thread: GithubThread): HTMLElement {
     { class: "gh-thread-talk" },
     ...thread.remarks.map((r) => h("div", { class: "gh-thread-say" }, remarkHead(r), ...remarkBody(r))),
     thread.more > 0 && last
-      ? h("button", { class: "gh-host", text: more, onclick: () => void Bridge.openUrl(last.url) })
+      ? h("button", { class: "gh-host", text: more, onclick: () => void App.openUrl(last.url) })
       : null,
   );
 }
@@ -1422,7 +1418,7 @@ function commentsView(c: GithubCommentsDetail, login: string): HTMLElement {
       threads.length > 0 && (open === 0 ? "todas resolvidas" : `${open} a resolver`),
     ),
     c.earlier
-      ? h("button", { class: "gh-host", text: "Os anteriores estão no GitHub", onclick: () => void Bridge.openUrl(c.url) })
+      ? h("button", { class: "gh-host", text: "Os anteriores estão no GitHub", onclick: () => void App.openUrl(c.url) })
       : null,
     ...c.entries.map((entry) => (entry.kind === "thread" ? threadBlock(c, entry) : sayRow(entry))),
     said + threads.length === 0
@@ -1547,7 +1543,7 @@ function commitsView(c: GithubCommitsDetail, login: string, screen: DetailScreen
   const rows = c.commits.map((commit) => {
     // From a list, a commit opens its own sheet; alone, it is already open.
     const open = single
-      ? () => void Bridge.openUrl(commit.url)
+      ? () => void App.openUrl(commit.url)
       : () => openTarget(
           { kind: "commits", repo: c.repo, head: commit.id, count: 1, branch: c.branch, author: null, from: null, to: null },
           commit.message,
@@ -1720,18 +1716,17 @@ const CREW_EYES = 0.72;
  * that passes between two refreshes is then a change its Mochi plays, not a
  * new Mochi that was always green.
  */
-const crew = new Map<string, { el: HTMLElement; engine: BotEngine }>();
+const crew = new Map<string, FreeMochi>();
 
 function crewMember(runId: number, job: GithubJob): HTMLElement {
   const key = `${runId}:${job.id}`;
   const look = crewLook(job);
   let member = crew.get(key);
   if (!member) {
-    member = createFreeBot(look.color, look.state, CREW_SIZE, CREW_EYES);
+    member = rt.api!.mochi.free(look.color, look.state, CREW_SIZE, CREW_EYES);
     crew.set(key, member);
   } else {
-    member.engine.bodyColor = hexToRGB(look.color);
-    member.engine.setState(look.state);
+    member.set(look.color, look.state);
   }
   return member.el;
 }
@@ -1741,7 +1736,6 @@ function dismissCrew() {
   for (const [key, member] of crew) {
     if (!member.el.isConnected) crew.delete(key);
   }
-  pruneMiniBots();
 }
 
 /**
@@ -1841,7 +1835,7 @@ function jobView(job: GithubJob, run: GithubRunDetail): HTMLElement {
     heading("Etapas"),
     ...job.steps.map((step) => timedRow(step, step.name, null, whole, now)),
     job.steps.length === 0 ? h("div", { class: "pane-empty", text: "Ainda sem etapas." }) : null,
-    h("button", { class: "gh-host", text: "Os logs estão no GitHub", onclick: () => void Bridge.openUrl(job.url) }),
+    h("button", { class: "gh-host", text: "Os logs estão no GitHub", onclick: () => void App.openUrl(job.url) }),
   );
 }
 
@@ -1870,7 +1864,7 @@ function detailView(d: GithubDetail, login: string, screen: DetailScreen): HTMLE
         "div",
         { class: "gh-sheet" },
         notGranted(d.permission, LOCKED_WHAT[d.permission]),
-        h("button", { class: "gh-host", text: "Abrir no GitHub", onclick: () => void Bridge.openUrl(screen.url) }),
+        h("button", { class: "gh-host", text: "Abrir no GitHub", onclick: () => void App.openUrl(screen.url) }),
       );
   }
 }
@@ -2080,7 +2074,7 @@ function diffView(file: GithubFile, url: string, thread?: GithubThread): HTMLEle
     { class: "pane-code" },
     diff,
     file.truncated
-      ? h("button", { class: "gh-host", text: "O resto deste diff está no GitHub", onclick: () => void Bridge.openUrl(url) })
+      ? h("button", { class: "gh-host", text: "O resto deste diff está no GitHub", onclick: () => void App.openUrl(url) })
       : null,
   );
 }
@@ -2117,7 +2111,7 @@ export function buildGithub(ctx: ViewContext): ViewHost {
               : s.type === "job"
                 ? (jobOf(s)?.job.url ?? s.run.url)
                 : s.url;
-        void Bridge.openUrl(target);
+        void App.openUrl(target);
       },
     },
     svg(ICONS.arrowUpRight, 10),
@@ -2164,7 +2158,7 @@ export function buildGithub(ctx: ViewContext): ViewHost {
       if (how !== "neutral") {
         ending = { state: how === "success" ? "done" : "error", until: performance.now() + END_LOOK_MS };
         later(redraw, END_LOOK_MS + 50);
-        Sound.play(how === "success" ? "finish" : "error");
+        rt.api?.sound.play(how === "success" ? "finish" : "error");
       }
     }
     if (ending && performance.now() > ending.until) ending = null;
