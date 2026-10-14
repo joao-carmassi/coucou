@@ -59,7 +59,7 @@ enum Task {
 const GRACE: Duration = Duration::from_millis(250);
 
 #[derive(Default)]
-pub struct TaskSet(Mutex<Vec<Task>>);
+pub struct TaskSet(Mutex<(bool, Vec<Task>)>); // (closed by `end`, tasks)
 
 impl Task {
     fn finished(&self) -> bool {
@@ -73,19 +73,28 @@ impl Task {
 impl TaskSet {
     /// Drops finished tasks first, so modules that spawn per event (settle threads, pipe connections) stay bounded.
     fn push(&self, t: Task) {
-        let mut v = self.0.lock().unwrap();
-        v.retain(|x| !x.finished());
-        v.push(t);
+        let mut g = self.0.lock().unwrap();
+        if g.0 {
+            // Late push after `end` (accept loop mid-poll, watch thread): threads already see the stop flag.
+            if let Task::Async(h) = t { h.abort() }
+            return;
+        }
+        g.1.retain(|x| !x.finished());
+        g.1.push(t);
     }
 
     #[cfg(test)]
     fn len(&self) -> usize {
-        self.0.lock().unwrap().len()
+        self.0.lock().unwrap().1.len()
     }
 
     /// Aborts async tasks; joins threads within GRACE in total, logs the ones still stuck.
     fn end(&self, id: &str) {
-        let tasks = std::mem::take(&mut *self.0.lock().unwrap());
+        let tasks = {
+            let mut g = self.0.lock().unwrap();
+            g.0 = true;
+            std::mem::take(&mut g.1)
+        };
         let mut threads = Vec::new();
         for t in tasks {
             match t {
@@ -372,6 +381,9 @@ mod tests {
         assert!(tasks.len() >= 1);
         sp.stop.store(true, Ordering::SeqCst);
         tasks.end("t");
+        assert_eq!(tasks.len(), 0);
+        // a push after `end` is dropped, not kept
+        sp.spawn(|_| {});
         assert_eq!(tasks.len(), 0);
     }
 

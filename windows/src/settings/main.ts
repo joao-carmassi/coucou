@@ -3,10 +3,11 @@
 
 import "./settings.css";
 import { Bridge, onEvent } from "../core/bridge";
-import { resolveEnabled, type ModuleInfo, type SettingsSection, type SettingsUi } from "../core/moduleApi";
+import { resolveEnabled, type ModuleInfo, type SettingsSection } from "../core/moduleApi";
 import { moduleSettings } from "../core/moduleSettings";
 import { DEFAULT_SETTINGS, State, type Settings } from "../core/state";
 import { h, clear } from "../kit/dom";
+import { makeSettingsUi } from "./ui";
 
 let settings: Settings = { ...DEFAULT_SETTINGS };
 // ModuleSettings reads State.settings (this same object) and saves patches of its own keys.
@@ -126,12 +127,12 @@ function generalSection(): HTMLElement {
 const modulesBox = h("div", {});
 /** The sections of the modules that are on, in catalog order: they sit between the switches and the footer. */
 const sectionsBox = h("div", { style: "display:contents" });
-const sections = new Map<string, { el: HTMLElement; dispose?(): void; timers: Set<number> }>();
+const sections = new Map<string, { el: HTMLElement; dispose?(): void; timers: Set<number>; stop(): void }>();
 // Injected by startSettings (src/boot/settings.ts): this file imports no module.
 let MODULE_INFO: ModuleInfo[] = [];
 let SETTINGS_SECTIONS: Record<string, SettingsSection> = {};
 
-const stopTimers = (s: { timers: Set<number> }) => { s.timers.forEach((t) => window.clearTimeout(t)); s.timers.clear(); };
+const stopTimers = (s: { stop(): void }) => s.stop();
 window.addEventListener("unload", () => sections.forEach(stopTimers));
 
 /** A module's section exists only while the module is on. */
@@ -145,14 +146,8 @@ function renderSections(effective: Record<string, boolean>) {
       stopTimers(has);
       sections.delete(id);
     } else if (on && !has) {
-      const timers = new Set<number>();
-      const ui: SettingsUi = {
-        timeout: (fn, ms) => {
-          const t = window.setTimeout(() => { timers.delete(t); fn(); }, ms);
-          timers.add(t);
-        },
-      };
-      sections.set(id, { ...make(moduleSettings(id, MODULE_INFO.find((m) => m.id === id)?.settingsDefaults), ui), timers });
+      const { ui, timers, stop } = makeSettingsUi();
+      sections.set(id, { ...make(moduleSettings(id, MODULE_INFO.find((m) => m.id === id)?.settingsDefaults), ui), timers, stop });
     }
   }
   const order = MODULE_INFO.map((m) => m.id);

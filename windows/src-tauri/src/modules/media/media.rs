@@ -309,7 +309,13 @@ mod sys {
             if stop.load(Ordering::SeqCst) || !path.exists() {
                 break;
             }
-            std::thread::sleep(Duration::from_millis(800));
+            // Poll stop every 50 ms so a stop mid-settle ends the thread inside the host's GRACE.
+            for _ in 0..16 {
+                if stop.load(Ordering::SeqCst) {
+                    return false;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
             let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
             if size > 0 && size == last && free(path) {
                 return true;
@@ -395,7 +401,7 @@ mod sys {
                         let name: Vec<u16> = raw.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
                         let path = dir.join(String::from_utf16_lossy(&name));
                         let app = app.clone();
-                        // shortcut: a thread per new file (ends within ~1 s of stop, or 10 min); a pool when bursts matter.
+                        // shortcut: a thread per new file (ends within ~50 ms of stop, or 10 min); a pool when bursts matter.
                         sp.spawn(move |stop| settle_and_add(&app, &stop, path, kind));
                     }
                 }

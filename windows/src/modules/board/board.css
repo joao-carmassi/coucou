@@ -67,7 +67,7 @@
   height: 6px;
 }
 
-/* The home layout (.overview, .left, .left-body) is kit/home.css; the tile-* cards are kit/tile.css. */
+/* The home layout (.home, .left, .left-body) is kit/home.css; the tile-* cards are kit/tile.css. */
 
 /* A card that opens something: the whole card is the button. */
 .card.opens:hover {

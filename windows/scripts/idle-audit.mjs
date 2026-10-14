@@ -78,6 +78,18 @@ for (const f of files(join(root, "src-tauri/src/modules"), [".rs"])) {
   });
 }
 
+// A static task outside the module ctx is invisible to stop: only host.rs (defines it) and the scheduler (the one approved
+// shared task, parked by pause/stop) may hold one. Path-based scope, not an allowlist entry.
+const staticTaskOk = /^src-tauri\/src\/(core\/host|modules\/integrations\/scheduler)\.rs$/;
+const staticTask = /\bSharedTask::new\b|\bstatic\b[^=]*\bTaskSet\b/;
+for (const f of files(join(root, "src-tauri/src"), [".rs"])) {
+  const name = rel(f);
+  if (staticTaskOk.test(name)) continue;
+  readFileSync(f, "utf8").split("\n").forEach((raw, i) => {
+    if (staticTask.test(raw.replace(/\/\/.*$/, ""))) add(name, i + 1, "static task", raw, null);
+  });
+}
+
 for (const e of ALLOWLIST) if (!usedEntries.has(e)) add(e[0], 0, "unused ALLOWLIST entry", e[1], null);
 console.log("file:line".padEnd(46) + "rule".padEnd(20) + "status");
 for (const x of findings)

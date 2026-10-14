@@ -213,7 +213,7 @@ for (const f of files(join(root, "src/kit"), [".ts"])) {
   }
   const isKit = (c) => /^(pane-|tile-|diff-|code-|file-|hl|home)/.test(c) || c === "solo" || c === "left-body" || c === "pane-file";
   // bare `home` / `card` / `wash` / `view` are also plain words (view names, state values): checked in class contexts only
-  const BARE = new Set(["card", "wash", "view", "home"]);
+  const BARE = new Set(["card", "wash", "view", "home", "left", "right"]);
   const kitSet = new Set([...kitClasses].filter((c) => isKit(c) && !BARE.has(c)));
   const lit = /(["'`])((?:\\.|(?!\1).)*)\1/g;
   const toks = (str) => str.split(/[\s.,>+~]+/).filter(Boolean);
