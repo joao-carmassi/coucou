@@ -22,12 +22,11 @@ import { ICONS } from "../icons";
 import { COLOR } from "../../../kit/palette";
 import { timeAgo } from "../../../kit/format";
 import { markdown } from "./markdown";
-import { State } from "../../../core/state";
 import { CLAUDE_ID, type ChangedFile, type ClaudeSession, type SessionStep } from "../types";
 import type { Claude } from "../claude";
 import type { ClaudeStore } from "../store";
 import { stepIcon, stepName, stepPreview, type ToType } from "./step";
-import { botGlowColor } from "../../../core/layout";
+import { botGlowColor } from "../../../kit/palette";
 import type { ViewContext, ViewHost } from "../../../core/moduleApi";
 
 /** What a session is called until it has a project or a title to go by. */
@@ -463,7 +462,7 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
   return {
     el,
     sync() {
-      const task = State.pills.find((t) => t.id === CLAUDE_ID) ?? null;
+      const task = c.api.pills.get(CLAUDE_ID);
       const session = store.session;
       const files = store.sessionFiles;
 

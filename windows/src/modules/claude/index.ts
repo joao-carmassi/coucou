@@ -7,7 +7,7 @@ import { svg } from "../../kit/dom";
 import "./base.css";
 import "./chat.css";
 import "./claude.css";
-import { PANEL_H } from "../../core/layout";
+import { PANEL_H } from "../../core/moduleApi";
 import type { BoardCardOf, BoardFocus, BoardPillOf } from "../board/api";
 import { CLAUDE_ID } from "./types";
 import { claudeOf } from "./claude";

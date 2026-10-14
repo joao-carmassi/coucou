@@ -3,7 +3,6 @@
 
 import type { ManagedSession } from "./bridge";
 import type { IslandApi } from "../../core/moduleApi";
-import { State } from "../../core/state";
 import {
   CLAUDE_ID, newSession,
   type ApprovalInfo, type ChangedFile, type ClaudeClient, type ClaudeSession, type PillBadge, type QuestionInfo,
@@ -97,7 +96,7 @@ export class ClaudeStore {
 
   /** The Claude pill, when the module has put it among the tasks. */
   get pill() {
-    return State.pills.find((t) => t.id === CLAUDE_ID) ?? null;
+    return this.api.pills.get(CLAUDE_ID);
   }
 
   /**

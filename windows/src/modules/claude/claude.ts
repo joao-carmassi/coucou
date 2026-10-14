@@ -2,13 +2,11 @@
 // (settleRequest, afterRequest, pickSession, goToAlert, openClient, decide, answer, ...), now
 // working through the module API. One instance per module start; views reach it with claudeOf().
 
-import { CLAUDE_SERVICE, type LaunchFile } from "./api";
-import { Bridge } from "../../core/bridge";
+import { CLAUDE_SERVICE, type LaunchFile, type LaunchPrompt } from "./api";
+import { App } from "../../kit/app";
 import { ClaudeBridge } from "./bridge";
 import type { BotStateName } from "../../core/layout";
 import type { Disposer, IslandApi } from "../../core/moduleApi";
-import { Sound } from "../../core/sound";
-import { State } from "../../core/state";
 import { activityLine } from "./activity";
 import { handleHook, type HookPayload } from "./hooks";
 import { ClaudeStore } from "./store";
@@ -52,7 +50,7 @@ export class Claude {
 
   /** The pill in front. */
   focusId(): string | null {
-    return State.focusPill?.id ?? null;
+    return this.api.pills.front()?.id ?? null;
   }
 
   private redraw = () => this.api.island.redraw();
@@ -66,7 +64,7 @@ export class Claude {
   }
 
   upsertAgent(id: string, name: string, color: string) {
-    if (State.pills.some((t) => t.id === id)) return;
+    if (this.api.pills.get(id)) return;
     // Right after the Claude pill, so it is among the first four.
     this.api.pills.set({ id, label: name, color, mood: "idle" }, { after: CLAUDE_ID });
     this.store.agentSteps.set(id, []);
@@ -87,7 +85,7 @@ export class Claude {
   }
 
   removeAgent(id: string) {
-    if (!State.pills.some((t) => t.id === id)) return;
+    if (!this.api.pills.get(id)) return;
     this.api.pills.remove(id);
     this.store.agentSteps.delete(id);
     this.store.badges.delete(id);
@@ -164,16 +162,16 @@ export class Claude {
     store.present();
     if (show) {
       this.syncRequest(true);
-      if (!next) this.api.island.open(State.defaultView());
+      if (!next) this.api.island.open(this.api.island.home());
     } else this.syncRequest(false);
   }
 
   decide(d: "allow" | "deny" | "plan-keep" | "plan-manual" | "plan-auto") {
     const req = this.store.pendingApproval;
-    void Bridge.log(`decide ${d} req=${req?.requestId ?? "none"}`);
+    void App.log(`decide ${d} req=${req?.requestId ?? "none"}`);
     if (!req) return;
     const denied = d === "deny" || d === "plan-keep";
-    Sound.play(denied ? "blip" : "approve");
+    this.api.sound.play(denied ? "blip" : "approve");
     void ClaudeBridge.approvalDecision(req.requestId, d);
     this.noteOutcome(req.tool, (step) => (step.permission = denied ? "denied" : "allowed"));
     this.settleRequest();
@@ -182,7 +180,7 @@ export class Claude {
   answer(answers: Record<string, string>) {
     const req = this.store.pendingQuestion;
     if (!req) return;
-    Sound.play("approve");
+    this.api.sound.play("approve");
     void ClaudeBridge.approvalAnswer(req.requestId, answers);
     this.noteOutcome(QUESTION_TOOL, (step) => (step.answers = answers));
     this.settleRequest();
@@ -191,7 +189,7 @@ export class Claude {
   skipQuestion() {
     const req = this.store.pendingQuestion;
     if (!req) return;
-    Sound.play("blip");
+    this.api.sound.play("blip");
     void ClaudeBridge.approvalDecision(req.requestId, "skip");
     this.noteOutcome(QUESTION_TOOL, (step) => (step.state = "failed"));
     this.settleRequest();
@@ -201,7 +199,7 @@ export class Claude {
   passQuestion() {
     const req = this.store.pendingQuestion;
     if (!req) return;
-    Sound.play("blip");
+    this.api.sound.play("blip");
     // Declined, not denied: Claude Code asks it in its own window at once.
     void ClaudeBridge.approvalDecline(req.requestId);
     this.settleRequest();
@@ -220,7 +218,7 @@ export class Claude {
   pickSession(id: string) {
     const store = this.store;
     if (id === store.frontId) return;
-    Sound.play("blip");
+    this.api.sound.play("blip");
     // The list of sessions is reached whatever pill is in front: picking one is asking for Claude's.
     if (this.focusId() !== CLAUDE_ID) this.setFocus(CLAUDE_ID);
     store.bringForward(id);
@@ -231,7 +229,7 @@ export class Claude {
     } else {
       this.syncRequest(false);
       const view = this.api.island.view();
-      if (view === "approval" || view === "question") this.api.island.setView(State.defaultView());
+      if (view === "approval" || view === "question") this.api.island.setView(this.api.island.home());
     }
   }
 
@@ -239,7 +237,7 @@ export class Claude {
   goToAlert() {
     if (this.focusId() !== CLAUDE_ID) this.setFocus(CLAUDE_ID);
     if (this.store.hasPending()) this.afterRequest(true);
-    else this.api.island.open(State.defaultView());
+    else this.api.island.open(this.api.island.home());
   }
 
   /** Where the session runs: the Claude app brought forward, or its terminal (VS Code without WSL). */
@@ -267,7 +265,7 @@ export class Claude {
 
   showError(err: unknown) {
     this.api.island.note(String(err).replace(/^Error:\s*/, ""));
-    Sound.play("error");
+    this.api.sound.play("error");
   }
 
   /** A new terminal session, in the front session's profile and folder, with the file attached. */
@@ -276,7 +274,7 @@ export class Claude {
     // Shown at once: it also takes the choose card down, so a second click can't launch twice.
     this.api.island.note("Abrindo no terminal…");
     ClaudeBridge.sessionLaunch({ profile: front.profile, cwd: front.cwd, resume: null, attach: path })
-      .then(() => Sound.play("attach"))
+      .then(() => this.api.sound.play("attach"))
       .catch((err) => this.showError(err));
   }
 
@@ -285,7 +283,7 @@ export class Claude {
     try {
       if (ingest) {
         this.api.island.note("Abrindo no terminal…");
-        path = (await Bridge.inboxIngest(path)).path;
+        path = (await App.inboxIngest(path)).path;
       }
       this.launchWith(path);
     } catch (err) {
@@ -332,8 +330,13 @@ export class Claude {
       api.provide("keepAwake", () => this.awake()),
       api.provide("pillOpen", (id) => id === CLAUDE_ID && (this.openClient(), true)),
       api.provide<LaunchFile>(CLAUDE_SERVICE.launchFile, (path, ingest) => this.launchFile(path, ingest)),
+      api.provide<LaunchPrompt>(CLAUDE_SERVICE.launchPrompt, async (prompt) => {
+        const profiles = (await ClaudeBridge.claudeProfiles()) ?? [];
+        const profile = (profiles.find((p) => p.isDefault) ?? profiles[0])?.key ?? "";
+        await ClaudeBridge.sessionLaunch({ profile, cwd: null, resume: null, attach: null, prompt });
+      }),
       // Focus can change under us (another module's pill): keep the avatar in step.
-      onStateChange(() => this.publish()),
+      api.island.onChange(() => this.publish()),
       onKeys(this),
     ];
     this.publish();
@@ -352,8 +355,6 @@ export class Claude {
     };
   }
 }
-
-const onStateChange = (fn: () => void): Disposer => State.subscribe(fn);
 
 /** The N and Y on the approval card's buttons: their keys, while the card is on screen. */
 function onKeys(c: Claude): Disposer {

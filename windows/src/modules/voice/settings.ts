@@ -1,7 +1,7 @@
 // The Voz section of the settings window (rendered only while the module is on).
 // The speech model is downloaded only on the button; the microphone opens only on the hotkey.
 
-import { onEvent } from "../../core/bridge";
+import { onEvent } from "../../kit/tauri";
 import { VoiceBridge } from "./bridge";
 import type { ModuleSettings } from "../../core/moduleSettings";
 import { h } from "../../kit/dom";

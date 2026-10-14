@@ -1,6 +1,6 @@
 // How tall the island should be for a card whose content varies (from core/layout.ts at m3-ok).
 
-import { PANEL_H } from "../../core/layout";
+import { PANEL_H } from "../../core/moduleApi";
 
 const ISLAND_CHROME = 52;
 const VIEW_MIN = 160;

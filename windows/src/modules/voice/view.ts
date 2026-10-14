@@ -2,10 +2,9 @@
 // waits for Enter (the module's key listener calls send), Esc or "Aguardar" (parks it hidden), never a timer; Enter launches a NEW Claude Code session; nothing here types into
 // an existing one. State lives here (one voice at a time); the module resets it on start/stop.
 
-import { ClaudeBridge } from "../claude/bridge";
+import { CLAUDE_SERVICE, type LaunchPrompt } from "../claude/api";
 import { VoiceBridge } from "./bridge";
-import type { ViewContext, ViewHost } from "../../core/moduleApi";
-import { State } from "../../core/state";
+import type { IslandApi, ViewContext, ViewHost } from "../../core/moduleApi";
 import { h, clear } from "../../kit/dom";
 
 export type Phase = "none" | "listening" | "transcribing" | "review" | "sending" | "error";
@@ -32,14 +31,14 @@ export const Voice = {
 const button = (label: string, kind: "primary" | "secondary", onclick: () => void) =>
   h("button", { class: `btn ${kind}`, onclick }, h("span", { text: label }));
 
-export async function send() {
+export async function send(api: IslandApi) {
   Voice.text = Voice.text.trim();
   if (Voice.busy || !Voice.text) return;
   Voice.busy = true;
   try {
-    const profiles = (await ClaudeBridge.claudeProfiles()) ?? [];
-    const profile = (profiles.find((p) => p.isDefault) ?? profiles[0])?.key ?? "";
-    await ClaudeBridge.sessionLaunch({ profile, cwd: null, resume: null, attach: null, prompt: Voice.text });
+    const launch = api.use<LaunchPrompt>(CLAUDE_SERVICE.launchPrompt);
+    if (!launch) throw new Error("O módulo Claude está desligado: não dá para enviar.");
+    await launch(Voice.text);
     Voice.phase = "none";
     Voice.leave();
   } catch (err) {
@@ -47,7 +46,7 @@ export async function send() {
     Voice.note = String(err).replace(/^Error:\s*/, "");
   } finally {
     Voice.busy = false;
-    State.notify();
+    api.island.redraw();
   }
 }
 

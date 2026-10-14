@@ -10,7 +10,6 @@
 // with its question tool, answered on the island.
 
 import { ClaudeBridge } from "./bridge";
-import { Sound } from "../../core/sound";
 import {
   CLAUDE_ID, PLAN_TOOL, QUESTION_TOOL, SESSION_UNNAMED, TURN_DONE, newSession, newStep,
   type ChangedFile, type ClaudeClient, type ClaudeSession, type Question, type StepKind, type StepResult,
@@ -446,7 +445,7 @@ function handleAgent(c: Claude, payload: HookPayload, agent: string) {
     case "SessionStart":
       ensurePill();
       reveal();
-      Sound.play("work");
+      c.api.sound.play("work");
       break;
 
     case "UserPromptSubmit": {
@@ -479,7 +478,7 @@ function handleAgent(c: Claude, payload: HookPayload, agent: string) {
       const lower = message.toLowerCase();
       if (lower.includes("rate limit") || lower.includes("limite d")) {
         c.updateTask(agentId, "waiting");
-        Sound.play("wait");
+        c.api.sound.play("wait");
       } else if (message.endsWith("?")) {
         c.updateTask(agentId, "ask");
         c.appendStep(agentId, message);
@@ -490,7 +489,7 @@ function handleAgent(c: Claude, payload: HookPayload, agent: string) {
     case "Stop":
       c.updateTask(agentId, "done");
       if (payload.message) c.appendStep(agentId, payload.message.slice(0, LINE_CHARS));
-      Sound.play("finish");
+      c.api.sound.play("finish");
       if (focused) alert("finished");
       else {
         c.store.setBadge(agentId, "done");
@@ -501,7 +500,7 @@ function handleAgent(c: Claude, payload: HookPayload, agent: string) {
 
     case "StopFailure":
       c.updateTask(agentId, "error");
-      Sound.play("error");
+      c.api.sound.play("error");
       if (focused) alert("error");
       else c.store.setBadge(agentId, "error");
       break;
@@ -591,7 +590,7 @@ export function handleHook(c: Claude, payload: HookPayload) {
   switch (name) {
     case "SessionStart":
       surface(null);
-      Sound.play("work");
+      c.api.sound.play("work");
       break;
 
     case "UserPromptSubmit": {
@@ -638,7 +637,7 @@ export function handleHook(c: Claude, payload: HookPayload) {
       const lower = message.toLowerCase();
       if (lower.includes("rate limit") || lower.includes("limite d")) {
         session.state = "waiting";
-        Sound.play("wait");
+        c.api.sound.play("wait");
       } else if (message.endsWith("?")) {
         session.state = "ask";
         say(session, message);
@@ -656,7 +655,7 @@ export function handleHook(c: Claude, payload: HookPayload) {
       session.agentsRunning = session.agentsLaunched = 0;
       session.state = "done";
       if (payload.message) say(session, payload.message.slice(0, LINE_CHARS));
-      Sound.play("finish");
+      c.api.sound.play("finish");
       tell("done");
       c.api.timeout(() => {
         // Still where its turn left it: back to rest. Its tab keeps its mark.
@@ -670,7 +669,7 @@ export function handleHook(c: Claude, payload: HookPayload) {
       log(session, newStep("Error", "note", "A sessão parou com um erro.")).state = "failed";
       session.agentsRunning = session.agentsLaunched = 0;
       session.state = "error";
-      Sound.play("error");
+      c.api.sound.play("error");
       tell("error");
       break;
 
@@ -719,7 +718,7 @@ export function handleHook(c: Claude, payload: HookPayload) {
       // line is synchronous, so the card really is up by the time it lands.
       if (requestId) void ClaudeBridge.approvalAck(requestId);
       session.state = questions ? "ask" : "alert";
-      Sound.play(questions ? "ask" : "alert");
+      c.api.sound.play(questions ? "ask" : "alert");
       if (!front) {
         // The session in front is waiting for an answer of its own: this one
         // waits its turn behind its tab, and gets the card next.

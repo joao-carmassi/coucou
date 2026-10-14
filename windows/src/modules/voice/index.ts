@@ -2,7 +2,7 @@
 // Claude session with the text. Needs the claude module (catalog `requires`).
 
 import type { Disposer, IslandApi, ModuleDef } from "../../core/moduleApi";
-import { Bridge } from "../../core/bridge";
+import { App } from "../../kit/app";
 import { VoiceBridge } from "./bridge";
 import { buildVoiceView, send, Voice } from "./view";
 
@@ -25,18 +25,18 @@ function start(api: IslandApi): Disposer {
     prev?.();
   };
   // Enter/Esc are captured only while listening or while a transcript is on the card: the listener exists
-  // only then (never while parked/hidden) and the window takes focus (Bridge.focusWindow) so the keys reach it while the user typed elsewhere.
+  // only then (never while parked/hidden) and the window takes focus (App.focusWindow) so the keys reach it while the user typed elsewhere.
   let offKeys: Disposer | null = null;
   const keys = (on: boolean) => {
     if (on === !!offKeys) return;
-    void Bridge.focusWindow(on);
+    void App.focusWindow(on);
     if (!on) { offKeys?.(); offKeys = null; return; }
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
       if (api.island.view() !== "voice") return; // a request card in front owns the keys
       const listening = Voice.phase === "listening";
       if (!listening && !reviewing()) return;
-      if (e.key === "Enter") { e.preventDefault(); if (listening) void VoiceBridge.voiceStop(); else void send(); }
+      if (e.key === "Enter") { e.preventDefault(); if (listening) void VoiceBridge.voiceStop(); else void send(api); }
       else if (e.key === "Escape") {
         e.preventDefault();
         if (listening) void VoiceBridge.voiceCancel();

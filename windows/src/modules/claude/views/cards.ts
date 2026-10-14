@@ -2,11 +2,10 @@
 // Ported from views/views.ts at m3-ok. Every card works on the module's store, never on State.
 
 import { h, svg, clear, dot, replay } from "../../../kit/dom";
-import { card } from "../../../views/views";
+import { card } from "../../../kit/card";
 import type { ViewContext, ViewHost } from "../../../core/moduleApi";
-import { Bridge } from "../../../core/bridge";
+import { App } from "../../../kit/app";
 import { ClaudeBridge } from "../bridge";
-import { State } from "../../../core/state";
 import type { Pill } from "../../../core/state";
 import { hasTarget, type Claude } from "../claude";
 import { claudeSettings } from "../store";
@@ -159,7 +158,7 @@ function agentWho(task: Pill | null, label: string): HTMLElement {
  * and, when other sessions are waiting for an answer behind it, how many.
  */
 function sessionWho(c: Claude, label: string): HTMLElement {
-  const task = State.pills.find((t) => t.id === CLAUDE_ID) ?? State.focusPill;
+  const task = c.api.pills.get(CLAUDE_ID) ?? c.api.pills.front();
   const session = c.store.session;
   const row = h("div", { class: "who-row" });
   if (task) row.append(dot(task.color, 8), h("span", { class: "n", text: session.id ? sessionName(session) : task.label }));
@@ -293,7 +292,7 @@ function boardCardOf(c: Claude): BoardCardOf {
   }
 
   return (taskId) => {
-    const task = State.pills.find((t) => t.id === taskId);
+    const task = c.api.pills.get(taskId);
     if (!task) return null;
     // The Claude pill with a session to show has the session's card.
     if (taskId === CLAUDE_ID && store.session.id) {
@@ -343,7 +342,7 @@ function idleCard(c: Claude, task: Pill): HTMLElement {
     }),
   );
   if (!configured) {
-    actions.append(h("button", { class: "link-btn", style: "color:#8e939c", text: "Configurações…", onclick: () => void Bridge.openSettingsWindow() }));
+    actions.append(h("button", { class: "link-btn", style: "color:#8e939c", text: "Configurações…", onclick: () => void App.openSettingsWindow() }));
   }
   return h(
     "div",
@@ -545,7 +544,7 @@ function buildQuestion(c: Claude, ctx: ViewContext): ViewHost {
     field.blur();
   }
 
-  field.addEventListener("blur", () => void Bridge.focusWindow(false));
+  field.addEventListener("blur", () => void App.focusWindow(false));
   field.addEventListener("keydown", (e) => {
     e.stopPropagation();
     if (e.key === "Enter") settle(field.value.trim());
@@ -650,7 +649,7 @@ function buildQuestion(c: Claude, ctx: ViewContext): ViewHost {
         onclick: () => {
           typing = true;
           c.store.changed();
-          void Bridge.focusWindow(true);
+          void App.focusWindow(true);
           c.api.timeout(() => field.focus(), FOCUS_MS);
         },
       }),
@@ -700,7 +699,7 @@ function buildError(c: Claude, ctx: ViewContext): ViewHost {
       return air.height;
     },
     sync() {
-      const task = State.focusPill;
+      const task = c.api.pills.front();
       const claude = task?.id === CLAUDE_ID;
       // A module's pill with news to tell (integrations) puts it here in place of a session's result.
       if (tellNews(c, task, who, title, facts, [row, detail], newsRow)) {
@@ -748,7 +747,7 @@ function buildFinished(c: Claude, ctx: ViewContext): ViewHost {
       return air.height;
     },
     sync() {
-      const task = State.focusPill;
+      const task = c.api.pills.front();
       if (tellNews(c, task, who, title, facts, [row], newsRow)) {
         title.classList.remove("said");
         air.fit();

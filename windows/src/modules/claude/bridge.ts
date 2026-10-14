@@ -1,4 +1,4 @@
-import { command, commandOrThrow } from "../../core/bridge";
+import { command, commandOrThrow } from "../../kit/tauri";
 
 
 export const ClaudeBridge = {
