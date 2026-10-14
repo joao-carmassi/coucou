@@ -7,5 +7,11 @@ export const MODULE_INFO: ModuleInfo[] = [
   { id: "upload", label: "Soltar arquivo", defaultEnabled: true, requires: ["claude"] },
   { id: "timer", label: "Timer", defaultEnabled: false },
   { id: "voice", label: "Voz", defaultEnabled: false, requires: ["claude"] },
-  { id: "integrations", label: "Integrações", defaultEnabled: false },
+  { id: "github", label: "GitHub", defaultEnabled: false, group: "Integrações" },
+  { id: "vercel", label: "Vercel", defaultEnabled: false, group: "Integrações" },
+  { id: "stripe", label: "Stripe", defaultEnabled: false, group: "Integrações" },
+  { id: "n8n", label: "n8n", defaultEnabled: false, group: "Integrações" },
+  { id: "resend", label: "Resend", defaultEnabled: false, group: "Integrações" },
+  { id: "calcom", label: "Cal.com", defaultEnabled: false, group: "Integrações" },
+  { id: "notion", label: "Notion", defaultEnabled: false, group: "Integrações" },
 ];

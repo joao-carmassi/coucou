@@ -102,7 +102,7 @@ export interface IslandApi {
   onVisibility(fn: (mode: IslandMode, prev: IslandMode) => void): Disposer;
 }
 
-export interface ModuleInfo { id: string; label: string; defaultEnabled: boolean; requires?: string[] }
+export interface ModuleInfo { id: string; label: string; defaultEnabled: boolean; requires?: string[]; /** Settings heading the module is listed under. */ group?: string }
 export interface ModuleDef extends ModuleInfo {
   views?: ViewDef[];
   tab?: TabDef;

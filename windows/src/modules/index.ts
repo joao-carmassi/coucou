@@ -6,6 +6,6 @@ import { media } from "./media";
 import { uploadModule } from "./upload";
 import { timerModule } from "./timer";
 import { voiceModule } from "./voice";
-import { integrations } from "./integrations";
+import { github, vercel, stripe, n8n, resend, calcom, notion } from "./integrations/provider";
 
-export const MODULES: ModuleDef[] = [claude, media, uploadModule, timerModule, voiceModule, integrations];
+export const MODULES: ModuleDef[] = [claude, media, uploadModule, timerModule, voiceModule, github, vercel, stripe, n8n, resend, calcom, notion];
