@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.2
+
+- Clicking the home tab clears all task holds (home is the default).
+- Home primary: setting "Principal do Início" (default Claude). Clicking an integration pill makes it the primary; after the island was closed for `focusHoldMinutes` it returns to the default. No timers.
+- Timer and media retake their hold on each visit via `api.island.onChange` (no 1 s polls); media no longer releases the hold just by leaving the view.
+- Module settings: per-module core-key exceptions; `save` refuses `focusHoldMinutes` and `modulesEnabled`.
+
 ## 0.8.1
 
 - Fix: opening the sessions list, clicking outside and reopening right away landed on home. The list now takes a task hold (`api.island.hold`) when entered; opening or resuming a session, or starting a new one, concludes it. Leaving or collapsing does not.
