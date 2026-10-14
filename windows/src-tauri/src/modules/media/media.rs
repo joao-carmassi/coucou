@@ -219,7 +219,7 @@ mod sys {
     };
     use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
-    use crate::core::host::ModuleCtx;
+    use crate::core::host::{ModuleCtx, Spawner};
     use super::{add, is_media, mtime_ms, now_ms, SCAN_MS};
 
     /// Shell objects want COM up on the thread: the work gets one of its own.
@@ -274,7 +274,8 @@ mod sys {
     pub fn start(ctx: &ModuleCtx) {
         for (dir, kind) in folders() {
             let app = ctx.app.clone();
-            ctx.spawn(move |stop| watch(app, stop, dir, kind));
+            let sp = ctx.spawner();
+            ctx.spawn(move |stop| watch(app, stop, sp, dir, kind));
         }
     }
 
@@ -340,7 +341,7 @@ mod sys {
     }
 
     /// Blocks in ReadDirectoryChangesW: nothing runs between notifications.
-    fn watch(app: AppHandle, stop: Arc<AtomicBool>, dir: PathBuf, kind: &'static str) {
+    fn watch(app: AppHandle, stop: Arc<AtomicBool>, sp: Spawner, dir: PathBuf, kind: &'static str) {
         scan(&app, &dir, kind);
         let wide: Vec<u16> = dir.as_os_str().to_string_lossy().encode_utf16().chain(Some(0)).collect();
         let Ok(h) = (unsafe {
@@ -394,9 +395,8 @@ mod sys {
                         let name: Vec<u16> = raw.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
                         let path = dir.join(String::from_utf16_lossy(&name));
                         let app = app.clone();
-                        let stop = stop.clone();
-                        // shortcut: a loose thread per new file (ends within ~1 s of stop, or 10 min); a pool when bursts matter.
-                        std::thread::spawn(move || settle_and_add(&app, &stop, path, kind));
+                        // shortcut: a thread per new file (ends within ~1 s of stop, or 10 min); a pool when bursts matter.
+                        sp.spawn(move |stop| settle_and_add(&app, &stop, path, kind));
                     }
                 }
                 // 2 = removed, 4 = renamed away from this name: the list drops what is gone.

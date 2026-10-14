@@ -33,6 +33,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use tokio::sync::mpsc;
 
+use crate::core::host::ModuleCtx;
 use crate::core::island::WINDOW_LABEL;
 use crate::core::log;
 
@@ -68,9 +69,12 @@ pub fn pipe_name() -> String {
     format!(r"\\.\pipe\coucou-{key}")
 }
 
-/// The accept loop; the module host aborts it on stop.
-pub fn start(app: AppHandle) -> tauri::async_runtime::JoinHandle<()> {
-    tauri::async_runtime::spawn(async move {
+/// The accept loop; the module host aborts it, and any in-flight connection, on stop
+/// (an aborted PermissionRequest leaves its `Pending` entry until `stop` clears them all).
+pub fn start(ctx: &ModuleCtx) {
+    let app = ctx.app.clone();
+    let sp = ctx.spawner();
+    ctx.spawn_async(async move {
         let name = pipe_name();
         // first_pipe_instance also means we refuse to join a pipe somebody else
         // already owns under our name, rather than serving on top of it.
@@ -104,9 +108,9 @@ pub fn start(app: AppHandle) -> tauri::async_runtime::JoinHandle<()> {
             };
             let connected = std::mem::replace(&mut server, next);
             let app = app.clone();
-            tauri::async_runtime::spawn(async move { handle(app, connected).await });
+            sp.spawn_async(handle(app, connected));
         }
-    })
+    });
 }
 
 /// One accepted relay connection, whatever carries it.

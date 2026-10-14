@@ -26,7 +26,7 @@ impl Module for Claude {
 
     fn start(&self, ctx: &ModuleCtx, s: &Settings) {
         hooks::ensure_hook_exe(&ctx.app);
-        ctx.adopt(pipe::start(ctx.app.clone()));
+        pipe::start(ctx);
         set_alert(ctx, s);
         let app = ctx.app.clone();
         ctx.spawn(move |stop| offer_wsl_setup(&app, &stop));

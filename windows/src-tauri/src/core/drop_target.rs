@@ -36,7 +36,7 @@ struct FileDropTarget {
 }
 
 impl FileDropTarget {
-    fn emit(&self, kind: &str, paths: &[PathBuf]) {
+    fn relay(&self, kind: &str, paths: &[PathBuf]) {
         let paths: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
         let _ = self.app.emit_to(WINDOW_LABEL, "file-drag", json!({ "type": kind, "paths": paths }));
     }
@@ -82,7 +82,7 @@ impl IDropTarget_Impl for FileDropTarget_Impl {
         self.effect.set(accepted);
         unsafe { *effect = accepted };
         if let Some(paths) = paths {
-            self.emit("enter", &paths);
+            self.relay("enter", &paths);
         }
         Ok(())
     }
@@ -94,7 +94,7 @@ impl IDropTarget_Impl for FileDropTarget_Impl {
 
     fn DragLeave(&self) -> windows::core::Result<()> {
         if self.effect.get() != DROPEFFECT_NONE {
-            self.emit("leave", &[]);
+            self.relay("leave", &[]);
         }
         self.effect.set(DROPEFFECT_NONE);
         Ok(())
@@ -111,7 +111,7 @@ impl IDropTarget_Impl for FileDropTarget_Impl {
         crate::core::log::line(format!("file drop: {} file(s)", paths.len()));
         unsafe { *effect = if paths.is_empty() { DROPEFFECT_NONE } else { DROPEFFECT_COPY } };
         self.effect.set(DROPEFFECT_NONE);
-        self.emit("drop", &paths);
+        self.relay("drop", &paths);
         Ok(())
     }
 }

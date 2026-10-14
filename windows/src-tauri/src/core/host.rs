@@ -61,7 +61,28 @@ const GRACE: Duration = Duration::from_millis(250);
 #[derive(Default)]
 pub struct TaskSet(Mutex<Vec<Task>>);
 
+impl Task {
+    fn finished(&self) -> bool {
+        match self {
+            Task::Thread(h) => h.is_finished(),
+            Task::Async(h) => h.inner().is_finished(),
+        }
+    }
+}
+
 impl TaskSet {
+    /// Drops finished tasks first, so modules that spawn per event (settle threads, pipe connections) stay bounded.
+    fn push(&self, t: Task) {
+        let mut v = self.0.lock().unwrap();
+        v.retain(|x| !x.finished());
+        v.push(t);
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.0.lock().unwrap().len()
+    }
+
     /// Aborts async tasks; joins threads within GRACE in total, logs the ones still stuck.
     fn end(&self, id: &str) {
         let tasks = std::mem::take(&mut *self.0.lock().unwrap());
@@ -86,11 +107,58 @@ impl TaskSet {
     }
 }
 
+/// Cloneable handle to a module's spawn rights: what ctx.spawn / spawn_async use, for code that outlives `&ModuleCtx`.
+#[derive(Clone)]
+pub struct Spawner {
+    id: &'static str,
+    stop: Arc<AtomicBool>,
+    tasks: Arc<TaskSet>,
+}
+
+impl Spawner {
+    /// A thread the host joins on stop.
+    pub fn spawn<F: FnOnce(Arc<AtomicBool>) + Send + 'static>(&self, f: F) {
+        let stop = self.stop.clone();
+        match std::thread::Builder::new().name(format!("module-{}", self.id)).spawn(move || f(stop)) {
+            Ok(h) => self.tasks.push(Task::Thread(h)),
+            Err(e) => log::line(format!("[module] {}: spawn failed: {e}", self.id)),
+        }
+    }
+
+    /// An async task the host aborts on stop.
+    pub fn spawn_async<F: Future<Output = ()> + Send + 'static>(&self, f: F) {
+        self.tasks.push(Task::Async(tauri::async_runtime::spawn(f)));
+    }
+}
+
+/// One async task shared by several modules (refcounted by its callers): exists only between `ensure` and `end`.
+pub struct SharedTask(Mutex<Option<tauri::async_runtime::JoinHandle<()>>>);
+
+impl SharedTask {
+    pub const fn new() -> Self {
+        Self(Mutex::new(None))
+    }
+
+    /// Starts `fut` unless a previous one is still running.
+    pub fn ensure<F: Future<Output = ()> + Send + 'static>(&self, fut: F) {
+        let mut h = self.0.lock().unwrap();
+        if h.as_ref().is_none_or(|h| h.inner().is_finished()) {
+            *h = Some(tauri::async_runtime::spawn(fut));
+        }
+    }
+
+    pub fn end(&self) {
+        if let Some(h) = self.0.lock().unwrap().take() {
+            h.abort();
+        }
+    }
+}
+
 pub struct ModuleCtx {
     pub id: &'static str,
     pub app: AppHandle,
     pub stop: Arc<AtomicBool>,
-    pub tasks: TaskSet,
+    pub tasks: Arc<TaskSet>,
     listeners: Mutex<Vec<EventId>>,
 }
 
@@ -100,22 +168,17 @@ impl ModuleCtx {
         self.stop.load(Ordering::SeqCst)
     }
 
+    pub fn spawner(&self) -> Spawner {
+        Spawner { id: self.id, stop: self.stop.clone(), tasks: self.tasks.clone() }
+    }
+
     /// The only way a module makes a thread: the host joins it on stop.
     pub fn spawn<F: FnOnce(Arc<AtomicBool>) + Send + 'static>(&self, f: F) {
-        let stop = self.stop.clone();
-        match std::thread::Builder::new().name(format!("module-{}", self.id)).spawn(move || f(stop)) {
-            Ok(h) => self.tasks.0.lock().unwrap().push(Task::Thread(h)),
-            Err(e) => log::line(format!("[module] {}: spawn failed: {e}", self.id)),
-        }
+        self.spawner().spawn(f);
     }
 
-    #[allow(dead_code)]
     pub fn spawn_async<F: Future<Output = ()> + Send + 'static>(&self, f: F) {
-        self.adopt(tauri::async_runtime::spawn(f));
-    }
-
-    pub fn adopt(&self, h: tauri::async_runtime::JoinHandle<()>) {
-        self.tasks.0.lock().unwrap().push(Task::Async(h));
+        self.spawner().spawn_async(f);
     }
 
     pub fn listen<F: Fn(tauri::Event) + Send + 'static>(&self, event: &str, f: F) {
@@ -196,7 +259,7 @@ impl ModuleHost {
                     id: m.id(),
                     app: app.clone(),
                     stop: Arc::new(AtomicBool::new(false)),
-                    tasks: TaskSet::default(),
+                    tasks: Arc::default(),
                     listeners: Mutex::default(),
                 });
                 m.start(&ctx, s);
@@ -289,6 +352,48 @@ mod tests {
         assert!(uncataloged(crate::modules::CATALOG, &ok).is_empty());
         let bad: Vec<Box<dyn Module>> = vec![Box::new(Fake("claude")), Box::new(Fake("ghost"))];
         assert_eq!(uncataloged(crate::modules::CATALOG, &bad), vec!["ghost"]);
+    }
+
+    fn spawner(tasks: &Arc<TaskSet>) -> Spawner {
+        Spawner { id: "t", stop: Arc::new(AtomicBool::new(false)), tasks: tasks.clone() }
+    }
+
+    #[test]
+    fn taskset_drops_finished_tasks_on_push() {
+        let tasks = Arc::new(TaskSet::default());
+        let sp = spawner(&tasks);
+        for _ in 0..5 {
+            sp.spawn(|_| {});
+            std::thread::sleep(Duration::from_millis(30));
+        }
+        assert!(tasks.len() <= 2, "finished threads piled up: {}", tasks.len());
+        // a running one is kept; `end` finishes it through the stop flag
+        sp.spawn(|stop| while !stop.load(Ordering::SeqCst) { std::thread::sleep(Duration::from_millis(5)) });
+        assert!(tasks.len() >= 1);
+        sp.stop.store(true, Ordering::SeqCst);
+        tasks.end("t");
+        assert_eq!(tasks.len(), 0);
+    }
+
+    #[test]
+    fn shared_task_ensure_is_idempotent_and_end_clears() {
+        use std::sync::atomic::AtomicUsize;
+        static STARTS: AtomicUsize = AtomicUsize::new(0);
+        let t = SharedTask::new();
+        let job = || async {
+            STARTS.fetch_add(1, Ordering::SeqCst);
+            std::future::pending::<()>().await
+        };
+        t.ensure(job());
+        t.ensure(job());
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(STARTS.load(Ordering::SeqCst), 1);
+        t.end();
+        assert!(t.0.lock().unwrap().is_none());
+        t.ensure(job());
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(STARTS.load(Ordering::SeqCst), 2);
+        t.end();
     }
 
     #[test]

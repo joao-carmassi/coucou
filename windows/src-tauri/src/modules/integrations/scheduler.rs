@@ -6,9 +6,10 @@ use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use tauri::async_runtime::JoinHandle;
 use tauri::AppHandle;
 use tokio::sync::Notify;
+
+use crate::core::host::SharedTask;
 
 use super::{github, integrations, secrets};
 
@@ -33,7 +34,6 @@ struct Sched {
     /// While a GitHub run is going: when its runs are asked about next.
     live_due: Option<Instant>,
     paused: bool,
-    handle: Option<JoinHandle<()>>,
     app: Option<AppHandle>,
 }
 
@@ -43,9 +43,9 @@ static ST: Mutex<Sched> = Mutex::new(Sched {
     due: BTreeMap::new(),
     live_due: None,
     paused: false,
-    handle: None,
     app: None,
 });
+static TASK: SharedTask = SharedTask::new();
 static REEVAL: Mutex<()> = Mutex::new(());
 static WAKE: Notify = Notify::const_new();
 
@@ -96,13 +96,9 @@ pub fn reeval() {
         st.live_due = None;
     }
     if st.active.is_empty() {
-        if let Some(h) = st.handle.take() {
-            h.abort();
-        }
-    } else if st.handle.as_ref().is_none_or(|h| h.inner().is_finished()) {
-        if let Some(app) = st.app.clone() {
-            st.handle = Some(tauri::async_runtime::spawn(run(app)));
-        }
+        TASK.end();
+    } else if let Some(app) = st.app.clone() {
+        TASK.ensure(run(app));
     }
     drop(st);
     WAKE.notify_one();

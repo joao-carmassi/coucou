@@ -303,30 +303,34 @@ fn transcribe(dir: &Path, pcm: &[f32], module_stop: &AtomicBool) -> Result<(Stri
         .map_err(|e| e.to_string())?;
     // Read on a thread so a chatty engine cannot fill the pipe while we wait on it.
     let mut pipe = child.stdout.take();
-    let reader = std::thread::spawn(move || {
-        let mut out = Vec::new();
-        if let Some(p) = pipe.as_mut() {
-            let _ = p.read_to_end(&mut out);
-        }
-        out
+    // Scoped: the reader cannot outlive this call (itself running on a ctx.spawn thread).
+    let (code, out) = std::thread::scope(|s| {
+        let reader = s.spawn(move || {
+            let mut out = Vec::new();
+            if let Some(p) = pipe.as_mut() {
+                let _ = p.read_to_end(&mut out);
+            }
+            out
+        });
+        let deadline = Instant::now() + ENGINE_TIMEOUT;
+        let code = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break Some(status.code()),
+                Ok(None) if Instant::now() < deadline && !module_stop.load(Ordering::SeqCst) => {
+                    std::thread::sleep(Duration::from_millis(25))
+                }
+                _ => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    break None;
+                }
+            }
+        };
+        (code, reader.join().unwrap_or_default())
     });
-    let deadline = Instant::now() + ENGINE_TIMEOUT;
-    let code = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status.code(),
-            Ok(None) if Instant::now() < deadline && !module_stop.load(Ordering::SeqCst) => {
-                std::thread::sleep(Duration::from_millis(25))
-            }
-            _ => {
-                let _ = child.kill();
-                let _ = child.wait();
-                let _ = reader.join();
-                return Err("O motor de voz não respondeu a tempo.".into());
-            }
-        }
-    };
+    let Some(code) = code else { return Err("O motor de voz não respondeu a tempo.".into()) };
     drop(tmp);
-    let stdout = String::from_utf8_lossy(&reader.join().unwrap_or_default()).into_owned();
+    let stdout = String::from_utf8_lossy(&out).into_owned();
     let v = stdout
         .lines()
         .rev()
