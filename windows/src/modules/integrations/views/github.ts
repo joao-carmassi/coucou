@@ -1802,7 +1802,7 @@ function runView(r: GithubRunDetail, login: string, screen: DetailScreen): HTMLE
       r.startedAt && `iniciado ${ago(r.startedAt)}`,
     ),
     block({
-      icon: roundIcon(style.color, svg(ICONS.timer, 11)),
+      icon: roundIcon(style.color, svg(ICONS.dial, 11)),
       title: tookTitle(r, now),
       right: counted(count, "job"),
       sub: r.jobs.length ? line(...tally(r.jobs)) : undefined,
@@ -1835,7 +1835,7 @@ function jobView(job: GithubJob, run: GithubRunDetail): HTMLElement {
     titleRow(job.name, chip(job.outcome, style.color)),
     h("div", { class: "gh-facts" }, ...line(run.workflow, job.runner, job.startedAt && `iniciado ${ago(job.startedAt)}`)),
     block({
-      icon: roundIcon(style.color, svg(ICONS.timer, 11)),
+      icon: roundIcon(style.color, svg(ICONS.dial, 11)),
       title: tookTitle(job, now),
       right: counted(job.steps.length, "etapa"),
       sub: broke ? line(`quebrou em “${broke.name}”`) : job.steps.length ? line(...tally(job.steps)) : undefined,
@@ -1937,7 +1937,7 @@ function screenLook(screen: Screen): ScreenLook {
   }
   if (screen.type === "job") {
     const state = jobOf(screen)?.job.state;
-    return { label: "Job", color: state ? BUILD_STYLE[state].color : COLOR.dim, icon: () => svg(ICONS.timer, 11) };
+    return { label: "Job", color: state ? BUILD_STYLE[state].color : COLOR.dim, icon: () => svg(ICONS.dial, 11) };
   }
   const d = screen.data;
   switch (screen.target.kind) {
@@ -1971,7 +1971,7 @@ function screenLook(screen: Screen): ScreenLook {
       return {
         label: "Execução",
         color: d?.kind === "run" ? BUILD_STYLE[d.state].color : COLOR.dim,
-        icon: () => svg(ICONS.timer, 11),
+        icon: () => svg(ICONS.dial, 11),
       };
     case "comments":
       return { label: "Comentários", color: TALK_COLOR, icon: () => svg(ICONS.comment, 10, { stroke: 2.2 }) };

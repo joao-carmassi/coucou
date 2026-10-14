@@ -134,7 +134,7 @@ function buildSettings(actions: ViewActions): ViewHost {
     h(
       "div",
       { class: "settings-row" },
-      svg(ICONS.timer, 12),
+      svg(ICONS.dial, 12),
       autoLabel,
       h("div", { class: "seg" }, ...segButtons),
     ),
