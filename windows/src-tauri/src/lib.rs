@@ -331,6 +331,7 @@ pub fn run() {
             modules::claude::commands::approval_decision,
 modules::voice::voice::voice_start,
 modules::voice::voice::voice_stop,
+modules::voice::voice::voice_cancel,
 modules::voice::voice::voice_model_status,
 modules::voice::voice::voice_download_model,
             modules::claude::commands::approval_ack,

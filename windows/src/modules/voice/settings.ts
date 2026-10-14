@@ -56,7 +56,7 @@ export function voiceSettingsSection(): { el: HTMLElement; dispose(): void } {
     h("div", { class: "row" },
       h("label", { text: "Atalho de voz" }),
       input,
-      h("span", { class: "hint", text: "Entrada de voz em inglês, reconhecida no próprio computador; o microfone só abre quando você aperta o atalho. Ex.: Ctrl+Alt+V. Aperte de novo para parar. Vazio = sem atalho." }),
+      h("span", { class: "hint", text: "Entrada de voz em inglês, reconhecida no próprio computador; o microfone só abre quando você aperta o atalho. Ex.: Ctrl+Alt+V. Aperte de novo (ou Enter) para finalizar; Esc cancela. Vazio = sem atalho." }),
     ),
     h("div", { class: "row" }, h("label", { text: "Modelo de voz" }), dl, status),
     err,

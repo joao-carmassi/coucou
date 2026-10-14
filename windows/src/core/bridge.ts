@@ -103,6 +103,7 @@ export const Bridge = {
   // ── Voice module (voice) ──────────────────────────────────────────────────
   voiceStart: () => commandOrThrow<void>("voice_start"),
   voiceStop: () => command<void>("voice_stop"),
+  voiceCancel: () => command<void>("voice_cancel"),
   voiceModelStatus: () => command<VoiceStatus>("voice_model_status"),
   voiceDownloadModel: () => commandOrThrow<void>("voice_download_model"),
   // ── Integrations module (integrations): secrets, pollers, GitHub panel ────

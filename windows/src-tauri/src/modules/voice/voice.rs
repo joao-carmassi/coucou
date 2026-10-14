@@ -1,10 +1,10 @@
-// Voice input (English): a global hotkey toggles the microphone, one phrase is cut on ~1 s of silence
-// (or 25 s), transcribed on-device by Cactus' `needle.exe` + `whistle.cact` (child process on a temp WAV,
+// Voice input (English): a global hotkey toggles the microphone; the recording runs through silence until
+// the user ends it (hotkey again or Enter on the card; Esc cancels) or the 10-minute safety cap hits, then is transcribed on-device by Cactus' `needle.exe` + `whistle.cact` (child process on a temp WAV,
 // telemetry off), and the text goes to the island, which shows it on a card. Nothing is sent anywhere by
 // this module; the model files are fetched only on the Settings button, pinned and SHA-256 checked.
 //
-// shortcut: one phrase per hotkey press and a fixed loudness threshold (QUIET); a noisy room or a
-// multi-sentence dictation needs an adaptive threshold and a continuous mode.
+// shortcut: a fixed loudness threshold (QUIET) only decides "was anything said at all"; a noisy room
+// needs an adaptive threshold. There is no silence/no-speech auto-stop on purpose.
 
 use std::io::{Read, Write};
 use std::os::windows::process::CommandExt;
@@ -24,11 +24,10 @@ use crate::core::host::{blocking, ModuleCtx, ModuleHost};
 use crate::core::hotkeys;
 
 const RATE: usize = 16_000;
-const MAX_PHRASE: usize = 25 * RATE;
-const PAUSE: usize = RATE; // ~1 s of quiet ends the phrase
-const NO_SPEECH: usize = 30 * RATE; // mic is closed if nobody speaks for this long
+/// Hard safety cap so a forgotten recording cannot grow forever (~38 MB of f32); the only automatic stop.
+const MAX_RECORD: usize = 10 * 60 * RATE;
 const QUIET: f32 = 0.012;
-const ENGINE_TIMEOUT: Duration = Duration::from_secs(30);
+const ENGINE_TIMEOUT: Duration = Duration::from_secs(180); // up to 10 min of audio
 
 #[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -94,6 +93,13 @@ pub fn voice_stop() {
     stop()
 }
 
+/// Esc while listening: stop and throw the audio away (no transcription).
+#[tauri::command]
+pub fn voice_cancel() {
+    CANCEL.store(true, Ordering::SeqCst);
+    stop()
+}
+
 #[tauri::command]
 pub async fn voice_model_status() -> VoiceStatus {
     blocking(|| VoiceStatus {
@@ -116,19 +122,19 @@ pub async fn voice_download_model(app: AppHandle) -> Result<(), String> {
 
 static CAPTURING: AtomicBool = AtomicBool::new(false);
 static STOP: AtomicBool = AtomicBool::new(false);
+static CANCEL: AtomicBool = AtomicBool::new(false);
 
 pub fn stop() {
     STOP.store(true, Ordering::SeqCst);
 }
 
-/// The hotkey: stops a phrase in progress, or starts one. Runs on the main thread.
+/// The hotkey: ends the recording in progress; otherwise the island decides (`voice-hotkey`): it reopens
+/// a transcript waiting there, or calls `voice_start`. Runs on the main thread.
 pub fn on_hotkey(app: &AppHandle) {
     if CAPTURING.load(Ordering::SeqCst) {
         return stop();
     }
-    if let Err(e) = start(app) {
-        emit_state(app, "error", &e);
-    }
+    let _ = app.emit("voice-hotkey", ());
 }
 
 fn start(app: &AppHandle) -> Result<(), String> {
@@ -143,15 +149,16 @@ fn start(app: &AppHandle) -> Result<(), String> {
         return Ok(());
     }
     STOP.store(false, Ordering::SeqCst);
+    CANCEL.store(false, Ordering::SeqCst);
     let app = app.clone();
     ctx.spawn(move |module_stop| {
         emit_state(&app, "listening", "");
         let result = record(&app, &module_stop).and_then(|pcm| match pcm {
-            Some(pcm) => {
+            Some(pcm) if !CANCEL.load(Ordering::SeqCst) => {
                 emit_state(&app, "transcribing", "");
                 transcribe(&d, &pcm, &module_stop).map(Some)
             }
-            None => Ok(None),
+            _ => Ok(None),
         });
         CAPTURING.store(false, Ordering::SeqCst);
         if module_stop.load(Ordering::SeqCst) {
@@ -169,7 +176,7 @@ fn start(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Records until one phrase is cut, the user stops, or nobody speaks for 30 s. None = nothing said.
+/// Records until the user stops it or MAX_RECORD. None = nothing said.
 /// The microphone is open (and the 30 ms loop runs) only inside this function.
 fn record(app: &AppHandle, module_stop: &AtomicBool) -> Result<Option<Vec<f32>>, String> {
     let werr = |e: windows::core::Error| format!("Microfone: {}", e.message());
@@ -200,7 +207,7 @@ fn record(app: &AppHandle, module_stop: &AtomicBool) -> Result<Option<Vec<f32>>,
         let cap: IAudioCaptureClient = ac.GetService().map_err(werr)?;
         ac.Start().map_err(werr)?;
 
-        let (mut phrase, mut quiet, mut spoke, mut waited) = (Vec::<f32>::new(), 0usize, false, 0usize);
+        let (mut phrase, mut spoke) = (Vec::<f32>::new(), false);
         let (mut peak, mut ticks) = (0f32, 0u32);
         let mut out = Ok(());
         'run: while !STOP.load(Ordering::SeqCst) && !module_stop.load(Ordering::SeqCst) {
@@ -232,24 +239,10 @@ fn record(app: &AppHandle, module_stop: &AtomicBool) -> Result<Option<Vec<f32>>,
                 let _ = cap.ReleaseBuffer(frames);
                 let rms = (chunk.iter().map(|s| s * s).sum::<f32>() / chunk.len().max(1) as f32).sqrt();
                 peak = peak.max(rms);
-                if rms < QUIET {
-                    quiet += chunk.len();
-                } else {
-                    quiet = 0;
-                    spoke = true;
-                }
-                waited += chunk.len();
+                spoke |= rms >= QUIET;
                 phrase.extend(chunk);
-                if spoke && (quiet >= PAUSE || phrase.len() >= MAX_PHRASE) {
+                if phrase.len() >= MAX_RECORD {
                     break 'run;
-                }
-                if !spoke {
-                    if phrase.len() > PAUSE {
-                        phrase.drain(..phrase.len() - PAUSE / 2); // leading silence is not kept
-                    }
-                    if waited >= NO_SPEECH {
-                        break 'run;
-                    }
                 }
             }
         }

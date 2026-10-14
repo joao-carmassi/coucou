@@ -59,7 +59,7 @@ Common: header with tabs (from the modules that have one) and sound button; card
 | `media` | media | recent screenshots, recordings, dropped files |
 | `timer` | timer | countdown and stopwatch |
 | `upload`, `uploading`, `choose` | upload | drop zone, progress (Mochi is the bar's cursor), "open in Claude Code" |
-| `voice` | voice | transcript shown inline on the listening card (read-only); **Enter** sends, **Esc** cancels, no timer; keys captured only while pending |
+| `voice` | voice | records until hotkey/**Enter** (10 min safety cap, no silence stop); transcript inline on the card (read-only); **Enter** sends, **Esc** cancels, **Aguardar** parks it hidden (hover/hotkey reopens); no timer; keys captured only while listening or showing |
 
 A service module adds a pill and a card in `overview` (GitHub also a panel). Layouts (height, Mochi position and size, agent layout `none | grid | pills | column`) are registered per view (`core/layout.ts`); the window height is at most 320.
 

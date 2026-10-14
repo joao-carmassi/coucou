@@ -1,4 +1,4 @@
-// Voice input (English): a global hotkey toggles the microphone, one phrase is transcribed on the
+// Voice input (English): a global hotkey toggles the microphone, the recording is transcribed on the
 // device and shown on a card; "Enviar" (in the UI) launches a Claude session with it.
 
 pub mod cfg;

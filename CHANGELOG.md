@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.4
+
+- Voice no longer stops on silence: it records until you press the hotkey again or Enter (Esc cancels), with a 10-minute safety cap.
+- The voice transcript card stays open until Enter (send), Esc (cancel) or the new "Aguardar" button, which hides the island and keeps the text; hover or the hotkey brings it back.
+
 ## 0.2.3
 
 - Mochi's "love" emote now plays on time after hovering him; the stopped frame loop only drew it once the mouse moved.

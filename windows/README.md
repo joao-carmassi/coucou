@@ -130,12 +130,16 @@ its diff) and the end of the session transcript (title and last message).
 
 - **Timer:** pick minutes (or a stopwatch), then **Iniciar**. A sound and a note
   mark the end.
-- **Voice:** English only. The hotkey opens the microphone for one phrase (about
-  1 s of silence ends it, 25 s at most). `needle.exe` with the `whistle.cact` model
+- **Voice:** English only. The hotkey opens the microphone and it keeps recording through
+  silence until you end it: press the hotkey again or **Enter** (**Esc** cancels and drops the
+  audio). There is no silence or no-speech auto-stop; the only automatic stop is a hard safety cap of
+  10 minutes so a forgotten recording cannot grow forever. `needle.exe` with the `whistle.cact` model
   (Cactus, telemetry off) transcribes it on your PC, and the text appears inline
   on the same voice card that showed "listening" (no separate review page), with no timer:
-  **Enter** opens a new Claude Code session with it, **Esc** drops it (so does starting a new
-  capture). The island takes focus and listens for Enter/Esc only while a transcript is pending. The
+  **Enter** opens a new Claude Code session with it, **Esc** drops it, **Aguardar** hides the island
+  but keeps the transcript (hover the island or press the hotkey to bring the card back; the island
+  is not kept awake and no timer runs while it waits). The island takes focus and listens for
+  Enter/Esc only while listening or while the card is showing. The
   model (~20 MB) is downloaded only from the button **Baixar modelo** in Settings →
   Voz, from huggingface.co, pinned and SHA-256 checked, into `%LOCALAPPDATA%\Coucou\voice`.
 

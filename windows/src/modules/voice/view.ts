@@ -1,5 +1,5 @@
 // The voice card: "microfone aberto", then the transcript inline (read-only). The transcript always
-// waits for Enter (the module's key listener calls send), never a timer, which launches a NEW Claude Code session; nothing here types into
+// waits for Enter (the module's key listener calls send), Esc or "Aguardar" (parks it hidden), never a timer; Enter launches a NEW Claude Code session; nothing here types into
 // an existing one. State lives here (one voice at a time); the module resets it on start/stop.
 
 import { Bridge } from "../../core/bridge";
@@ -17,12 +17,14 @@ export const Voice = {
   level: null as HTMLElement | null,
   /** Review is over (sent or cancelled): the module lets go of the pin and folds the island. */
   leave: (() => {}) as () => void,
+  /** "Aguardar": hide the island, keep the transcript for later. */
+  park: (() => {}) as () => void,
   reset() {
     this.phase = "none";
     this.text = this.note = "";
     this.busy = false;
     this.level = null;
-    this.leave = () => {};
+    this.leave = this.park = () => {};
   },
 };
 
@@ -73,14 +75,15 @@ export function buildVoiceView(_ctx: ViewContext): ViewHost {
       switch (Voice.phase) {
         case "listening":
           title.textContent = "● Microfone aberto";
-          sub.textContent = "Fale em inglês. Uma pausa de 1 s fecha a gravação; nada é enviado sem Enter.";
-          actions.append(button("Parar", "secondary", () => void Bridge.voiceStop()));
+          sub.textContent = "Fale em inglês, sem pressa. Enter ou atalho finaliza · Esc cancela.";
+          actions.append(button("Finalizar", "secondary", () => void Bridge.voiceStop()));
           break;
         case "transcribing":
           title.textContent = "Transcrevendo…";
           break;
         case "review":
           sub.textContent = "Enter envia · Esc cancela";
+          actions.append(button("Aguardar", "secondary", () => Voice.park()));
           break;
         case "sending":
           title.textContent = "Enviando…";
