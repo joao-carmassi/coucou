@@ -1,5 +1,5 @@
-// The voice card: "microfone aberto", the transcript, and where it goes. The transcript always
-// waits for Enter (or the Enviar button), never a timer, which launches a NEW Claude Code session; nothing here types into
+// The voice card: "microfone aberto", then the transcript inline (read-only). The transcript always
+// waits for Enter (the module's key listener calls send), never a timer, which launches a NEW Claude Code session; nothing here types into
 // an existing one. State lives here (one voice at a time); the module resets it on start/stop.
 
 import { Bridge } from "../../core/bridge";
@@ -29,7 +29,7 @@ export const Voice = {
 const button = (label: string, kind: "primary" | "secondary", onclick: () => void) =>
   h("button", { class: `btn ${kind}`, onclick }, h("span", { text: label }));
 
-async function send() {
+export async function send() {
   Voice.text = Voice.text.trim();
   if (Voice.busy || !Voice.text) return;
   Voice.busy = true;
@@ -55,19 +55,10 @@ export function buildVoiceView(_ctx: ViewContext): ViewHost {
     h("div", { style: "height:100%;width:0;background:#ef4444;transition:width .1s" }));
   Voice.level = meter.firstElementChild as HTMLElement;
   const actions = h("div", { style: "display:flex;gap:8px;margin-top:6px" });
-  const field = h("textarea", { rows: "2", spellcheck: "false", style: "display:none;width:100%;resize:none" }) as HTMLTextAreaElement;
-  const body = h("div", { class: "stack", style: "padding:0 18px 0 100px" }, title, field, sub, meter, actions);
+  const text = h("div", { style: "display:none;max-height:64px;overflow:auto;white-space:pre-wrap;word-break:break-word;font-size:13px" });
+  const body = h("div", { class: "stack", style: "padding:0 18px 0 100px" }, title, text, sub, meter, actions);
   const el = h("div", { class: "view" }, h("div", { class: "card" }, body));
   const done = () => { Voice.phase = "none"; Voice.leave(); };
-  // Enter sends, Esc cancels, Shift+Enter is a newline. No timer ever sends.
-  field.addEventListener("input", () => { Voice.text = field.value; });
-  field.addEventListener("keydown", (e) => {
-    e.stopPropagation();
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); }
-    else if (e.key === "Escape") done();
-  });
-  field.addEventListener("blur", () => void Bridge.focusWindow(false));
-  let editing = false;
 
   return {
     el,
@@ -76,14 +67,9 @@ export function buildVoiceView(_ctx: ViewContext): ViewHost {
       meter.style.display = Voice.phase === "listening" ? "" : "none";
       sub.textContent = "";
       const review = Voice.phase === "review";
-      field.style.display = review ? "" : "none";
+      text.style.display = review ? "" : "none";
       title.style.display = review ? "none" : "";
-      if (review && !editing) {
-        editing = true;
-        field.value = Voice.text;
-        void Bridge.focusWindow(true);
-        setTimeout(() => field.focus(), 80);
-      } else if (!review) editing = false;
+      text.textContent = review ? Voice.text : "";
       switch (Voice.phase) {
         case "listening":
           title.textContent = "● Microfone aberto";
@@ -94,8 +80,7 @@ export function buildVoiceView(_ctx: ViewContext): ViewHost {
           title.textContent = "Transcrevendo…";
           break;
         case "review":
-          sub.textContent = "Enter envia · Esc cancela · Shift+Enter quebra linha";
-          actions.append(button("Enviar", "primary", () => void send()), button("Cancelar", "secondary", done));
+          sub.textContent = "Enter envia · Esc cancela";
           break;
         case "sending":
           title.textContent = "Enviando…";

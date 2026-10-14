@@ -1,10 +1,11 @@
-// Voice module: hotkey (Rust) -> listening -> transcript -> review card -> "Enviar" launches a
+// Voice module: hotkey (Rust) -> listening -> transcript -> transcript inline on the voice card -> Enter launches a
 // Claude session with the text. Needs the claude module (catalog `requires`).
 
 import type { Disposer, IslandApi, ModuleDef } from "../../core/moduleApi";
+import { Bridge } from "../../core/bridge";
 import { State } from "../../core/state";
 import { voiceSettingsSection } from "./settings";
-import { buildVoiceView, Voice } from "./view";
+import { buildVoiceView, send, Voice } from "./view";
 
 const reviewing = () => Voice.phase === "review";
 const STATUS: Partial<Record<string, string>> = { listening: "ouvindo…", transcribing: "transcrevendo…", review: "voz: revisar" };
@@ -22,7 +23,23 @@ function start(api: IslandApi): Disposer {
     if (api.island.mode() === "expanded") api.island.setView("voice");
     else api.island.open("voice");
   };
+  // Enter/Esc are captured only while a transcript is pending: the listener exists only then and the
+  // window takes focus (Bridge.focusWindow) so the keys reach it while the user typed elsewhere.
+  let offKeys: Disposer | null = null;
+  const keys = (on: boolean) => {
+    if (on === !!offKeys) return;
+    void Bridge.focusWindow(on);
+    if (!on) { offKeys?.(); offKeys = null; return; }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+      if (e.key === "Enter") { e.preventDefault(); void send(); }
+      else if (e.key === "Escape") { e.preventDefault(); Voice.phase = "none"; Voice.leave(); }
+    };
+    window.addEventListener("keydown", onKey);
+    offKeys = () => window.removeEventListener("keydown", onKey);
+  };
   Voice.leave = () => {
+    keys(false);
     State.isPinned = false;
     line();
     api.island.close();
@@ -41,6 +58,7 @@ function start(api: IslandApi): Disposer {
         }
         return;
       }
+      keys(false);
       line();
       show();
     }),
@@ -51,14 +69,16 @@ function start(api: IslandApi): Disposer {
       Voice.text = text;
       Voice.phase = "review";
       State.isPinned = true;
+      keys(true);
       line();
       show();
     }),
-    // The transcript stays reachable (a close or a hover does not lose it) until Enviar/Cancelar.
+    // The transcript stays reachable (a close or a hover does not lose it) until Enter/Esc.
     api.provide("homeView", () => (reviewing() ? { view: "voice", pin: true, priority: 40 } : null)),
     api.island.keepAwake(reviewing),
   ];
   return () => {
+    keys(false);
     for (const off of offs.reverse()) off();
     api.status.set(null);
     Voice.reset();
