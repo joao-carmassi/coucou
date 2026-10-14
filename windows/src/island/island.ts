@@ -1005,8 +1005,11 @@ export class Island implements IslandHost {
     return State.mode === "expanded" && State.isPinned;
   }
 
+  /** From the live cursor: wasInIsland is frozen while a module drag holds the pointer (onCursor returns early). */
   mouseInside(): boolean {
-    return this.wasInIsland;
+    const r = this.islandRect();
+    const { x, y } = State.mouse;
+    return x >= r.x - HIT_MARGIN && x <= r.x + r.w + HIT_MARGIN && y >= r.y - HIT_MARGIN && y <= r.y + r.h + HIT_MARGIN;
   }
 
   fsmState(): FsmState {
