@@ -292,7 +292,6 @@ export class Island implements IslandHost {
     State.view = view;
     if (State.mode !== "expanded") this.setMode("expanded");
     else this.animateGeometry(false);
-    State.lastActivity = performance.now();
     this.homeCollapseAt = null;
     State.notify();
   }
@@ -312,7 +311,6 @@ export class Island implements IslandHost {
     }
     const grew = viewLayout(view).height >= viewLayout(State.view).height;
     State.view = view;
-    State.lastActivity = performance.now();
     this.animateGeometry(!grew);
     State.notify();
   }
@@ -570,7 +568,6 @@ export class Island implements IslandHost {
 
     this.islandEl.addEventListener("mousedown", (e) => {
       Sound.resume();
-      State.lastActivity = performance.now();
       if (State.mode !== "expanded") {
         // Compact opens on the release: a press that travels is a sideways nudge.
         if (State.mode === "compact") this.nudge = { x: e.clientX, off: this.offset(this.width.value), moved: false };
@@ -589,7 +586,6 @@ export class Island implements IslandHost {
 
     window.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && State.mode === "expanded" && !State.isPinned) this.collapse();
-      State.lastActivity = performance.now();
     });
 
 
@@ -1019,6 +1015,7 @@ export class Island implements IslandHost {
     }
 
     syncMiniBotStates(State.pills);
+    pruneMiniBots();
     this.engine.setState(this.effState());
   }
 

@@ -22,7 +22,6 @@ class SoundEngine {
   private loading: Promise<void> | null = null;
   private idleTimer: number | null = null;
   private loaded = false;
-  private extra = new Map<string, string>();
 
   private async load(name: string, url: string) {
     const ctx = this.ctx;
@@ -31,18 +30,10 @@ class SoundEngine {
       const res = await fetch(url);
       if (!res.ok) return;
       const buf = await ctx.decodeAudioData(await res.arrayBuffer());
-      // A module sound unregistered while it loaded must not come back.
-      if (SOUND_NAMES.includes(name as never) || this.extra.has(name)) this.buffers.set(name, buf);
+      this.buffers.set(name, buf);
     } catch {
       /* a missing sound must never break the island */
     }
-  }
-
-  /** A module's own sound (a WAV url). Loaded with the rest, or at once if the engine is already up. */
-  register(name: string, url: string): () => void {
-    this.extra.set(name, url);
-    if (this.loaded) void this.load(name, url);
-    return () => { this.extra.delete(name); this.buffers.delete(name); };
   }
 
   /** Creates the context and decodes every WAV. Safe to call more than once. */
@@ -57,12 +48,7 @@ class SoundEngine {
       master.gain.value = this.volume;
       master.connect(ctx.destination);
       this.master = master;
-      await Promise.all([
-        ...SOUND_NAMES.map((name) => this.load(name, `/sounds/${name}.wav`)),
-        ...[...this.extra].map(([name, url]) => this.load(name, url)),
-      ]);
-      // A sound registered while the rest was loading missed the snapshot above.
-      await Promise.all([...this.extra].filter(([n]) => !this.buffers.has(n)).map(([n, u]) => this.load(n, u)));
+      await Promise.all(SOUND_NAMES.map((name) => this.load(name, `/sounds/${name}.wav`)));
       this.loaded = true;
       this.idle();
     })();

@@ -2,13 +2,14 @@
 // Nothing here runs at import time: no timers, no listeners.
 
 import { Avatar } from "./avatar";
-import { Bridge, command, onEvent } from "./bridge";
+import { Bridge, onEvent } from "./bridge";
 import { Compact } from "./compact";
 import { Hooks, Services, onMode } from "./hooks";
 import { moduleSettings } from "./moduleSettings";
 import { dropPills, focusPill, putPill } from "./pills";
 import { Requests } from "./requests";
 import { Sound } from "./sound";
+import { createMiniBot, freeMochi, mochiSprite } from "../mochi/minibots";
 import { resolveEnabled } from "./moduleApi";
 import type { AvatarSignal, Disposer, IslandApi, IslandHooks, IslandHost, ModuleDef, StatusLine } from "./moduleApi";
 import { State } from "./state";
@@ -60,7 +61,10 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
         if (putPill(State, id, pill, at)) State.notify();
       },
       remove(pid) { if (dropPills(State, id, pid)) State.notify(); },
-      clear() { if (dropPills(State, id)) State.notify(); },
+      all: () => State.pills,
+      get: (pid) => State.pills.find((p) => p.id === pid) ?? null,
+      front: () => State.focusPill,
+      others: () => State.otherPills,
       focus(pid) {
         const prev = State.focusId;
         if (!focusPill(State, id, pid, opening)) return () => {};
@@ -72,12 +76,12 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
         };
       },
     },
-    sound: { register: (name, url) => scope.add(Sound.register(name, url)) },
+    sound: { play: (name) => Sound.play(name) },
+    mochi: { mini: createMiniBot, free: freeMochi, sprite: mochiSprite },
     settings: <T extends object>() => mySettings.get<T>(),
     saveSettings: (patch) => mySettings.save(patch),
     paused: () => State.paused,
     onPause: (fn) => scope.add(State.onPause(fn)),
-    invoke: (cmd, args) => command(cmd, args),
     listen<T>(event: string, fn: (p: T) => void): Disposer {
       let off: (() => void) | null = null;
       let dead = false;
@@ -124,14 +128,16 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
       wake: () => host.reveal(),
       hide: () => host.hide(),
       keepAwake: (pred) => scope.add(Hooks.provide("keepAwake", pred)),
-      isVisible: () => State.mode !== "hidden",
       mode: () => State.mode,
       fsmState: () => host.fsmState(),
       mouseInside: () => host.mouseInside(),
       view: () => State.view,
       note: (t) => host.note(t),
       error: (e) => host.error(e),
-      layoutHint: () => host.layoutHint(),
+      onChange: (fn) => scope.add(State.subscribe(() => { try { fn(); } catch (err) { console.error(`[coucou] ${id} onChange failed`, err); } })),
+      home: () => State.defaultView(),
+      mouse: () => State.mouse,
+      mouseLocal: () => State.mouseInIsland,
       redraw: () => host.redraw(),
       overlay: (o) => scope.add(host.addOverlay(o)),
     },

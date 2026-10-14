@@ -98,8 +98,6 @@ class AppState {
 
   noteMessage: string | null = null;
 
-  lastActivity = performance.now();
-
   settings: Settings = { ...DEFAULT_SETTINGS };
 
   private listeners = new Set<Listener>();
@@ -120,10 +118,6 @@ class AppState {
 
   get focusPill(): Pill | null {
     return this.pills.find((t) => t.id === this.focusId) ?? this.pills[0] ?? null;
-  }
-
-  get effectiveState(): BotStateName {
-    return this.stateOverride ?? this.focusPill?.mood ?? this.avatarState;
   }
 
   get otherPills(): Pill[] {

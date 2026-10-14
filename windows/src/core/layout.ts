@@ -1,6 +1,12 @@
 // Island geometry — ported from IslandTypes.swift + IslandWindowController.islandSize
 // + IslandRootView.botPosition. All values are logical pixels, identical to the
 // macOS app's points.
+import { EXPANDED_W, PANEL_H } from "./moduleApi";
+export { EXPANDED_W, PANEL_H };
+export { botGlowColor } from "../kit/palette";
+export { washRGBA } from "../kit/card";
+export type { Wash } from "../kit/card";
+
 export type IslandMode = "hidden" | "compact" | "expanded";
 
 export type CoreViewName = "empty" | "confused" | "note" | "settings" | "greeting";
@@ -40,13 +46,11 @@ export interface ViewLayout {
 // The window is a fixed 720×320 (largest view) like the macOS panel; the island is
 // drawn inside it, glued to the top edge and horizontally centred.
 export const PANEL_W = 720;
-export const PANEL_H = 320;
 
 // No notch on a PC: these are the hidden/compact sizes from docs/SPEC.md.
 export const NOTCH_W = 184;
 export const NOTCH_H = 32;
 export const COMPACT_W = 288; // NOTCH_W + 104 — only islandSize's default still uses it
-export const EXPANDED_W = 640;
 
 // The compact island fits its content: padding | bot | gap | (mini grid or text) | padding.
 export const COMPACT_PAD = 14;
@@ -154,27 +158,6 @@ export function botPosition(
   }
 }
 
-export function botGlowColor(s: BotStateName): string {
-  switch (s) {
-    case "working":
-      return "#3B9EFF";
-    case "thinking":
-      return "#A78BFA";
-    case "searching":
-      return "#6366F1";
-    case "alert":
-      return "#F5A524";
-    case "error":
-      return "#F4505E";
-    case "done":
-      return "#34D399";
-    case "waiting":
-      return "#F59E0B";
-    default:
-      return "#FFFFFF";
-  }
-}
-
 export function botGlowOpacity(s: BotStateName): number {
   switch (s) {
     case "idle":
@@ -184,29 +167,5 @@ export function botGlowOpacity(s: BotStateName): number {
       return 0;
     default:
       return 0.65;
-  }
-}
-
-// Card wash colours (CardBackground.washColor)
-export type Wash = "red" | "green" | "pink" | "amber" | "cyan" | "indigo" | "soft" | null;
-
-export function washRGBA(wash: Wash): string {
-  switch (wash) {
-    case "red":
-      return "rgba(244,80,94,0.55)";
-    case "green":
-      return "rgba(52,211,153,0.5)";
-    case "pink":
-      return "rgba(244,114,182,0.55)";
-    case "amber":
-      return "rgba(245,165,36,0.42)";
-    case "cyan":
-      return "rgba(34,211,238,0.38)";
-    case "indigo":
-      return "rgba(99,102,241,0.5)";
-    case "soft":
-      return "rgba(255,255,255,0.08)";
-    default:
-      return "rgba(0,0,0,0)";
   }
 }

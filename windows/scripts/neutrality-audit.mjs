@@ -6,9 +6,13 @@
 //
 // LINTS (behavioural; FAIL by default when a count is above scripts/neutrality-ratchet.json; `--warn-lints` only prints):
 //   A. boundary: src/modules/** must not import `State` (value import from core/state), write `State.<field> =`, or
-//      value-import core other than core/moduleApi, kit/* (`import type` is always fine).
-//   B. dead fields: every field of Settings, AppState, ViewLayout and IslandApi must be READ in src/{core,island,views,mochi}
-//      (IslandApi: used by any src file but moduleApi.ts/registry.ts, since modules are its readers).
+//      value-import core other than core/moduleApi, kit/* (`import type` is always fine). From core/state only `State` may
+//      be value-imported (and counts as a stateImport); anything else from there is a foreign core import.
+//   A2. crossModuleImports: a module value-imports `../<other>/x` where x is not `api` (`import type` is fine).
+//   K. kit rule (a finding, not a ratchet): src/kit/** may value-import only kit/* and @tauri-apps/*; from core/ and mochi/
+//      only `import type`.
+//   B. dead fields: every field of Settings, AppState, ViewLayout and IslandApi must be READ in src/{core,island,views,mochi,kit}
+//      (Settings: also src/settings/** and src/main.ts; IslandApi: used by any src file but moduleApi.ts/registry.ts, since modules are its readers).
 // scripts/neutrality-ratchet.json holds the counts; they may only go down (`--write-ratchet` lowers them).
 //
 // Rules:
@@ -24,7 +28,7 @@
 //
 // ALLOWLIST: [file suffix, substring of the offending line, reason]. Keep each entry justified.
 import { readdirSync, readFileSync, writeFileSync, statSync, existsSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(fileURLToPath(import.meta.url), "..", "..");
@@ -164,15 +168,34 @@ const codeLines = (f) => {
   const st = { block: false };
   return readFileSync(f, "utf8").split("\n").map((l) => splitLine(l, st, "ts").code);
 };
+// Kit rule: value imports only from kit/* and @tauri-apps/*.
+for (const f of files(join(root, "src/kit"), [".ts"])) {
+  const code = codeLines(f).join("\n");
+  for (const im of code.matchAll(/\b(?:import|export)\s+(?!type\b)([^;]*?)\s+from\s+["']([^"']+)["']/g)) {
+    if (!/\w/.test(im[1].replace(/\btype\s+\w+/g, "")) || /^(\.\/|@tauri-apps\/|\.\.\/kit\/)/.test(im[2])) continue;
+    add(rel(f), code.slice(0, im.index).split("\n").length, "kit value import outside kit/@tauri-apps", im[0].split("\n")[0], false);
+  }
+}
+
 const ALLOWED_CORE = /\/(core\/moduleApi|kit\/[\w/-]+)$/;
-const stateImports = [], stateWrites = [], foreignImports = [];
+const stateImports = [], stateWrites = [], foreignImports = [], crossImports = [];
 for (const m of moduleDirs) for (const f of files(join(root, "src/modules", m), [".ts"])) {
   const lines = codeLines(f), code = lines.join("\n");
   for (const im of code.matchAll(/\bimport\s+(?!type\b)([^;]*?)\s+from\s+["']((?:\.\.\/)+(?:core|views|island|mochi|kit|style|settings)\/[^"']+)["']/g)) {
     const at = { m, file: rel(f), line: code.slice(0, im.index).split("\n").length };
     const clause = im[1].replace(/\btype\s+\w+/g, ""); // `{ type X }` is a type
-    if (/core\/state$/.test(im[2])) { if (/\bState\b/.test(clause)) stateImports.push(at); }
+    if (/core\/state$/.test(im[2])) {
+      const names = clause.replace(/[{}]/g, "").split(",").map((x) => x.trim()).filter(Boolean);
+      if (names.includes("State")) stateImports.push(at);
+      if (names.some((x) => x !== "State")) foreignImports.push({ ...at, what: "core/state" });
+    }
     else if (!ALLOWED_CORE.test(im[2]) && /\w/.test(clause)) foreignImports.push({ ...at, what: im[2].replace(/^(\.\.\/)+/, "") });
+  }
+  for (const im of code.matchAll(/\bimport\s+(?!type\b)([^;]*?)\s+from\s+["']((?:\.\.?\/)+[^"']+)["']/g)) {
+    if (!/\w/.test(im[1].replace(/\btype\s+\w+/g, ""))) continue;
+    const target = relative(join(root, "src/modules"), resolve(dirname(f), im[2])).split(sep);
+    if (target[0] === ".." || target[0] === m || target.length < 2 || target.slice(1).join("/").replace(/\.ts$/, "") === "api") continue;
+    crossImports.push({ m, file: rel(f), line: code.slice(0, im.index).split("\n").length, what: target.join("/") });
   }
   lines.forEach((c, i) => { if (/\bState\.[\w.]+\s*(?:=(?!=)|\+=|-=)/.test(c)) stateWrites.push({ m, file: rel(f), line: i + 1 }); });
 }
@@ -209,6 +232,7 @@ function members(file, kind, name, nested) {
 const srcTs = files(join(root, "src"), [".ts"]);
 const coreTs = ["core", "island", "views", "mochi", "kit"].flatMap((d) => files(join(root, "src", d), [".ts"]));
 const corpus = (list) => list.map((f) => ({ f, code: codeLines(f).join("\n") }));
+const settingsCode = corpus([...files(join(root, "src/settings"), [".ts"]), join(root, "src/main.ts")]);
 const coreCode = corpus(coreTs), apiCode = corpus(srcTs.filter((f) => !/core\/(moduleApi|registry)\.ts$/.test(rel(f)))), moduleCode = corpus(srcTs.filter((f) => rel(f).startsWith("src/modules/")));
 const notWrite = String.raw`(?!\s*(?:=(?!=)|[+\-*]=|\+\+|--))`;
 const readIn = (list, path) => {
@@ -219,7 +243,7 @@ const readIn = (list, path) => {
 };
 const deadFields = [];
 for (const [owner, file, kind, name, nested, scope] of [
-  ["Settings", "src/core/state.ts", "interface", "Settings", false, coreCode],
+  ["Settings", "src/core/state.ts", "interface", "Settings", false, [...coreCode, ...settingsCode]],
   ["AppState", "src/core/state.ts", "class", "AppState", false, coreCode],
   ["ViewLayout", "src/core/layout.ts", "interface", "ViewLayout", false, coreCode],
   ["IslandApi", "src/core/moduleApi.ts", "interface", "IslandApi", true, apiCode],
@@ -230,7 +254,7 @@ for (const [owner, file, kind, name, nested, scope] of [
   deadFields.push({ owner, field, mods });
 }
 
-const lintCounts = { stateImports: stateImports.length, stateWrites: stateWrites.length, foreignCoreImports: foreignImports.length, deadFields: deadFields.length };
+const lintCounts = { stateImports: stateImports.length, stateWrites: stateWrites.length, foreignCoreImports: foreignImports.length, crossModuleImports: crossImports.length, deadFields: deadFields.length };
 if (process.argv.includes("--write-ratchet")) {
   const next = Object.fromEntries(Object.entries(lintCounts).map(([k, v]) => [k, Math.min(v, ratchet[k] ?? v)]));
   // `reasons` (why a count stays above zero) is hand-written: keep it.
@@ -246,6 +270,7 @@ const perModule = (list, label, extra = () => "") => {
 perModule(stateImports, "State import  ");
 perModule(stateWrites, "State write   ");
 perModule(foreignImports, "core import   ", (x) => ` (${x.what})`);
+perModule(crossImports, "cross import  ", (x) => ` (${x.what})`);
 for (const d of deadFields) console.log(`  dead field    ${(d.owner + "." + d.field).padEnd(30)} ${d.mods ? `mentioned ${d.mods}x in modules` : "unused"}`);
 let lintBad = 0;
 for (const [k, v] of Object.entries(lintCounts)) {

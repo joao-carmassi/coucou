@@ -4,11 +4,14 @@
 import { h, svg, clear } from "../kit/dom";
 import { ICONS } from "../kit/icons";
 import { State } from "../core/state";
-import { washRGBA } from "../core/layout";
-import type { IslandViewName, Wash } from "../core/layout";
+import { card } from "../kit/card";
+import type { Wash } from "../kit/card";
+import type { IslandViewName } from "../core/layout";
 import type { TabDef, ViewHost } from "../core/moduleApi";
 
 export type { ViewHost } from "../core/moduleApi";
+export { card };
+export type { Wash };
 
 export interface ViewActions {
   setView(v: IslandViewName): void;
@@ -20,12 +23,6 @@ export interface ViewActions {
 }
 
 // ── Shared pieces ─────────────────────────────────────────────────────────────
-
-export function card(wash: Wash, ...children: (Node | string)[]): HTMLElement {
-  const el = h("div", { class: wash ? "card wash" : "card" }, ...children);
-  if (wash) el.style.setProperty("--wash", washRGBA(wash));
-  return el;
-}
 
 // ── Header ────────────────────────────────────────────────────────────────────
 

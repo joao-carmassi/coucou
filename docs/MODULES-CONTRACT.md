@@ -124,20 +124,19 @@ export interface IslandHooks { homeView(): HomeRequest | null; keepAwake(): bool
 export interface IslandHost { // what Island lends the registry
   readonly actions: ViewActions; open(view: string): void; addRequest(owner: string, spec: RequestSpec): Disposer; hide(): void; collapse(): void; reveal(): void;
   setView(view: string): void; note(text: string): void; error(err: unknown): void; mouseInside(): boolean;
-  fsmState(): FsmState; layoutHint(): void; redraw(): void;
+  fsmState(): FsmState; layoutHint(): void; redraw(): void; // host side only; modules get api.island.redraw
   addView(def: ViewDef, ctx: ViewContext): Disposer; setTabs(tabs: TabDef[]): void; addOverlay(o: Overlay): Disposer;
   avatarEmote(e: BotEmoteName): void; avatarMorph(v: number): void; avatarGulp(): void }
 export interface IslandApi {
   readonly id: string; settings(): Settings;
-  invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null>;
   listen<T>(event: string, fn: (payload: T) => void): Disposer;
   timeout(fn: () => void, ms: number): Disposer;
   interval(fn: () => void, ms: number, opts?: { whenVisible?: boolean }): Disposer;
   status: { set(line: StatusLine | null): void };
   avatar: { publish(sig: AvatarSignal | null): void; emote(e: BotEmoteName): void; morph(v: number): void; gulp(): void };
   island: { open(view: string): void; request(spec: { view: string; priority: number; pin?: boolean; ms?: number }): Disposer; busy(): boolean; setView(view: string): void; close(): void; wake(): void; hide(): void;
-    keepAwake(pred: () => boolean): Disposer; isVisible(): boolean; mode(): IslandMode; fsmState(): FsmState; mouseInside(): boolean; view(): string;
-    note(text: string): void; error(err: unknown): void; layoutHint(): void; redraw(): void; overlay(o: Overlay): Disposer };
+    keepAwake(pred: () => boolean): Disposer; mode(): IslandMode; fsmState(): FsmState; mouseInside(): boolean; view(): string;
+    note(text: string): void; error(err: unknown): void; overlay(o: Overlay): Disposer; /* + onChange/home/mouse/mouseLocal/redraw: see "Core API (WP0)" */ };
   provide<K extends keyof IslandHooks>(hook: K, fn: IslandHooks[K]): Disposer;
   provide<T>(service: `${string}.${string}`, impl: T): Disposer; // services: namespaced key, removed when the module stops
   use<T>(service: `${string}.${string}`): T | undefined;          // first provider; undefined = feature absent
@@ -218,6 +217,21 @@ Nothing below is verified at runtime beyond the checks in `docs/idle-baseline.md
 | github, vercel, stripe, n8n, resend, calcom, notion | OFF | One module per service (group "Integrações"). One shared scheduler, no task while none is on. Services used: `board.card`, `board.news`, `board.focus`; hook, `avatar.tint` |
 
 Known limit: the compact grid shows at most 4 mini pills (display limit, not a limit on modules).
+
+## Core API (WP0)
+
+Everything below is scoped to the module (disposed when it stops) and costs nothing while unused. Types live in `core/moduleApi.ts`.
+
+- **Transport seam.** `kit/tauri.ts` owns `IS_TAURI`, `command`, `commandOrThrow`, `onEvent` (core/bridge re-exports them). `kit/app.ts` owns `App = { log, openUrl, openSettingsWindow, focusWindow, inboxIngest }`; `Bridge` spreads `...App`, so core callers did not change. A module's own Rust commands go through its own bridge.ts on `kit/tauri`.
+- **Kit rule.** `src/kit/**` may value-import only `kit/*` and `@tauri-apps/*`; from `core/` and `mochi/` only `import type`. Moved into the kit (old paths re-export, shims go in WP-Z): `kit/canvas.ts` (`wipe`), `kit/card.ts` (`card`, `washRGBA`, `Wash`), `kit/palette.ts` (`botGlowColor`).
+- **Constants/types.** `BAND`, `PANEL_H = 320`, `EXPANDED_W = 640` and `export type { Pill }` live in moduleApi (layout re-exports the constants, no runtime cycle); `FreeMochi`, `MochiSprite` too.
+- **Pills (read).** `all(): readonly Pill[]`, `get(id): Pill | null`, `front(): Pill | null` (= `State.focusPill`, first pill when none is focused), `others(): readonly Pill[]` (every pill but the front). Read-only views of all modules' pills; writes stay owner-scoped (`set`, `remove`, `focus`). `pills.clear` was removed.
+- **Island.** `onChange(fn): Disposer` (after every State change; a throwing `fn` is logged, not propagated), `home(): string` (live `State.defaultView()`; `"empty"` with no module), `mouse(): {x,y}` (screen px), `mouseLocal(): {x,y}` (relative to the island's top-left), `redraw(): void` (next frame). Removed: `isVisible` (use `mode() !== "hidden"`) and `layoutHint` (a view that changes height uses `ViewHost.height` / `ctx.onResize()`).
+- **Sound.** `api.sound = { play(name: string): void }`. `register` is gone along with `Sound.register`.
+- **Mochi.** `api.mochi.mini(pill, size): HTMLElement`; `free(color, mood, size, eyes?): FreeMochi { el; set(color, mood) }` (`set` re-adds the canvas to the live set, so a reused crew member never freezes); `sprite({ overhang? }): MochiSprite { update(dt); draw(ctx, w, h); setState(m, instant?); emote(e, ms?); color(hex | null) }` for a canvas the module owns and ticks (`emote` takes milliseconds, default 1800). Mini and free canvases are ticked by the island's loop; the island prunes detached ones in every `syncDom`, so modules never call `pruneMiniBots`.
+- **Removed:** `api.invoke`, `pills.clear`, `sound.register`, `island.isVisible`, `island.layoutHint`, and the unread `State.lastActivity` / `effectiveState`.
+- **Audit lints** (`scripts/neutrality-audit.mjs`, ratchet in `scripts/neutrality-ratchet.json`): a module may value-import from `core/state` only `State` (and that counts as a stateImport; any other name counts as a foreign core import); new `crossModuleImports`: a module may value-import another module only through its `api.ts` (`import type` is free); the kit rule is a plain finding; dead `Settings` fields are also looked up in `src/settings/**` and `src/main.ts`.
+- Tests: `tests/harness/moduleApi.test.ts`.
 
 ## Neutrality baseline
 
@@ -321,10 +335,10 @@ Modules read `State` (pills, focusId, mode, view) but never write it; the three 
 
 ## Pills, badges, moods, sounds (M5 neutrality)
 
-- **Pill** (`core/state.ts`): `{ id, label, color, mood, emote?, eye?, badge?, owner? }`. A module puts pills in the compact grid / overview row through `api.pills`: `set(pill, at?)` (a new pill needs `label` + `color`; later calls patch fields, `null` clears `emote`/`eye`/`badge`), `remove(id)`, `clear()`. `at`: `"start"`, `{ after: id }` (missing anchor = start), `{ before: id }` (missing anchor = end), default the end. The registry stamps `owner` (a module cannot touch another's pill) and removes all of a module's pills when it stops (focus moves off a removed pill). Modules never write `State.pills`. Data only one module needs (the steps of an agent pill) stays in that module, keyed by pill id.
+- **Pill** (`core/state.ts`): `{ id, label, color, mood, emote?, eye?, badge?, owner? }`. A module puts pills in the compact grid / overview row through `api.pills`: `set(pill, at?)` (a new pill needs `label` + `color`; later calls patch fields, `null` clears `emote`/`eye`/`badge`), `remove(id)` (`clear()` is gone: remove each id). `at`: `"start"`, `{ after: id }` (missing anchor = start), `{ before: id }` (missing anchor = end), default the end. The registry stamps `owner` (a module cannot touch another's pill) and removes all of a module's pills when it stops (focus moves off a removed pill). Modules never write `State.pills`. Data only one module needs (the steps of an agent pill) stays in that module, keyed by pill id.
 - **Badge**: `"alert" | "done" | "error"` (`core/badge.ts`). Old names (`approval`, `finished`) are no longer accepted.
 - **Mood** (`BotStateName`): `idle working thinking searching alert ask error done waiting sleeping dizzy`. Old names (`approval`, `question`, `finished`, `ratelimit`) are no longer accepted by `api.avatar.publish` / `api.pills.set`; `Mochi.setState` ignores unknown moods. Sound names are the neutral ones and match `sounds/<name>.wav`. Emote names are unchanged. View names (`approval`, `question`, `finished`) are Claude's own views, not moods.
-- **Sounds**: neutral names (`SOUND_NAMES` in `core/sound.ts`) are the WAV file names in `sounds/`. `api.sound.register(name, url)` adds a module's own WAV (removed when the module stops).
+- **Sounds**: neutral names (`SOUND_NAMES` in `core/sound.ts`) are the WAV file names in `sounds/`. `api.sound.play(name)` plays one of them (`api.sound.register` is gone: a module cannot add WAVs).
 - **Status priority**: the core only says "higher wins, tie goes to the most recent" (+ optional `BAND`). Numbers the shipped modules use today:
 
 | Priority | Who |

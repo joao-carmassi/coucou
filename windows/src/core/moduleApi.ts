@@ -3,14 +3,30 @@
 import type { BotEmoteName, BotStateName, IslandMode, ViewLayout } from "./layout";
 import type { RequestSpec } from "./requests";
 import type { ModuleSettings } from "./moduleSettings";
-import type { PillAt, PillInput } from "./state";
+import type { Pill, PillAt, PillInput } from "./state";
 import type { FsmState } from "../island/fsm";
 import type { ViewActions } from "../views/views";
 
+export type { Pill } from "./state";
 export type Disposer = () => void;
 
 /** Optional neutral priority bands for status lines and avatar signals (any number works). */
 export const BAND = { URGENT: 90, NOTICE: 60, ACTIVE: 30, AMBIENT: 10 } as const;
+
+/** The window is a fixed PANEL_W x PANEL_H; the expanded island is EXPANDED_W wide. core/layout re-exports both. */
+export const PANEL_H = 320;
+export const EXPANDED_W = 640;
+
+/** A Mochi built by api.mochi.free: ticked by the island until its element leaves the document. */
+export interface FreeMochi { el: HTMLElement; set(color: string, mood: BotStateName): void }
+/** A Mochi drawn on a canvas the module owns; the module ticks it. `emote` ms defaults to 1800. */
+export interface MochiSprite {
+  update(dt: number): void;
+  draw(ctx: CanvasRenderingContext2D, w: number, h: number): void;
+  setState(m: BotStateName, instant?: boolean): void;
+  emote(e: BotEmoteName, ms?: number): void;
+  color(hex: string | null): void;
+}
 
 /** Higher wins, tie goes to the most recent. Suggested bands: BAND below; who uses which number is in docs/MODULES-CONTRACT.md. */
 export interface StatusLine {
@@ -105,7 +121,6 @@ export interface IslandApi {
   paused(): boolean;
   /** Fires with the new value every time Pause flips. */
   onPause(fn: (paused: boolean) => void): Disposer;
-  invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null>;
   listen<T>(event: string, fn: (payload: T) => void): Disposer;
   timeout(fn: () => void, ms: number): Disposer;
   interval(fn: () => void, ms: number, opts?: { whenVisible?: boolean }): Disposer;
@@ -117,9 +132,26 @@ export interface IslandApi {
    * module's pill is refused. The first pill is focused by the core, and when the front pill goes the core moves focus to
    * the first one left. The returned function gives the front back to the pill it took it from, if it still holds it.
    */
-  pills: { set(pill: PillInput, at?: PillAt): void; remove(id: string): void; clear(): void; focus(id: string): Disposer };
-  /** Adds a sound under `name` (url of a WAV); removed when the module stops. */
-  sound: { register(name: string, url: string): Disposer };
+  pills: {
+    set(pill: PillInput, at?: PillAt): void; remove(id: string): void; focus(id: string): Disposer;
+    /** Every pill, in order (all modules'): read-only. */
+    all(): readonly Pill[];
+    get(id: string): Pill | null;
+    /** The pill in front (the first one when none was focused), or null. */
+    front(): Pill | null;
+    /** Every pill but the front one. */
+    others(): readonly Pill[];
+  };
+  /** Plays a core sound by name (SOUND_NAMES in core/sound.ts); a name that is not loaded stays silent. */
+  sound: { play(name: string): void };
+  mochi: {
+    /** A mini Mochi whose body is `size` CSS px across, in the pill's colour and mood. Ticked by the island until detached. */
+    mini(pill: Pill, size: number): HTMLElement;
+    /** A mini Mochi that stands for something other than a pill; `set` changes its look. `eyes` scales the eyes. */
+    free(color: string, mood: BotStateName, size: number, eyes?: number): FreeMochi;
+    /** A Mochi for a canvas of the module's own. `overhang`: px of canvas above the body that particles may use. */
+    sprite(opts?: { overhang?: number }): MochiSprite;
+  };
   island: {
     /** Navigation: unfolds the island on `view`. It never pins; to hold the island open use `request`. */
     open(view: string): void;
@@ -132,8 +164,18 @@ export interface IslandApi {
     /** True while any pinned request exists (a note over it would be rude). */
     busy(): boolean;
     setView(view: string): void; close(): void; wake(): void; hide(): void;
-    keepAwake(pred: () => boolean): Disposer; isVisible(): boolean; mode(): IslandMode; fsmState(): FsmState; mouseInside(): boolean; view(): string;
-    note(text: string): void; error(err: unknown): void; layoutHint(): void; redraw(): void; overlay(o: Overlay): Disposer;
+    keepAwake(pred: () => boolean): Disposer; mode(): IslandMode; fsmState(): FsmState; mouseInside(): boolean; view(): string;
+    note(text: string): void; error(err: unknown): void; overlay(o: Overlay): Disposer;
+    /** Fires after every change of the island's state (pills, mode, view, requests...); removed when the module stops. */
+    onChange(fn: () => void): Disposer;
+    /** The view the island rests on (what the strongest module asks for, else "empty"), read live. */
+    home(): string;
+    /** The cursor in logical screen pixels. */
+    mouse(): { x: number; y: number };
+    /** The cursor relative to the island's top-left corner. */
+    mouseLocal(): { x: number; y: number };
+    /** Asks for a redraw on the next frame. */
+    redraw(): void;
   };
   provide<K extends keyof IslandHooks>(hook: K, fn: IslandHooks[K]): Disposer;
   /** Offers a service under a namespaced key ("<module>.<name>"; the types live in that module's api.ts). Removed when this module stops. */

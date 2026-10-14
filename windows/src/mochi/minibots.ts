@@ -2,8 +2,9 @@
 // Each canvas owns a BotEngine; the island's frame loop ticks every live one.
 
 import { BOT_STATES, BotEngine, hexToRGB } from "./engine";
-import type { BotStateName } from "../core/layout";
-import { wipe } from "../core/canvas";
+import type { BotEmoteName, BotStateName } from "../core/layout";
+import type { FreeMochi, MochiSprite } from "../core/moduleApi";
+import { wipe } from "../kit/canvas";
 import type { Pill } from "../core/state";
 
 interface MiniBot {
@@ -88,6 +89,34 @@ export function createFreeBot(
   engine.tgEs = eyes;
   engine.setBadge(cfg.badge);
   return { el: slot, engine };
+}
+
+/** createFreeBot as api.mochi.free: `set` also puts the canvas back among the live ones, so a reused crew member never freezes. */
+export function freeMochi(color: string, mood: BotStateName, size: number, eyes = 1): FreeMochi {
+  const { el, engine } = createFreeBot(color, mood, size, eyes);
+  const canvas = el.querySelector("canvas")!;
+  const rec = live.get(canvas)!;
+  return {
+    el,
+    set(c, m) {
+      engine.bodyColor = hexToRGB(c);
+      engine.setState(m);
+      live.set(canvas, rec);
+    },
+  };
+}
+
+/** A Mochi that draws on a canvas of the module's own (the module ticks it): api.mochi.sprite. */
+export function mochiSprite(opts: { overhang?: number } = {}): MochiSprite {
+  const engine = new BotEngine();
+  if (opts.overhang != null) engine.particleOverhang = opts.overhang;
+  return {
+    update: (dt) => engine.update(dt),
+    draw: (ctx, w, h) => engine.draw(ctx, w, h),
+    setState: (m: BotStateName, instant) => engine.setState(m, instant),
+    emote: (e: BotEmoteName, ms) => engine.triggerEmote(e, ms == null ? undefined : ms / 1000),
+    color: (hex) => { engine.bodyColor = hex ? hexToRGB(hex) : null; },
+  };
 }
 
 export function releaseMiniBot(canvas: HTMLCanvasElement) {

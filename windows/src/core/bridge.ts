@@ -2,22 +2,12 @@
 // page is opened in a plain browser, so the island can be iterated on with
 // `npm run dev` alone.
 
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { App } from "../kit/app";
+import { IS_TAURI, command, commandOrThrow, onEvent } from "../kit/tauri";
 import type { Settings } from "./state";
 
-export const IS_TAURI =
-  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-
-export async function command<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
-  if (!IS_TAURI) return null;
-  try {
-    return await invoke<T>(cmd, args);
-  } catch (err) {
-    console.error(`[coucou] ${cmd} failed`, err);
-    return null;
-  }
-}
+export { IS_TAURI, command, commandOrThrow, onEvent };
 
 export interface BootInfo {
   settings: Settings;
@@ -31,6 +21,8 @@ export interface BootInfo {
 }
 
 export const Bridge = {
+  ...App,
+
   boot: () => command<BootInfo>("boot"),
 
   /** Rust merges these top-level keys onto the stored settings: keys not given are never touched. */
@@ -46,25 +38,12 @@ export const Bridge = {
   setIslandRect: (x: number, y: number, width: number, height: number) =>
     command<void>("set_island_rect", { x, y, width, height }),
 
-  /** Give the window keyboard focus and take it away again. */
-  focusWindow: (focused: boolean) => command<void>("focus_window", { focused }),
-
   reposition: () => command<void>("reposition"),
-
-  openUrl: (url: string) => command<void>("open_url", { url }),
 
   quit: () => command<void>("quit_app"),
 
-  openSettingsWindow: () => command<void>("open_settings_window"),
-
   /** The section the settings window was opened for, once ("" for none). */
   takeSettingsSection: () => command<string>("take_settings_section"),
-
-  /** Writes to %LOCALAPPDATA%\Coucou\coucou.log, next to the Rust lines. */
-  log: (message: string) => command<void>("log_line", { message }),
-
-  /** Copies a file into the inbox (sweeps old ones, emits `inbox-added`); rejects with the reason. */
-  inboxIngest: (path: string) => commandOrThrow<{ name: string; path: string; size: number }>("inbox_ingest", { path }),
 
   /** Tray → Pause. */
   setPaused: (paused: boolean) => command<void>("set_paused", { paused }),
@@ -90,15 +69,3 @@ export async function onDragDrop(handler: (e: DragDropPayload) => void) {
   if (!IS_TAURI) return () => {};
   return listen<DragDropPayload>("file-drag", (e) => handler(e.payload));
 }
-
-export async function onEvent<T>(name: string, handler: (payload: T) => void) {
-  if (!IS_TAURI) return () => {};
-  return listen<T>(name, (e) => handler(e.payload));
-}
-
-/** Same as `command`, but surfaces the error so the UI can show what went wrong. */
-export async function commandOrThrow<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (!IS_TAURI) throw new Error("not running inside Coucou");
-  return invoke<T>(cmd, args);
-}
-
