@@ -11,7 +11,6 @@ pub struct Settings {
     pub sound_enabled: bool,
     pub sound_volume: f64,
     pub auto_close_interval: f64,
-    pub absence_interval: f64,
     /// "primary" = the main display, "cursor" = whichever display the mouse is on.
     pub screen: String,
     pub autostart: bool,
@@ -35,7 +34,6 @@ impl Default for Settings {
             sound_enabled: true,
             sound_volume: 0.12,
             auto_close_interval: 15.0,
-            absence_interval: 180.0,
             screen: "primary".into(),
             autostart: false,
             compact_hide_interval: default_compact_hide(),

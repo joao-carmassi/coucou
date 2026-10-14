@@ -13,7 +13,7 @@ export const media: ModuleDef = {
   id: "media",
   views: [{
     name: "media",
-    layout: { height: PANEL_H, botX: 67, botY: 108, botDiameter: 71, agentMode: "none" },
+    layout: { height: PANEL_H, botX: 67, botY: 108, botDiameter: 71 },
     build: (ctx) => buildMediaView(mediaOf(ctx.api), ctx),
   }],
   tabs: [{ view: "media", title: "Mídia", icon: () => svg(ICONS.photo, 13, { stroke: 1.6 }), order: 40 }],

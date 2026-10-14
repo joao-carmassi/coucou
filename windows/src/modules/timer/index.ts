@@ -51,7 +51,7 @@ export const timerModule: ModuleDef = {
   id: "timer",
   views: [{
     name: "timer",
-    layout: { height: 160, botX: 54, botY: null, botDiameter: 46, agentMode: "none" },
+    layout: { height: 160, botX: 54, botY: null, botDiameter: 46 },
     build: (ctx) => buildTimerView(Timer, ctx),
   }],
   tabs: [{ view: "timer", title: "Timer", icon: () => svg(ICONS.dial, 13), order: 30 }],
