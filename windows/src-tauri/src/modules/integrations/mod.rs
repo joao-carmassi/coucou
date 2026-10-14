@@ -29,10 +29,6 @@ impl Module for Provider {
         scheduler::enable(&ctx.app, self.short);
     }
 
-    fn apply(&self, _ctx: &ModuleCtx, _s: &Settings) {
-        scheduler::reeval();
-    }
-
     fn stop(&self, _ctx: &ModuleCtx) {
         scheduler::disable(self.short);
     }

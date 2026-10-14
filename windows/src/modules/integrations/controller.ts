@@ -218,6 +218,10 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
   }
 
   const offs: Disposer[] = [
+    // The open detail closes when the pill leaves the front.
+    State.subscribe(() => {
+      if (State.focusId !== id) detailOpen = false;
+    }),
     api.listen<IntegrationUpdate>("integration", handle),
     api.listen("secrets-changed", () => void refreshConfigured()),
     api.provide("openTarget", openTarget),

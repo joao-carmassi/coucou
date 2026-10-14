@@ -1,6 +1,6 @@
-// ONE scheduler shared by every provider module, refcounted: the first `enable` spawns the task,
-// the last `disable` aborts it. Zero providers on => no task. With providers on but none configured
-// the task is parked on the Notify (settings saves, secret changes, pause and manual refresh wake it).
+// ONE scheduler shared by every provider module. The task exists only while >=1 provider is on AND
+// configured (`reeval` spawns/aborts it); while paused it parks on the Notify (secret changes,
+// module switches, pause and manual refresh wake it).
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;
@@ -34,6 +34,7 @@ struct Sched {
     live_due: Option<Instant>,
     paused: bool,
     handle: Option<JoinHandle<()>>,
+    app: Option<AppHandle>,
 }
 
 static ST: Mutex<Sched> = Mutex::new(Sched {
@@ -43,7 +44,9 @@ static ST: Mutex<Sched> = Mutex::new(Sched {
     live_due: None,
     paused: false,
     handle: None,
+    app: None,
 });
+static REEVAL: Mutex<()> = Mutex::new(());
 static WAKE: Notify = Notify::const_new();
 
 /// `github` -> `integration_github`.
@@ -56,59 +59,52 @@ fn active_ids(enabled: &[&str], configured: impl Fn(&str) -> bool) -> Vec<&'stat
     PROVIDERS.iter().map(|p| p.0).filter(|id| enabled.contains(id) && configured(id)).collect()
 }
 
-/// Provider module started. The first one spawns the scheduler task.
+/// Provider module started: record the app and re-evaluate (the task spawns only if one is active).
 pub fn enable(app: &AppHandle, short: &str) {
     let Some(id) = full(short) else { return };
     {
         let mut st = ST.lock().unwrap();
+        st.app = Some(app.clone());
         if !st.enabled.contains(&id) {
             st.enabled.push(id);
-        }
-        if st.handle.is_none() {
-            st.handle = Some(tauri::async_runtime::spawn(run(app.clone())));
         }
     }
     reeval();
 }
 
-/// Provider module stopped. The last one aborts the task.
+/// Provider module stopped.
 pub fn disable(short: &str) {
     let Some(id) = full(short) else { return };
-    let h = {
-        let mut st = ST.lock().unwrap();
-        st.enabled.retain(|x| *x != id);
-        if st.enabled.is_empty() {
-            st.active.clear();
-            st.due.clear();
-            st.live_due = None;
-            st.handle.take()
-        } else {
-            None
-        }
-    };
-    match h {
-        Some(h) => h.abort(),
-        None => reeval(),
-    }
+    ST.lock().unwrap().enabled.retain(|x| *x != id);
+    reeval();
 }
 
-/// A module switched or a secret changed: recompute the active set and wake the task.
+/// A module switched or a secret changed: recompute the active set, start/stop the task, wake it.
 pub fn reeval() {
+    let _serial = REEVAL.lock().unwrap(); // whole call: enabled read, keyring read and active write stay ordered
     let enabled = ST.lock().unwrap().enabled.clone();
-    let ids = active_ids(&enabled, secrets::configured); // keyring reads outside the lock
-    {
-        let mut st = ST.lock().unwrap();
-        let now = Instant::now();
-        st.due.retain(|id, _| ids.contains(id));
-        for id in &ids {
-            let delay = PROVIDERS.iter().find(|p| p.0 == *id).map_or(0, |p| p.1);
-            st.due.entry(id).or_insert(now + Duration::from_secs(delay));
+    let ids = active_ids(&enabled, secrets::configured); // keyring reads outside the ST lock
+    let mut st = ST.lock().unwrap();
+    let now = Instant::now();
+    st.due.retain(|id, _| ids.contains(id));
+    for id in &ids {
+        let delay = PROVIDERS.iter().find(|p| p.0 == *id).map_or(0, |p| p.1);
+        st.due.entry(id).or_insert(now + Duration::from_secs(delay));
+    }
+    st.active = ids;
+    if !st.active.contains(&GITHUB) {
+        st.live_due = None;
+    }
+    if st.active.is_empty() {
+        if let Some(h) = st.handle.take() {
+            h.abort();
         }
-        st.active = ids;
-        if !st.active.contains(&GITHUB) {
-            st.live_due = None;
+    } else if st.handle.as_ref().is_none_or(|h| h.inner().is_finished()) {
+        if let Some(app) = st.app.clone() {
+            st.handle = Some(tauri::async_runtime::spawn(run(app)));
         }
     }
+    drop(st);
     WAKE.notify_one();
 }
 
@@ -151,6 +147,10 @@ async fn run(app: AppHandle) {
         };
         let worked = !due.is_empty() || live;
         for id in due {
+            let still = ST.lock().unwrap().active.contains(&id);
+            if !still {
+                continue;
+            }
             integrations::poll_once(app.clone(), id).await;
         }
         if live {

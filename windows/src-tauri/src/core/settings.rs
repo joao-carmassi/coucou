@@ -87,7 +87,9 @@ pub fn migrate_modules(s: &mut Settings) -> bool {
         let id = format!("integration_{short}");
         s.extra.get("activeIntegrations").and_then(|v| v.as_array()).is_some_and(|a| a.iter().any(|x| x.as_str() == Some(&id)))
     };
-    let providers = INTEGRATIONS.map(|short| (short, listed(short)));
+    // m7 era: the master switch was explicitly off, so the listed providers stay off.
+    let off = s.modules_enabled.get("integrations") == Some(&false);
+    let providers = INTEGRATIONS.map(|short| (short, listed(short) && !off));
     let mut added = false;
     let base = [("claude", true), ("media", true), ("upload", true), ("timer", false), ("voice", voice)];
     for (id, on) in base.into_iter().chain(providers) {
@@ -177,5 +179,15 @@ mod tests {
             assert_eq!(s.module_on(id, !on), on, "{id}");
         }
         assert!(!migrate_modules(&mut s), "idempotent");
+    }
+
+    #[test]
+    fn migrate_master_off_keeps_providers_off() {
+        let mut s: Settings = serde_json::from_str(
+            r#"{"activeIntegrations":["integration_github"],"modulesEnabled":{"integrations":false}}"#,
+        )
+        .unwrap();
+        migrate_modules(&mut s);
+        assert!(!s.module_on("github", true));
     }
 }
