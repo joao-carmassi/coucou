@@ -11,7 +11,7 @@ The core is the island + the Mochi avatar. Everything else is a module on the mo
 | upload | ON (requires claude) | ported (M5) | the drop animation starts AFTER the island opens (fixes the "0 %" bug) |
 | timer | OFF | ported (M5) | |
 | voice | OFF (requires claude) | ported (M5) | English only (Whistle/needle.exe); alert hotkey belongs to claude |
-| github, vercel, stripe, n8n, resend, calcom, notion | OFF | ported (split) | 7 modules (one per service, group "Integrações"); one refcounted scheduler, no task while none is on; GitHub panel + pills; hooks `taskCard`/`taskNews`/`avatar.tint` |
+| github, vercel, stripe, n8n, resend, calcom, notion | OFF | ported (split) | 7 modules (one per service, group "Integrações"); one shared scheduler, no task while none is on; GitHub panel + pills; hooks `taskCard`/`taskNews`/`avatar.tint` |
 
 Known gaps: (a) the integration badge clears on settle, not on pill focus; (b) the compact grid shows max 4 pills (display limit).
 The idle "Nova sessão" card was never shown with Claude ON at m3-ok (not a regression).

@@ -6,7 +6,7 @@
 
 **Mochi doesn't get a notch on a PC — so it lives at the top of your screen instead.**
 
-Approve Claude Code permissions, watch your session work, drop a file, chat with Claude, keep an eye on your services — without leaving what you're doing.
+Approve Claude Code permissions, watch your session work, drop a file, keep an eye on your services — without leaving what you're doing.
 
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?logo=windows)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=black)
@@ -34,7 +34,6 @@ installs for the current user only — no admin prompt.
 <img src="screenshots/compact.png" width="292" alt="The compact island, with the integration pills as mini Mochis">
 <img src="screenshots/overview.png" width="640" alt="The overview: the focused integration on the left, the other pills on the right">
 <img src="screenshots/approval.png" width="640" alt="A Claude Code permission request, with Deny and Allow">
-<img src="screenshots/chat.png" width="640" alt="Chatting with Claude from the island">
 <img src="screenshots/drop.png" width="640" alt="Mochi turned into a box, waiting for a file">
 
 | What you do | What happens |
@@ -215,9 +214,8 @@ function claude-qf { $env:CLAUDE_CONFIG_DIR="$HOME\.claude-qf"; try { & claude.e
 Dropping a file on the island, or dragging Mochi onto a window, opens a new
 terminal session with that file (or a screenshot of the window) attached.
 
-**Settings… → Claude** takes your Anthropic API key. Keys live in the **Windows
-Credential Manager**, never on disk and never in the interface — the island can
-only ask whether a key exists. Same for every integration key.
+Integration keys live in the **Windows Credential Manager**, never on disk and
+never in the interface — the island can only ask whether a key exists.
 
 No telemetry. The only network requests Coucou makes are to the services you
 configure yourself.

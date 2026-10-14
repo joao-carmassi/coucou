@@ -221,6 +221,8 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
     // The open detail closes when the pill leaves the front.
     State.subscribe(() => {
       if (State.focusId !== id) detailOpen = false;
+      // Focusing the pill is seeing its news: the badge goes (a repeat is a no-op).
+      else if (State.tasks.find((t) => t.id === id)?.pillBadge) api.pill.badge(id, null);
     }),
     api.listen<IntegrationUpdate>("integration", handle),
     api.listen("secrets-changed", () => void refreshConfigured()),
