@@ -8,7 +8,7 @@
 // once the session is gone.
 
 import { h, svg } from "../../../kit/dom";
-import { diffLine, fileKind, readPatch } from "../../../kit/code";
+import { diffBlock, diffLine, fileKind, readPatch } from "../../../kit/code";
 import { ICONS } from "../icons";
 import type { SessionStep } from "../types";
 
@@ -112,5 +112,5 @@ export function stepPreview(step: SessionStep, limit?: number, typed?: ToType[])
   }
 
   if (rows.length === 0) return null;
-  return h("div", { class: step.state === "failed" ? "code-diff step-preview failed" : "code-diff step-preview" }, ...rows);
+  return diffBlock(step.state === "failed" ? "step-preview failed" : "step-preview", ...rows);
 }
