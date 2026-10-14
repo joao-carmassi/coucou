@@ -246,3 +246,12 @@ src/views/palette.ts                           0         4
 src/views/views.ts                             4         0
 TOTAL findings 172, warnings 99, allowlisted 4
 ```
+
+After M1 (bridge split) the comment-only warnings dropped 99 -> 56 (findings unchanged: the typed calls only moved, `src/core/bridge.ts` is now clean). After M2 (CSS) and the audit allowlist update: see the latest `npm run neutrality-audit` output.
+
+## Module CSS (M2)
+
+- `src/style/index.ts` imports only the shared sheets (ui, core, overview, settings). Every module imports its own sheets from its `index.ts` (claude: base, chat, panel, claude; upload; integrations (in `provider.ts`); media; timer).
+- `src/main.ts` imports `./style` before anything that reaches `modules/index`, so module sheets land AFTER the shared ones (needed for ties such as `.sess-newbtn` vs `.btn`).
+- Inter-module order = the import order in `modules/index.ts` (claude, upload, integrations, media, timer, voice), NOT the catalog order. Sheets that were interleaved before (upload between claude chat and panel; integrations between claude panel and claude.css) now follow all claude sheets; checked: no tie between rules that can hit the same element.
+- The settings window must never import a module `index.ts` (it would pull the island CSS: `html,body{overflow:hidden}`). It loads `src/modules/settings.ts` (`SETTINGS_SECTIONS`, keyed by module id); each module's `settings.css` is imported from its `settings.ts`. `ModuleDef.settings` was removed.

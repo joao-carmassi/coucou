@@ -2,6 +2,7 @@
 // Its Rust half (modules/media) watches the Windows folders and keeps the list.
 
 import { svg } from "../../views/dom";
+import "./media.css";
 import { PANEL_H } from "../../core/layout";
 import type { ModuleDef } from "../../core/moduleApi";
 import { armMochiDrop } from "./ghost";

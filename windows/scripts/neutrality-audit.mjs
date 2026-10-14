@@ -4,7 +4,7 @@
 // Run: npm run neutrality-audit [-- --fail] [-- --verbose]
 //
 // Rules:
-//   1. TS import path containing `/modules/` (core/registry.ts and settings/main.ts may import modules/index + catalog).
+//   1. TS import path containing `/modules/` (core/registry.ts and settings/main.ts may import modules/settings + catalog).
 //   2. Module id / label / group (derived from src/modules/* folders and the catalog) as a whole word in code
 //      (comment-only hits are counted as warnings: rule "... (comment)").
 //   3. Concept denylist (approval, session, overview, ...) in code (comment-only: warning).
@@ -22,7 +22,7 @@ const fail = process.argv.includes("--fail");
 const ALLOWLIST = [
   ["src/core/registry.ts", "modules/index", "the only core file that loads the module list"],
   ["src/core/registry.ts", "modules/catalog", "registry reads the catalog"],
-  ["src/settings/main.ts", "modules/index", "settings window lists the modules"],
+  ["src/settings/main.ts", "modules/settings", "settings window loads the sections only (no island code or CSS)"],
   ["src/settings/main.ts", "modules/catalog", "settings window lists the modules"],
 ];
 const CORE_EVENTS = ["cursor", "tray", "screen-changed", "settings-changed", "settings-shown", "modules-changed", "file-drag", "hotkey-error", "inbox-added"];

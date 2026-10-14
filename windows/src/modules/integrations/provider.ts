@@ -4,10 +4,10 @@
 // `taskNews` hooks, each answering only for its own pill id.
 
 import { PANEL_H } from "../../core/layout";
+import "./integrations.css";
 import type { ModuleDef } from "../../core/moduleApi";
 import { startProvider } from "./controller";
 import { PROVIDERS, moduleIdOf, type Provider } from "./providers";
-import { providerSettingsSection } from "./settings";
 import { buildGithub } from "./views/github";
 
 export function providerModule(def: Provider): ModuleDef {
@@ -26,7 +26,6 @@ export function providerModule(def: Provider): ModuleDef {
         build: buildGithub,
       }],
     }),
-    settings: () => providerSettingsSection(def),
     start: (api) => startProvider(api, def),
   };
 }

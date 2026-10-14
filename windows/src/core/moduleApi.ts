@@ -109,8 +109,6 @@ export interface ModuleInfo { id: string; label: string; defaultEnabled: boolean
 export interface ModuleDef extends ModuleInfo {
   views?: ViewDef[];
   tab?: TabDef;
-  /** The settings section; `dispose` runs when the module is switched off. */
-  settings?: () => { el: HTMLElement; dispose?(): void };
   start(api: IslandApi): Disposer | void;
 }
 

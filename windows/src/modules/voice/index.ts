@@ -5,7 +5,6 @@ import type { Disposer, IslandApi, ModuleDef } from "../../core/moduleApi";
 import { Bridge } from "../../core/bridge";
 import { VoiceBridge } from "./bridge";
 import { State } from "../../core/state";
-import { voiceSettingsSection } from "./settings";
 import { buildVoiceView, send, Voice } from "./view";
 
 const reviewing = () => Voice.phase === "review";
@@ -118,6 +117,5 @@ export const voiceModule: ModuleDef = {
     layout: { height: 160, botX: 60, botY: null, botDiameter: 50, agentMode: "column" },
     build: buildVoiceView,
   }],
-  settings: voiceSettingsSection,
   start,
 };

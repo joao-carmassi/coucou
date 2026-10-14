@@ -2,12 +2,10 @@
 // screen, autostart. Module sections plug in later.
 
 import "./settings.css";
-import "../modules/claude/settings.css";
-import "../modules/integrations/settings.css";
 import { Bridge, onEvent } from "../core/bridge";
 import { resolveEnabled } from "../core/moduleApi";
 import { MODULE_INFO } from "../modules/catalog";
-import { MODULES } from "../modules/index";
+import { SETTINGS_SECTIONS } from "../modules/settings";
 import { DEFAULT_SETTINGS, State, type Settings } from "../core/state";
 import { h, clear } from "../views/dom";
 
@@ -131,19 +129,18 @@ const sections = new Map<string, { el: HTMLElement; dispose?(): void }>();
 
 /** A module's section exists only while the module is on. */
 function renderSections(effective: Record<string, boolean>) {
-  for (const def of MODULES) {
-    if (!def.settings) continue;
-    const on = effective[def.id] === true;
-    const has = sections.get(def.id);
+  for (const [id, make] of Object.entries(SETTINGS_SECTIONS)) {
+    const on = effective[id] === true;
+    const has = sections.get(id);
     if (!on && has) {
       has.el.remove();
       has.dispose?.();
-      sections.delete(def.id);
+      sections.delete(id);
     } else if (on && !has) {
-      sections.set(def.id, def.settings());
+      sections.set(id, make());
     }
   }
-  const order = MODULES.map((m) => m.id);
+  const order = MODULE_INFO.map((m) => m.id);
   sectionsBox.replaceChildren(...[...sections].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0])).map(([, s]) => s.el));
 }
 

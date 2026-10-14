@@ -1,4 +1,5 @@
 import { svg } from "../../views/dom";
+import "./timer.css";
 import { ICONS } from "../../views/icons";
 import { Sound } from "../../core/sound";
 import type { Disposer, IslandApi, ModuleDef } from "../../core/moduleApi";

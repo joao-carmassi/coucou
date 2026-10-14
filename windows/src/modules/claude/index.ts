@@ -3,11 +3,14 @@
 // (store.ts); the core only receives a status line, an avatar signal, a pill, and hooks.
 
 import type { ModuleDef, ViewContext, ViewDef } from "../../core/moduleApi";
+import "./base.css";
+import "./chat.css";
+import "./panel.css";
+import "./claude.css";
 import { PANEL_H } from "../../core/layout";
 import { svg } from "../../views/dom";
 import { claudeOf } from "./claude";
 import { ICONS } from "../../views/icons";
-import { claudeSettingsSection } from "./settings";
 import { CARDS } from "./views/cards";
 import { buildSession } from "./views/session";
 import { buildSessionsView } from "./views/sessions";
@@ -43,6 +46,5 @@ export const claude: ModuleDef = {
       (ctx) => buildSession(claudeOf(ctx.api), ctx), "overview"),
   ],
   tab: { view: "sessions", title: "Sessões", icon: () => svg(ICONS.bubble, 13), order: 20 },
-  settings: claudeSettingsSection,
   start: (api) => claudeOf(api).start(),
 };

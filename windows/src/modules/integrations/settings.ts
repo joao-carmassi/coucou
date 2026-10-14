@@ -1,9 +1,10 @@
 // The Integrações section of the settings window: the keys of each integration in
 // the Windows Credential Manager (never on disk), and GitHub's token with a connection test.
 // Port of the integrations part of settings/main.ts at m3-ok. The window renders it only while
-// the module is on (ModuleDef.settings).
+// the module is on (modules/settings.ts).
 
 import { Bridge } from "../../core/bridge";
+import "./settings.css";
 import { type GithubAccount, IntegrationsBridge } from "./bridge";
 import { h, clear } from "../../views/dom";
 import { GITHUB, type Provider } from "./providers";

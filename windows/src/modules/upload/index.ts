@@ -4,6 +4,7 @@
 // The core only sees an Overlay and three views; the file goes to Claude through the launchFile hook.
 
 import { Bridge } from "../../core/bridge";
+import "./upload.css";
 import { ClaudeBridge } from "../claude/bridge";
 import { EXPANDED_W } from "../../core/layout";
 import type { Disposer, IslandApi, ModuleDef, Overlay } from "../../core/moduleApi";

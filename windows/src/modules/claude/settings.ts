@@ -1,12 +1,13 @@
 // The Claude section of the settings window: hooks (Windows and WSL), the second account,
 // what the idle card opens, the "go to alert" hotkey. The window renders it only while the
-// module is on (ModuleDef.settings). Everything that writes to disk is confirmed here: the
+// module is on (modules/settings.ts). Everything that writes to disk is confirmed here: the
 // exact diff is shown, the file is backed up, and a file that changed in between is refused.
 //
 // The settings window keeps one Settings object in State.settings (settings/main.ts), so a
 // field changed here travels with the window's own saves.
 
 import { Bridge } from "../../core/bridge";
+import "./settings.css";
 import { type HookPreview, type HookStatus, type WslStatus, ClaudeBridge } from "./bridge";
 import { State } from "../../core/state";
 import { h, clear } from "../../views/dom";
