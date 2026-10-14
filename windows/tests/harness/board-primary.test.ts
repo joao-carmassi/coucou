@@ -50,7 +50,7 @@ const fold = () => { island.collapse(); tick(10); };
 const reopen = () => { island.fsm.forceHome(); tick(100); };
 const clickPill = (label: string) => {
   [...document.querySelectorAll<HTMLElement>(".pill")].find((p) => p.textContent === label)!.click();
-  tick(10);
+  tick(100);
 };
 
 beforeAll(async () => {
