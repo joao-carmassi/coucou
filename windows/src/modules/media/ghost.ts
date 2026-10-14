@@ -1,11 +1,12 @@
 // Mochi pulled out of the island and dropped on a window: that window is captured into the inbox
-// and the Mídia list opens on it. The core only reports the pull (hook "mochiDrop") and the button
+// and goes to Claude if that module is on, else the Mídia list opens on it. The core only reports the pull (hook "mochiDrop") and the button
 // (overlay.cursor's `down`); the ghost, the release and the attach live here.
 
 import { h } from "../../views/dom";
 import { wipe } from "../../core/canvas";
 import { MediaBridge } from "../../core/bridge";
 import type { Disposer, IslandApi } from "../../core/moduleApi";
+import { Hooks } from "../../core/hooks";
 import { Sound } from "../../core/sound";
 import { State } from "../../core/state";
 import { BotEngine, hexToRGB } from "../../mochi/engine";
@@ -37,9 +38,13 @@ export function armMochiDrop(api: IslandApi, ctl: MediaCtl): Disposer {
     if (over) return; // dropped back home: silent cancel
     MediaBridge.attachWindow()
       .then((file) => {
-        // Not sent to Claude: it is already in the inbox and the Mídia list; the user picks the action there.
         api.avatar.emote("wink");
         Sound.play("attach");
+        // Claude on: open it with the shot attached (already in the inbox, no ingest). Else the Mídia list only.
+        if (Hooks.has("launchFile")) {
+          void api.call("launchFile", file.path, false);
+          return;
+        }
         ctl.highlight(file.name);
         api.island.open("media", { pinMs: PIN_MS });
       })
