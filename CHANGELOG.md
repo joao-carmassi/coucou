@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.5
+
+- Voice: the card stays open while listening and while a transcript is on it; it was pinned in state but not in the island's state machine, so it folded by itself.
+
 ## 0.2.4
 
 - Voice no longer stops on silence: it records until you press the hotkey again or Enter (Esc cancels), with a 10-minute safety cap.

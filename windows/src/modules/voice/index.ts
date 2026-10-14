@@ -20,8 +20,10 @@ function start(api: IslandApi): Disposer {
   const show = () => {
     const v = api.island.view();
     if (v === "approval" || v === "question") return;
-    if (api.island.mode() === "expanded") api.island.setView("voice");
-    else api.island.open("voice");
+    // Pinned in every phase: open() hands the pin to the state machine, which setView alone never did
+    // (an already open card kept its auto-close timer and folded while the transcript was on it).
+    State.isPinned = true;
+    api.island.open("voice");
   };
   // Enter/Esc are captured only while listening or while a transcript is on the card: the listener exists
   // only then (never while parked/hidden) and the window takes focus (Bridge.focusWindow) so the keys reach it while the user typed elsewhere.
