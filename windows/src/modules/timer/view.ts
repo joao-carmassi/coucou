@@ -38,7 +38,7 @@ export function buildTimerView(Timer: TimerClock, ctx: ViewContext): ViewHost {
         h("div", { class: "actions timer-row" },
           ...[5, 10, 25].map((m) => btn(`${m} min`, "secondary", () => Timer.prepare("countdown", m))),
           mins, btn("Ok", "secondary", go), h("div", { class: "grow" }),
-          h("button", { class: "link-btn q-link", text: "Cronômetro", onclick: () => Timer.prepare("stopwatch") })),
+          h("button", { class: "link-btn text-link", text: "Cronômetro", onclick: () => Timer.prepare("stopwatch") })),
       );
     } else {
       const stopwatch = Timer.kind === "stopwatch";
@@ -50,7 +50,7 @@ export function buildTimerView(Timer: TimerClock, ctx: ViewContext): ViewHost {
         label,
         h("div", { class: "actions timer-row" },
           readout, h("div", { class: "grow" }), main,
-          h("button", { class: "link-btn q-link", text: "Cancelar", onclick: () => Timer.cancel() })),
+          h("button", { class: "link-btn text-link", text: "Cancelar", onclick: () => Timer.cancel() })),
         bar,
       );
     }

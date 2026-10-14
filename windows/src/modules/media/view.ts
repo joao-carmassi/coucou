@@ -95,17 +95,17 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
   let error = "";
   let wasOn = false;
 
-  const sub = h("span", { class: "gh-sub" });
-  const head = h("div", { class: "gh-head" }, h("div", { class: "gh-tab" }, h("b", { text: "Mídia" })), h("div", { class: "grow" }), sub);
-  const grid = h("div", { class: "gh-list media-grid" });
+  const sub = h("span", { class: "pane-sub" });
+  const head = h("div", { class: "pane-head" }, h("div", { class: "pane-tab" }, h("b", { text: "Mídia" })), h("div", { class: "grow" }), sub);
+  const grid = h("div", { class: "pane-list media-grid" });
   const menu = h("div", { class: "media-menu" });
-  const main = h("div", { class: "gh-main" }, head, grid, menu);
+  const main = h("div", { class: "pane-main" }, head, grid, menu);
   const side = h(
     "div",
-    { class: "gh-side" },
-    h("div", { class: "gh-side-who" }, h("b", { text: "Mídia" }), h("span", { text: "capturas e arquivos" })),
+    { class: "pane-side" },
+    h("div", { class: "pane-side-who" }, h("b", { text: "Mídia" }), h("span", { text: "capturas e arquivos" })),
   );
-  const el = h("div", { class: "view gh-view media-view" }, h("div", { class: "card gh-card" }, side, h("div", { class: "gh-col" }, main)));
+  const el = h("div", { class: "view pane-view media-view" }, h("div", { class: "card pane-card" }, side, h("div", { class: "pane-col" }, main)));
 
   menu.style.display = "none";
   const closeMenu = () => (menu.style.display = "none");
@@ -226,7 +226,7 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
     const cells = h("div", { class: "media-cells" });
     for (const item of items) {
       const img = h("img", { class: "media-thumb", alt: "", draggable: false, "data-path": item.path, "data-size": item.size });
-      const more = h("button", { class: "gh-icon media-more", title: "Ações" }, svg(ICONS.ellipsis, 12));
+      const more = h("button", { class: "pane-icon media-more", title: "Ações" }, svg(ICONS.ellipsis, 12));
       more.addEventListener("click", () => {
         const a = more.getBoundingClientRect();
         openMenu(item, a.right - 140, a.bottom + 2);

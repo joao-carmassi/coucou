@@ -12,7 +12,7 @@ import type { Pill } from "../../../core/state";
 import { hasTarget, type Claude } from "../claude";
 import { claudeSettings } from "../store";
 import { CLAUDE_SERVICE, askPill, type TaskCardOf, type TaskNewsOf } from "../api";
-import { ICONS } from "../../../views/icons";
+import { ICONS } from "../icons";
 import { COLOR } from "../../../views/palette";
 import { CARD_AIR_MIN, fittedHeight } from "../fit";
 import { CLAUDE_ID, TURN_DONE, turnSteps, type ClaudeSession, type SessionStep } from "../types";
@@ -210,9 +210,9 @@ function airy(lines: HTMLElement, onResize: () => void): { fit(): void; readonly
 /** Third-party agents and the integrations other modules add: their pill's last words. */
 function otherCard(c: Claude, task: Pill): HTMLElement {
   const steps = c.store.agentSteps.get(task.id);
-  return h("div", { class: "int-card" },
-    h("div", { class: "int-head" }, dot(task.color, 7), h("b", { text: task.label }), h("span", { text: steps ? "Agente" : "Integração" })),
-    h("div", { class: "int-status" }, h("span", { text: steps?.at(-1) ?? "" })),
+  return h("div", { class: "tile-card" },
+    h("div", { class: "tile-head" }, dot(task.color, 7), h("b", { text: task.label }), h("span", { text: steps ? "Agente" : "Integração" })),
+    h("div", { class: "tile-status" }, h("span", { text: steps?.at(-1) ?? "" })),
   );
 }
 
@@ -396,7 +396,7 @@ function idleCard(c: Claude, task: Pill): HTMLElement {
   const statusColor = configured ? "#22C55E" : "#F4505E";
   const desktop = store.session.client === "desktop";
   const terminal = !desktop && claudeSettings().idleOpen === "terminal";
-  const actions = h("div", { class: "int-actions" },
+  const actions = h("div", { class: "tile-actions" },
     h("button", {
       class: "link-btn",
       style: `color:${task.color}b3`,
@@ -417,9 +417,9 @@ function idleCard(c: Claude, task: Pill): HTMLElement {
   }
   return h(
     "div",
-    { class: "int-card" },
-    h("div", { class: "int-head" }, dot(task.color, 7), h("b", { text: store.clientName }), h("span", { text: "Integração" })),
-    h("div", { class: "int-status" }, dot(statusColor, 5), h("span", { text: label })),
+    { class: "tile-card" },
+    h("div", { class: "tile-head" }, dot(task.color, 7), h("b", { text: store.clientName }), h("span", { text: "Integração" })),
+    h("div", { class: "tile-status" }, dot(statusColor, 5), h("span", { text: label })),
     actions,
   );
 }
@@ -474,7 +474,7 @@ function buildApproval(c: Claude, ctx: ViewContext): ViewHost {
   const who = h("div");
   const code = h("div", { class: "code" });
   // For an edit: the diff it would make, between what is asked and the answer.
-  const proposed = h("div", { class: "proposed gh-code" });
+  const proposed = h("div", { class: "proposed pane-code" });
   const row = h("div", { class: "actions" });
   const lines = stack(116, 16, who, code, proposed, row);
   const el = h("div", { class: "view" }, card("amber", lines));
@@ -520,13 +520,13 @@ function buildApproval(c: Claude, ctx: ViewContext): ViewHost {
           proposed.scrollTop = 0;
         } else if (proposal) {
           const kind = fileKind(proposal.path);
-          const diff = h("div", { class: "gh-diff" });
+          const diff = h("div", { class: "code-diff" });
           for (const line of readPatch(proposal.patch)) {
             if (!("hunk" in line)) diff.append(diffLine(line.new ?? line.old, line.sign, line.text, kind));
           }
           if (proposal.truncated) {
             diff.append(
-              h("div", { class: "gh-diff-line hunk" }, h("span", { class: "n", text: "⋯" }), h("span", { class: "s" }), h("span", { class: "t", text: "O resto desta edição está no Claude Code" })),
+              h("div", { class: "diff-line hunk" }, h("span", { class: "n", text: "⋯" }), h("span", { class: "s" }), h("span", { class: "t", text: "O resto desta edição está no Claude Code" })),
             );
           }
           proposed.append(diff);
@@ -582,8 +582,8 @@ function buildQuestion(c: Claude, ctx: ViewContext): ViewHost {
   const title = h("div", { class: "title q-title" });
   const row = h("div", { class: "actions q-options" });
   const hint = h("span", { class: "q-hint" });
-  const back = h("button", { class: "link-btn q-link", text: "‹ Anterior" });
-  const pass = h("button", { class: "link-btn q-link", onclick: () => c.passQuestion() });
+  const back = h("button", { class: "link-btn text-link", text: "‹ Anterior" });
+  const pass = h("button", { class: "link-btn text-link", onclick: () => c.passQuestion() });
   const skip = h("button", { class: "btn secondary q-skip", text: "Aguardar", title: "Fechar a ilha e responder depois", onclick: () => c.deferAlert() });
   // Under a list of options: "Other…", and Send when several can be picked.
   const tail = h("div", { class: "q-tail" });

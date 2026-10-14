@@ -4,7 +4,7 @@
 // states in mochi/engine.ts: a colour is written once on this side, here.
 
 export const COLOR = {
-  /** An error, a failure; GitHub's own dot. */
+  /** An error, a failure. */
   red: "#F4505E",
   /** Finished: merged, approved, added. */
   green: "#34D399",
@@ -26,7 +26,7 @@ export const COLOR = {
   dim: "#9398A1",
   /** Nothing to say: stopped, closed, not granted. */
   grey: "#6B7079",
-  /** No colour given: a language GitHub has none for. */
+  /** No colour given: a language with no known colour. */
   blank: "#4B5563",
 } as const;
 

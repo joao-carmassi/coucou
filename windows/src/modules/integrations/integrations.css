@@ -1,3 +1,33 @@
+.int-go .pane-ago {
+  margin-left: auto;
+  padding-left: 6px;
+}
+
+/* On a project's row: whether the pill speaks up for it. Struck through and
+   dim when it is muted. */
+.gh-bell {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--dim-2);
+  cursor: default;
+  transition: color 0.2s ease-out, background 0.2s ease-out;
+}
+
+.gh-bell:hover {
+  background: var(--surface-plate);
+  color: var(--ink);
+}
+
+.gh-bell.off {
+  color: var(--dim-5);
+}
+
 /* Shimmer sweep, 2.2 s — same as ShimmeringText. Lost in the module split: only the GitHub loader uses it. */
 .shimmer {
   background: linear-gradient(90deg, #7c818a 0%, #f2f3f5 40%, #7c818a 70%);
@@ -153,7 +183,7 @@
 }
 
 .int-figure:hover {
-  background: var(--gh-hover);
+  background: var(--surface-hover);
 }
 
 /* Its right edge on the times of the lines under it. */
@@ -192,7 +222,7 @@
 }
 
 .int-go:hover {
-  background: var(--gh-hover);
+  background: var(--surface-hover);
 }
 
 .int-go:hover .int-name {
@@ -332,7 +362,7 @@
   user-select: text;
 }
 
-.int-card.detail {
+.tile-card.detail {
   padding-top: 8px;
 }
 
@@ -430,17 +460,17 @@ button.gh-step:hover {
   margin: 0 -4px 0 -7px;
   padding: 0 4px 0 7px;
   border-radius: 7px;
-  background: var(--gh-plate);
+  background: var(--surface-plate);
 }
 
-.gh-head-badge .gh-block-icon {
+.pane-head-badge .gh-block-icon {
   margin-top: 0;
   width: 16px;
   height: 16px;
 }
 
-.gh-icon.spin svg {
-  animation: gh-spin 0.8s linear infinite;
+.pane-icon.spin svg {
+  animation: pane-spin 0.8s linear infinite;
 }
 
 .gh-status {
@@ -467,7 +497,7 @@ button.gh-step:hover {
   display: none;
 }
 
-.gh-notice-slot:not(:empty) + .gh-main {
+.gh-notice-slot:not(:empty) + .pane-main {
   margin-top: 5px;
 }
 
@@ -555,14 +585,14 @@ button.gh-step:hover {
   color: var(--ink-2);
 }
 
-.nf .gh-pm {
+.nf .diff-pm {
   font-size: 11.5px;
 }
 
 .nf-branch {
   padding: 1px 6px;
   border-radius: 5px;
-  background: var(--gh-plate);
+  background: var(--surface-plate);
   color: var(--ink-2);
   font-size: 10.5px;
 }
@@ -653,7 +683,7 @@ button.gh-step:hover {
   border-radius: 50%;
   border: 1.6px solid currentColor;
   border-top-color: transparent;
-  animation: gh-spin 0.9s linear infinite;
+  animation: pane-spin 0.9s linear infinite;
 }
 
 .gh-meta {
@@ -824,8 +854,8 @@ button.gh-step:hover {
   color: var(--ink-2);
 }
 
-.gh-head.gh-swap b,
-.gh-head.gh-swap .gh-sub {
+.pane-head.gh-swap b,
+.pane-head.gh-swap .pane-sub {
   animation: gh-swap 0.26s ease-out both;
 }
 
@@ -984,7 +1014,7 @@ button.gh-step:hover {
 }
 
 /* In the column, a mark among marks: a size down. */
-.gh-step .gh-ext {
+.gh-step .file-ext {
   min-width: 14px;
   height: 11px;
   padding: 0 2px;
@@ -992,7 +1022,7 @@ button.gh-step:hover {
   font-size: 6.5px;
 }
 
-.gh-code > .gh-host {
+.pane-code > .gh-host {
   align-self: flex-start;
   margin-left: 12px;
 }
@@ -1027,7 +1057,7 @@ button.gh-step:hover {
   white-space: nowrap;
 }
 
-.gh-say-head .int-ago {
+.gh-say-head .pane-ago {
   margin-left: auto;
   padding-left: 6px;
 }
@@ -1035,7 +1065,7 @@ button.gh-step:hover {
 /* The words as they were written: their lines kept, and free to be copied. */
 .gh-say-body {
   font: 400 11.5px/1.45 var(--font);
-  color: var(--gh-text);
+  color: var(--surface-text);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   user-select: text;
@@ -1053,7 +1083,7 @@ button.gh-step:hover {
   flex-direction: column;
   flex: 0 0 auto;
   border-radius: 10px;
-  background: var(--gh-tile);
+  background: var(--surface-tile);
   overflow: hidden;
 }
 
@@ -1071,20 +1101,20 @@ button.gh-step:hover {
 }
 
 .gh-thread-head:hover {
-  background: var(--gh-hover);
+  background: var(--surface-hover);
 }
 
 /* The badge in a column of its own, as in a list of files. */
-.gh-thread-head .gh-row-icon {
+.gh-thread-head .pane-row-icon {
   width: 24px;
   justify-items: start;
 }
 
-.gh-thread-head .gh-row-title {
+.gh-thread-head .pane-row-title {
   font: 400 11px var(--mono);
 }
 
-.gh-thread-head .gh-file-status {
+.gh-thread-head .pane-file-status {
   margin-left: auto;
   padding-left: 8px;
 }
@@ -1097,11 +1127,11 @@ button.gh-step:hover {
   color: var(--dim-3);
 }
 
-.gh-thread-head .gh-row-where + .gh-thread-out {
+.gh-thread-head .pane-row-where + .gh-thread-out {
   margin-left: auto;
 }
 
-.gh-thread > .gh-diff {
+.gh-thread > .code-diff {
   padding: 4px 0;
   background: var(--card-flat);
 }
@@ -1125,7 +1155,7 @@ button.gh-step:hover {
   background: transparent;
 }
 
-.gh-thread.resolved .gh-row-title {
+.gh-thread.resolved .pane-row-title {
   color: var(--dim-2);
 }
 
@@ -1141,7 +1171,7 @@ button.gh-step:hover {
 
 /* In a file's diff: the line a thread is about wears the comments' cyan, and
    the thread sits under it, in from the gutter. */
-.gh-diff-line.noted {
+.diff-line.noted {
   border-left-color: var(--cyan);
   box-shadow: inset 0 -1px color-mix(in srgb, var(--cyan) 35%, transparent);
 }
@@ -1149,7 +1179,7 @@ button.gh-step:hover {
 .gh-diff-note {
   margin: 0 10px 6px 36px;
   border-radius: 0 0 9px 9px;
-  background: var(--gh-tile);
+  background: var(--surface-tile);
   user-select: none;
 }
 
@@ -1249,7 +1279,7 @@ button.gh-step:hover {
   display: block;
   height: 6px;
   border-radius: 3px;
-  background: var(--gh-plate);
+  background: var(--surface-plate);
 }
 
 .gh-ghost b {
@@ -1271,7 +1301,7 @@ button.gh-step:hover {
 
 .gh-desc {
   font: 400 11.5px/1.4 var(--font);
-  color: var(--gh-text);
+  color: var(--surface-text);
   padding: 0 8px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1327,7 +1357,7 @@ button.gh-host:hover {
   border-radius: 10px;
   /* The same grey as a white wash over the card, but solid: a translucent tile
      let the card's glow show through and read as lying on top of it. */
-  background: var(--gh-tile);
+  background: var(--surface-tile);
   font: inherit;
   color: inherit;
   text-align: left;
@@ -1336,7 +1366,7 @@ button.gh-host:hover {
 }
 
 button.gh-block:hover {
-  background: var(--gh-tile-hover);
+  background: var(--surface-tile-hover);
 }
 
 .gh-block.muted {
@@ -1456,7 +1486,7 @@ button.gh-block:hover {
 
 /* A job's row opens with its Mochi instead of a mark: a little wider, so the
    name and the bar under it move over by as much. */
-.gh-crew .gh-row-icon {
+.gh-crew .pane-row-icon {
   width: 20px;
   height: 17px;
   /* He stands beside the whole row — the name and the bar under it — not
@@ -1479,7 +1509,7 @@ button.gh-block:hover {
   margin-left: 21px;
   height: 4px;
   border-radius: 2px;
-  background: var(--gh-track);
+  background: var(--surface-track);
 }
 
 .gh-bar i {

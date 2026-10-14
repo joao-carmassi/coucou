@@ -5,7 +5,7 @@
 // (month → day → booking); here it is the list of upcoming bookings.
 
 import { h, svg, dot } from "../../../views/dom";
-import { ICONS } from "../../../views/icons";
+import { ICONS } from "../icons";
 import { COLOR } from "../../../views/palette";
 import { timeAgo } from "../../../views/format";
 import type { Pill } from "../../../core/state";
@@ -14,7 +14,7 @@ import { type GithubActivityKind, type GithubData, type GithubTarget, Integratio
 import { GITHUB, PROVIDERS, info, steps } from "../store";
 
 function header(color: string, name: string, kind: string, extra?: Node): HTMLElement {
-  const row = h("div", { class: "int-head" }, dot(color, 7), h("b", { text: name }), h("span", { text: kind }));
+  const row = h("div", { class: "tile-head" }, dot(color, 7), h("b", { text: name }), h("span", { text: kind }));
   if (extra) row.append(extra);
   return row;
 }
@@ -47,7 +47,7 @@ function idleCard(task: Pill, openSettings: () => void): HTMLElement {
   const label = error ?? (configured ? "Conectado · carregando…" : missing);
   const statusColor = error || !configured ? "#F4505E" : "#22C55E";
 
-  const actions = h("div", { class: "int-actions" });
+  const actions = h("div", { class: "tile-actions" });
   if (task.id === "integration_n8n") {
     actions.append(
       h("button", {
@@ -84,9 +84,9 @@ function idleCard(task: Pill, openSettings: () => void): HTMLElement {
 
   return h(
     "div",
-    { class: "int-card" },
+    { class: "tile-card" },
     header(task.color, task.label, "Integração"),
-    h("div", { class: "int-status" }, dot(statusColor, 5), h("span", { text: label })),
+    h("div", { class: "tile-status" }, dot(statusColor, 5), h("span", { text: label })),
     actions,
   );
 }
@@ -99,7 +99,7 @@ function vercelCard(onDetail: () => void): HTMLElement {
   deployments.slice(0, 3).forEach((d, i) => {
     const accent = d.state === "READY" ? "#22C55E" : "#F4505E";
     const name = h("span", { class: "int-name", text: String(d.projectName ?? "") });
-    const ago = h("span", { class: "int-ago", text: timeAgo(d.createdAt) });
+    const ago = h("span", { class: "pane-ago", text: timeAgo(d.createdAt) });
     if (i === 0) {
       const more = h(
         "button",
@@ -111,7 +111,7 @@ function vercelCard(onDetail: () => void): HTMLElement {
       rows.append(listRow(accent, false, name, ago));
     }
   });
-  return h("div", { class: "int-card" }, header("#7C5CFF", "Vercel", "Deploys"), rows);
+  return h("div", { class: "tile-card" }, header("#7C5CFF", "Vercel", "Deploys"), rows);
 }
 
 function vercelDetail(onBack: () => void): HTMLElement {
@@ -136,7 +136,7 @@ function vercelDetail(onBack: () => void): HTMLElement {
   }
   return h(
     "div",
-    { class: "int-card detail" },
+    { class: "tile-card detail" },
     h(
       "div",
       { class: "int-detail-head" },
@@ -166,12 +166,12 @@ function resendCard(): HTMLElement {
     const short = to.split("@")[0];
     const cells: Node[] = [
       h("span", { class: "int-name", text: short }),
-      h("span", { class: "int-ago", text: timeAgo(e.createdAt) }),
+      h("span", { class: "pane-ago", text: timeAgo(e.createdAt) }),
     ];
     if (i === 0 && e.subject) cells.push(h("span", { class: "int-sub", text: String(e.subject) }));
     rows.append(listRow(accent, i === 0, ...cells));
   });
-  return h("div", { class: "int-card" }, header("#22C55E", "Resend", "E-mails", extra), rows);
+  return h("div", { class: "tile-card" }, header("#22C55E", "Resend", "E-mails", extra), rows);
 }
 
 // ── GitHub ────────────────────────────────────────────────────────────────────
@@ -287,19 +287,19 @@ function githubCard(onPanel: (open?: GithubOpening) => void): HTMLElement {
         where.fact
           ? h("span", { class: "int-amount", style: `color:${style.color}`, text: where.text })
           : h("span", { class: "int-where", text: where.text }),
-        h("span", { class: "int-ago", text: timeAgo(a.at) }),
+        h("span", { class: "pane-ago", text: timeAgo(a.at) }),
       ),
     );
   }
-  if (d.activity.length === 0) rows.append(h("div", { class: "int-empty", text: "Nada nos últimos 30 dias" }));
+  if (d.activity.length === 0) rows.append(h("div", { class: "pane-empty", text: "Nada nos últimos 30 dias" }));
 
   const stars = c && d.totalStars > 0
     ? h("span", { class: "int-total", title: "Estrelas em todos os seus repositórios" },
         h("i", { class: "int-star" }, svg(ICONS.star, 9)), h("span", { text: compact(d.totalStars) }))
     : undefined;
-  const card = h("div", { class: "int-card" }, header(COLOR.red, "GitHub", `@${d.login}`, stars));
+  const card = h("div", { class: "tile-card" }, header(COLOR.red, "GitHub", `@${d.login}`, stars));
   // What's shown is the last good answer; say why it isn't fresher.
-  if (error) card.append(h("div", { class: "int-status" }, dot(COLOR.red, 5), h("span", { text: error })));
+  if (error) card.append(h("div", { class: "tile-status" }, dot(COLOR.red, 5), h("span", { text: error })));
   card.append(figure, rows);
   return card;
 }
@@ -325,13 +325,13 @@ function stripeCard(): HTMLElement {
           style: "color:#22c55e",
           text: `+${(Number(p.amount ?? 0) / 100).toFixed(2)}`,
         }),
-        h("span", { class: "int-ago", text: timeAgo(p.createdAt) }),
+        h("span", { class: "pane-ago", text: timeAgo(p.createdAt) }),
       ),
     );
   }
   return h(
     "div",
-    { class: "int-card" },
+    { class: "tile-card" },
     header("#0570DE", "Stripe", "Pagamentos"),
     h("div", { class: "int-balance" }, h("span", { text: balance }), h("i", { text: currency })),
     rows,
@@ -356,11 +356,11 @@ function notionCard(): HTMLElement {
           ? h("span", { class: "int-emoji", text: String(p.emoji) })
           : h("i", { class: "int-emoji" }, svg(ICONS.doc, 9)),
         h("span", { class: "int-name", text: String(p.title ?? "Sem título") }),
-        h("span", { class: "int-ago", text: timeAgo(p.lastEditedAt) }),
+        h("span", { class: "pane-ago", text: timeAgo(p.lastEditedAt) }),
       ),
     );
   }
-  return h("div", { class: "int-card" }, header("#E8E8E8", "Notion", "Recentes"), rows);
+  return h("div", { class: "tile-card" }, header("#E8E8E8", "Notion", "Recentes"), rows);
 }
 
 // ── Cal.com ───────────────────────────────────────────────────────────────────
@@ -371,7 +371,7 @@ function calcomCard(): HTMLElement {
     .sort((a, b) => new Date(String(a.start)).getTime() - new Date(String(b.start)).getTime());
   const rows = h("div", { class: "int-rows tight" });
   if (bookings.length === 0) {
-    rows.append(h("div", { class: "int-empty", text: "Nenhuma chamada agendada" }));
+    rows.append(h("div", { class: "pane-empty", text: "Nenhuma chamada agendada" }));
   }
   for (const b of bookings.slice(0, 3)) {
     const when = new Date(String(b.start));
@@ -387,7 +387,7 @@ function calcomCard(): HTMLElement {
       ),
     );
   }
-  return h("div", { class: "int-card" }, header("#C9956A", "Cal.com", "Agenda"), rows);
+  return h("div", { class: "tile-card" }, header("#C9956A", "Cal.com", "Agenda"), rows);
 }
 
 // ── n8n ───────────────────────────────────────────────────────────────────────
@@ -400,11 +400,11 @@ function n8nCard(task: Pill, onDetail: () => void, openSettings: () => void): HT
   const accent = success ? "#22C55E" : "#F4505E";
   return h(
     "div",
-    { class: "int-card" },
+    { class: "tile-card" },
     header("#F29B38", "n8n", "Workflow"),
     h(
       "div",
-      { class: "int-actions" },
+      { class: "tile-actions" },
       h(
         "button",
         {
@@ -427,7 +427,7 @@ function n8nDetail(task: Pill, onBack: () => void): HTMLElement {
   const detail = lines[1];
   return h(
     "div",
-    { class: "int-card detail" },
+    { class: "tile-card detail" },
     h(
       "div",
       { class: "int-detail-head" },
@@ -443,7 +443,7 @@ function n8nDetail(task: Pill, onBack: () => void): HTMLElement {
     detail
       ? h("pre", { class: "int-detail-text", text: detail })
       : h("div", {
-          class: "int-status",
+          class: "tile-status",
           text: success ? "Concluído com sucesso." : "Sem detalhes do erro.",
         }),
   );

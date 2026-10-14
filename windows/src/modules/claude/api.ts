@@ -1,6 +1,6 @@
 // What the Claude module offers other modules (services, via api.provide / api.use). Types only.
 
-/** A card a module draws for a pill it owns, in the Claude overview's left card; `key` changes when it must be redrawn. */
+/** A card a module draws for a pill it owns, in the Claude overview's left card, dressed in the host's tile-* classes (claude/panel.css); `key` changes when it must be redrawn. */
 export interface TaskCard { key: string; build(): HTMLElement }
 /** News a module's pill tells: the finished and error cards show it in place of a session's result. */
 export interface TaskNews { says: string; title: string; facts: Node[] }

@@ -80,7 +80,7 @@ export class Island implements IslandHost {
 
   /** The colour Mochi body is drawn in, eased towards what it should be. */
   private bodyRGB: RGB | null = null;
-  /** A body colour a view asked for (the GitHub graph's day under the mouse); wins over the pill's. His body only. */
+  /** A body colour a view asked for (a chart's day under the mouse); wins over the pill's. His body only. */
   private tintRequest: RGB | null = null;
 
   private running = false;

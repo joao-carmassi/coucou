@@ -78,7 +78,7 @@
   background: color-mix(in srgb, var(--card), #fff 2.5%);
 }
 
-.who .gh-pm.count {
+.who .diff-pm.count {
   font-size: 10.5px;
 }
 
@@ -96,7 +96,7 @@
   overflow-y: auto;
   margin: 2px 0;
   border-radius: 10px;
-  border: 1px solid var(--gh-edge);
+  border: 1px solid var(--surface-edge);
   background: var(--card-flat);
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
@@ -158,11 +158,11 @@
 .sess-mark.run {
   border: 2px solid rgba(255, 255, 255, 0.18);
   border-top-color: var(--ink);
-  animation: gh-spin 0.9s linear infinite;
+  animation: pane-spin 0.9s linear infinite;
 }
 
 /* A line of an edit not typed yet takes no room: the file grows as it is written. */
-.gh-diff-line.untyped {
+.diff-line.untyped {
   display: none;
 }
 
@@ -176,7 +176,7 @@
 }
 
 /* The tab of a file being written: an editor's dot for unsaved. */
-.gh-tab.writing::after {
+.pane-tab.writing::after {
   content: "";
   width: 6px;
   height: 6px;
@@ -192,8 +192,8 @@
   padding: 0 8px;
   border: 0;
   border-radius: 999px;
-  background: var(--gh-plate);
-  color: var(--gh-text);
+  background: var(--surface-plate);
+  color: var(--surface-text);
   font: 500 10.5px var(--font);
   cursor: default;
 }
@@ -227,7 +227,7 @@
   max-width: 85%;
   padding: 5px 10px;
   border-radius: 11px;
-  background: var(--gh-plate);
+  background: var(--surface-plate);
   font: 400 12px/1.4 var(--font);
   color: var(--ink-2);
   display: -webkit-box;
@@ -239,7 +239,7 @@
 
 /* A conversation's title is longer than a project's name: in the session's
    column it gets a second line before it is cut. */
-.session-view .gh-side-who b {
+.session-view .pane-side-who b {
   white-space: normal;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -361,7 +361,7 @@
   flex-direction: column;
   gap: 7px;
   font: 400 12.5px/1.45 var(--font);
-  color: var(--gh-text);
+  color: var(--surface-text);
   overflow-wrap: anywhere;
 }
 
@@ -378,7 +378,7 @@
   font: 400 11.5px var(--mono);
   padding: 1px 5px;
   border-radius: 5px;
-  background: var(--gh-plate);
+  background: var(--surface-plate);
   color: var(--ink-2);
 }
 
@@ -421,7 +421,7 @@
   padding: 8px 10px;
   border-radius: 8px;
   background: var(--card-flat);
-  border: 1px solid var(--gh-edge);
+  border: 1px solid var(--surface-edge);
   font: 400 11.5px/1.45 var(--mono);
   color: var(--code);
   white-space: pre;
@@ -436,7 +436,7 @@
 .md-table th,
 .md-table td {
   padding: 4px 9px;
-  border: 1px solid var(--gh-edge);
+  border: 1px solid var(--surface-edge);
   text-align: left;
   vertical-align: top;
 }
@@ -444,12 +444,12 @@
 .md-table th {
   font-weight: 600;
   color: var(--ink);
-  background: var(--gh-plate);
+  background: var(--surface-plate);
 }
 
 .md-rule {
   border: 0;
-  border-top: 1px solid var(--gh-edge);
+  border-top: 1px solid var(--surface-edge);
   margin: 2px 0;
 }
 
@@ -462,8 +462,8 @@
   padding: 0 8px;
   border: 0;
   border-radius: 999px;
-  background: var(--gh-plate);
-  color: var(--gh-text);
+  background: var(--surface-plate);
+  color: var(--surface-text);
   font: 500 10.5px var(--font);
   white-space: nowrap;
   cursor: default;
@@ -491,7 +491,7 @@
 }
 
 /* The session on show, in the list of sessions. */
-.sess-row.on .gh-row-title {
+.sess-row.on .pane-row-title {
   color: var(--ink);
   font-weight: 600;
 }
@@ -583,11 +583,11 @@
   overflow: hidden;
 }
 
-.now-box .gh-diff-line {
+.now-box .diff-line {
   grid-template-columns: 26px 12px 1fr;
 }
 
-.now-box .gh-diff-line .t,
+.now-box .diff-line .t,
 .now-box .term-line .t {
   white-space: pre;
   overflow: hidden;
@@ -725,7 +725,7 @@
   margin-top: 4px;
   padding: 4px 0;
   border-radius: 8px;
-  border: 1px solid var(--gh-edge);
+  border: 1px solid var(--surface-edge);
   background: var(--card);
   overflow: hidden;
 }
@@ -766,7 +766,7 @@
 .jr-option {
   padding: 2px 8px;
   border-radius: 999px;
-  border: 1px solid var(--gh-edge);
+  border: 1px solid var(--surface-edge);
   font: 500 10.5px var(--font);
   color: var(--dim-3);
 }
@@ -840,31 +840,6 @@
 .stack.airy {
   padding-top: 20px !important;
   padding-bottom: 20px !important;
-}
-
-/* On a project's row: whether the pill speaks up for it. Struck through and
-   dim when it is muted. */
-.gh-bell {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--dim-2);
-  cursor: default;
-  transition: color 0.2s ease-out, background 0.2s ease-out;
-}
-
-.gh-bell:hover {
-  background: var(--gh-plate);
-  color: var(--ink);
-}
-
-.gh-bell.off {
-  color: var(--dim-5);
 }
 
 /* ── Sessions view (view id "sessions") ──────────────────────────── */
