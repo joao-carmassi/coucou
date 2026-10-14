@@ -124,7 +124,8 @@ export class Claude {
     this.setFocus(id);
     // A request that came in while another pill had the front only left a
     // badge: bringing Claude's pill forward is asking for its card.
-    if (id !== CLAUDE_ID) return;
+    // Folded: side-effect free (setView/afterRequest could open the island); the next open shows the card anyway.
+    if (id !== CLAUDE_ID || this.api.island.mode() !== "expanded") return;
     if (this.store.pendingQuestion) this.api.island.setView("question");
     else if (this.store.pendingApproval) this.api.island.setView("approval");
     // No card for the session in front, but one behind it is waiting: its turn.

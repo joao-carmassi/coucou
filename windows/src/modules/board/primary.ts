@@ -2,8 +2,10 @@
 // module id, "claude" by default) and a short-lived user pick (a click on a pill in the list). The pick is
 // judged on the next open, and also by ONE one-shot timeout armed only while a pick exists and the island is
 // folded (cancelled on open or when the board stops): a folded island must not keep the picked pill in front.
+// The timer is not trusted alone: `due` is also judged lazily on every visibility change (hover wake, open).
 
 import type { Disposer, IslandApi, Pill } from "../../core/moduleApi";
+import { App } from "../../kit/app";
 import type { BoardFocus } from "./api";
 
 export interface PrimarySettings { boardPrimary: string; focusHoldMinutes: number }
@@ -32,14 +34,27 @@ export function startPrimary(api: IslandApi): Disposer {
   const defaultPill = (): Pill | undefined => api.pills.all().find((p) => p.owner === settings().primary);
   const explicit = (p: Pill | null) => !!p && (EXPLICIT.has(p.mood) || !!p.badge);
 
-  /** `folded`: nobody is looking, so nothing that could open the island runs (no pending request, no explicit default). */
-  function applyDefault(folded = false) {
+  const log = (msg: string) => { void App.log(`board primary: ${msg}`); };
+  const due = () => !!pick && closedAt !== null && Date.now() - closedAt >= settings().holdMs;
+
+  /** Puts the default in front (never over a pill with news of its own). Focus services do nothing while the island is folded. */
+  function applyDefault() {
     const want = defaultPill();
     const cur = front();
     if (!want || cur?.id === want.id || explicit(cur)) return;
-    if (folded && (explicit(want) || api.island.busy())) return;
     busy = true;
     try { put(want.id); } finally { busy = false; }
+  }
+
+  /** Ends a due pick on a folded island. `forced`: the timer itself (due by construction). The pick is kept when not due, so a later wake retries. */
+  function revertPick(src: string, forced = false) {
+    if (!pick) return;
+    if (!forced && !due()) { log(`${src} pick-not-due`); return; }
+    const cur = front();
+    pick = null;
+    if (explicit(cur)) { log(`${src} cur-explicit ${cur?.id}`); return; }
+    applyDefault();
+    log(`${src} applied, front=${front()?.id}`);
   }
 
   rt.choose = (id) => {
@@ -52,12 +67,14 @@ export function startPrimary(api: IslandApi): Disposer {
       if (prev === "expanded" && mode !== "expanded") {
         closedAt = Date.now();
         revert?.();
-        revert = pick ? api.timeout(() => { revert = null; if (!pick) return; pick = null; applyDefault(true); }, settings().holdMs) : null;
+        revert = pick ? api.timeout(() => { revert = null; log("timer fired"); revertPick("timer", true); }, settings().holdMs) : null;
+        return;
       }
-      if (mode !== "expanded" || prev === "expanded") return;
+      if (mode !== "expanded") { revertPick("wake"); return; } // hover wake: the timer may not have run
+      if (prev === "expanded") return;
       revert?.();
       revert = null;
-      if (pick && closedAt !== null && Date.now() - closedAt >= settings().holdMs) pick = null;
+      if (due()) pick = null;
       closedAt = null;
       if (!pick) applyDefault();
     }),

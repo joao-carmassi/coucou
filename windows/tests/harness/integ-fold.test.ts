@@ -105,4 +105,19 @@ describe("folded island with an integration pill", () => {
     expect(eng()).toBe("working");
     expect(State.mode).not.toBe("expanded");
   });
+
+  it("picked integration, folded, Claude done: the hover wake past the hold time shows Claude even if the timer never ran", () => {
+    Object.assign(State.settings, { boardPrimary: "claude", focusHoldMinutes: 1 });
+    probe.api!.status.set(null);
+    probe.api!.pills.set({ id: "claude-pill", ambient: false, mood: "idle" });
+    pick();
+    expect(State.focusPill?.id).toBe("integration_vercel");
+    fold();
+    probe.api!.pills.set({ id: "claude-pill", mood: "done" });
+    island.fsm.forceHidden(); tick(500);
+    vi.setSystemTime(Date.now() + 61_000);
+    island.fsm.forcePetit(); tick(500);
+    expect(State.focusPill?.id).toBe("claude-pill");
+    expect(State.mode).not.toBe("expanded");
+  });
 });

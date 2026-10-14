@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.5
+
+- Board primary: fix a picked pill (Vercel) staying in front on the mini island after the focus time, until the island was opened and closed again. The pick is now judged lazily on every visibility change (hover wake, open) as well as by the fold timer, and is dropped only once judged (a skipped attempt no longer loses it). An explicit default (Claude done/alert/error) now takes the front too.
+- Claude: `focusPill` does nothing but set the focus while the island is not expanded, so a board revert can never open it; the board no longer needs to skip when a request is pending.
+- The board logs its decisions (timer fired, pick-not-due, cur-explicit, applied) to the app log.
+
 ## 0.8.4
 
 - Compact mini grid: with no status line on show (nobody working) every other pill is listed again, ambient integrations included (the compact grid still shows 4); while a status line shows, ambient pills stay out. Core only (`State.gridPills`, `State.statusLine`); `api.pills.others()` unchanged. The width follows the same list.

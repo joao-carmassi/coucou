@@ -234,15 +234,60 @@ describe("board primary: a folded island reverts the pick", () => {
     expect(front()).toBe("alpha-pill");
   });
 
-  it("a pending request: the fold revert does not open the island", () => {
+  it("a pending request: the fold revert still happens and does not open the island", () => {
     reopen();
     clickPill("Vercel");
     fold();
     const off = probe.alpha!.island.request({ view: "home", priority: 10, pin: true });
     island.collapse(); tick(10);
     tick(61_000);
-    expect(front()).toBe("vercel-pill"); // skipped: the next open decides
+    expect(front()).toBe("claude-pill");
     expect(State.mode).not.toBe("expanded");
     off();
+  });
+
+  it("the default is explicit (done): it still takes the front, the island stays folded", () => {
+    reopen();
+    clickPill("Vercel");
+    fold();
+    probe.claude!.pills.set({ id: "claude-pill", mood: "done" });
+    tick(61_000);
+    expect(front()).toBe("claude-pill");
+    expect(State.mode).not.toBe("expanded");
+  });
+
+  it("the timer never ran (time only jumped): a hover wake past the focus time puts the default in front", () => {
+    reopen();
+    clickPill("Vercel");
+    fold();
+    island.fsm.forceHidden(); tick(10);
+    vi.setSystemTime(Date.now() + 61_000); // no timer ticks
+    expect(front()).toBe("vercel-pill");
+    island.fsm.forcePetit(); tick(10);
+    expect(front()).toBe("claude-pill");
+    expect(State.mode).not.toBe("expanded");
+  });
+
+  it("a wake before the focus time keeps the pick; a later wake past it reverts", () => {
+    reopen();
+    clickPill("Vercel");
+    fold();
+    island.fsm.forceHidden(); tick(10);
+    island.fsm.forcePetit(); tick(10);
+    expect(front()).toBe("vercel-pill");
+    island.fsm.forceHidden(); tick(10);
+    vi.setSystemTime(Date.now() + 61_000);
+    island.fsm.forcePetit(); tick(10);
+    expect(front()).toBe("claude-pill");
+  });
+
+  it("the front got news of its own: the revert leaves it and ends the pick", () => {
+    reopen();
+    clickPill("Vercel");
+    fold();
+    probe.vercel!.pills.set({ id: "vercel-pill", mood: "error" });
+    tick(61_000);
+    expect(front()).toBe("vercel-pill");
+    probe.vercel!.pills.set({ id: "vercel-pill", mood: "idle" });
   });
 });
