@@ -1,5 +1,5 @@
 // The home's primary: a default (setting boardPrimary), a click on a pill that lasts the focus time, and the
-// lazy revert on the next open (no timers). Providers are Rust-less dummies; their pills are `<id>-pill`.
+// revert on the next open, and by one timeout armed only while a pick exists and the island is folded. Providers are Rust-less dummies; their pills are `<id>-pill`.
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IslandApi, ModuleDef } from "../../src/core/moduleApi";
 import type { BoardCardOf, BoardFocus } from "../../src/modules/board/api";
@@ -177,5 +177,62 @@ describe("board primary", () => {
     tick(1000);
     expect(front()).toBe("vercel-pill");
     Registry.apply(ALL);
+  });
+});
+
+describe("board primary: a folded island reverts the pick", () => {
+  it("pick, fold, focus time passes without reopening: the default is in front and the island stays folded", () => {
+    reopen();
+    clickPill("Vercel");
+    fold();
+    tick(30_000);
+    expect(front()).toBe("vercel-pill");
+    tick(31_000);
+    expect(front()).toBe("claude-pill");
+    expect(State.mode).not.toBe("expanded");
+  });
+
+  it("0 minutes reverts at the fold", () => {
+    set({ focusHoldMinutes: 0 });
+    reopen();
+    clickPill("Vercel");
+    fold();
+    tick(10);
+    expect(front()).toBe("claude-pill");
+  });
+
+  it("reopening before the time cancels the timer", () => {
+    reopen();
+    clickPill("Vercel");
+    fold();
+    tick(30_000);
+    reopen();
+    const off = probe.alpha!.island.request({ view: "home", priority: 10, pin: true }); // keeps it open past the old deadline
+    tick(120_000);
+    expect(State.mode).toBe("expanded");
+    expect(front()).toBe("vercel-pill");
+    off();
+  });
+
+  it("the board stopping clears the timer", () => {
+    reopen();
+    clickPill("Vercel");
+    fold();
+    Registry.apply({ ...ALL, board: false });
+    tick(120_000);
+    expect(front()).toBe("vercel-pill");
+    Registry.apply(ALL);
+  });
+
+  it("a pending request: the fold revert does not open the island", () => {
+    reopen();
+    clickPill("Vercel");
+    fold();
+    const off = probe.alpha!.island.request({ view: "home", priority: 10, pin: true });
+    island.collapse(); tick(10);
+    tick(61_000);
+    expect(front()).toBe("vercel-pill"); // skipped: the next open decides
+    expect(State.mode).not.toBe("expanded");
+    off();
   });
 });

@@ -3,6 +3,7 @@
 ## 0.8.4
 
 - Compact mini grid: with no status line on show (nobody working) every other pill is listed again, ambient integrations included (up to 6); while a status line shows, ambient pills stay out. Core only (`State.gridPills`, `State.statusLine`); `api.pills.others()` unchanged. The width follows the same list.
+- Board primary: a pick no longer keeps the picked pill in front of a folded island. One scoped timeout (only while a pick exists and the island is folded) puts the default back after `focusHoldMinutes`; it never opens the island.
 - Regression tests: news on a folded island (front or not) and ambient pills.
 
 ## 0.8.3

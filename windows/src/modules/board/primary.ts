@@ -1,6 +1,7 @@
 // The home's "primary": the pill whose card fills the left tile. A default one (setting `boardPrimary`: a
-// module id, "claude" by default) and a short-lived user pick (a click on a pill in the list). No timers:
-// the close time is stamped on visibility and the pick is judged lazily on the next open.
+// module id, "claude" by default) and a short-lived user pick (a click on a pill in the list). The pick is
+// judged on the next open, and also by ONE one-shot timeout armed only while a pick exists and the island is
+// folded (cancelled on open or when the board stops): a folded island must not keep the picked pill in front.
 
 import type { Disposer, IslandApi, Pill } from "../../core/moduleApi";
 import type { BoardFocus } from "./api";
@@ -17,6 +18,7 @@ export function startPrimary(api: IslandApi): Disposer {
   let pick: string | null = null;
   let closedAt: number | null = null;
   let busy = false;
+  let revert: Disposer | null = null;
 
   const settings = () => {
     const s = api.settings<PrimarySettings>();
@@ -30,10 +32,12 @@ export function startPrimary(api: IslandApi): Disposer {
   const defaultPill = (): Pill | undefined => api.pills.all().find((p) => p.owner === settings().primary);
   const explicit = (p: Pill | null) => !!p && (EXPLICIT.has(p.mood) || !!p.badge);
 
-  function applyDefault() {
+  /** `folded`: nobody is looking, so nothing that could open the island runs (no pending request, no explicit default). */
+  function applyDefault(folded = false) {
     const want = defaultPill();
     const cur = front();
     if (!want || cur?.id === want.id || explicit(cur)) return;
+    if (folded && (explicit(want) || api.island.busy())) return;
     busy = true;
     try { put(want.id); } finally { busy = false; }
   }
@@ -45,8 +49,14 @@ export function startPrimary(api: IslandApi): Disposer {
 
   const offs = [
     api.onVisibility((mode, prev) => {
-      if (prev === "expanded" && mode !== "expanded") closedAt = Date.now();
+      if (prev === "expanded" && mode !== "expanded") {
+        closedAt = Date.now();
+        revert?.();
+        revert = pick ? api.timeout(() => { revert = null; pick = null; applyDefault(true); }, settings().holdMs) : null;
+      }
       if (mode !== "expanded" || prev === "expanded") return;
+      revert?.();
+      revert = null;
       if (pick && closedAt !== null && Date.now() - closedAt >= settings().holdMs) pick = null;
       closedAt = null;
       if (!pick) applyDefault();
@@ -59,5 +69,5 @@ export function startPrimary(api: IslandApi): Disposer {
       if (gone) applyDefault();
     }),
   ];
-  return () => { rt.choose = null; offs.reverse().forEach((o) => o()); };
+  return () => { revert?.(); rt.choose = null; offs.reverse().forEach((o) => o()); };
 }

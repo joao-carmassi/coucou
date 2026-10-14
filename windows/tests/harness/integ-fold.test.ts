@@ -18,7 +18,8 @@ const loadModules = async () => {
     start(api) {
       probe.api = api;
       api.pills.set({ id: "claude-pill", label: "Claude", color: "#88aaff", mood: "idle" });
-      return () => { probe.api = null; };
+      const off = api.provide<(id: string) => void>("board.focus", (id) => { if (id === "claude-pill") api.pills.focus(id); });
+      return () => { off(); probe.api = null; };
     },
   } as ModuleDef;
   return { MODULES: [board, prov, vercel] };
@@ -86,5 +87,22 @@ describe("folded island with an integration pill", () => {
     expect(State.gridPills).toEqual([]);
     probe.api!.status.set(null); tick(100);
     expect(State.gridPills.map((p) => p.id)).toEqual(["integration_vercel"]);
+  });
+
+  it("picked integration, folded, Claude starts working: past the hold time the folded island shows Claude, no click", () => {
+    Object.assign(State.settings, { boardPrimary: "claude", focusHoldMinutes: 1 });
+    probe.api!.status.set(null);
+    probe.api!.pills.set({ id: "claude-pill", ambient: false, mood: "idle" });
+    pick();
+    expect(State.focusPill?.id).toBe("integration_vercel");
+    fold();
+    probe.api!.pills.set({ id: "claude-pill", mood: "working" });
+    probe.api!.status.set({ priority: 30, text: "trabalhando" });
+    tick(61_000);
+    island.fsm.forcePetit(); tick(500);
+    expect(State.focusPill?.id).toBe("claude-pill");
+    expect(State.statusLine?.text).toBe("trabalhando");
+    expect(eng()).toBe("working");
+    expect(State.mode).not.toBe("expanded");
   });
 });
