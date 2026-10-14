@@ -1,0 +1,6 @@
+{
+  "id": "board",
+  "label": "Painel",
+  "default": true,
+  "order": 0
+}

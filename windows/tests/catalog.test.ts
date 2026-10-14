@@ -17,7 +17,7 @@ test("catalog: shipped manifests are consistent", () => {
   ids.forEach((id, i) => {
     for (const r of catalog(true)[i].requires ?? []) assert.ok(ids.indexOf(r) >= 0 && ids.indexOf(r) < i, `${id} requires ${r} earlier`);
   });
-  assert.deepEqual(catalog(false).map((x) => x.id).slice(0, 5), ["claude", "media", "timer", "upload", "voice"]);
+  assert.deepEqual(catalog(false).map((x) => x.id).slice(0, 6), ["board", "claude", "media", "timer", "upload", "voice"]);
 });
 
 test("collectDefs: keeps module-looking exports only", () => {

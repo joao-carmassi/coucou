@@ -57,12 +57,15 @@ fn boot(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>) -> BootI
 /// Merges `patch` (top-level keys, replaced whole) onto the stored settings under the lock, so two windows
 /// saving different keys never undo each other. Keys the build does not know travel in `extra`.
 #[tauri::command]
-fn save_settings(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>, patch: serde_json::Map<String, serde_json::Value>) {
+fn save_settings(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>, patch: serde_json::Map<String, serde_json::Value>) -> Result<(), String> {
     let (settings, screen_changed, autostart_changed) = {
         let mut current = shared.settings.lock().unwrap();
         let mut settings = match settings::merge_patch(&current, patch) {
             Ok(s) => s,
-            Err(err) => return eprintln!("[coucou] settings patch refused: {err}"),
+            Err(err) => {
+                eprintln!("[coucou] settings patch refused: {err}");
+                return Err(format!("settings patch refused: {err}"));
+            }
         };
         // A caller that does not know about modules must not wipe the switches.
         if settings.modules_enabled.is_empty() {
@@ -92,6 +95,7 @@ fn save_settings(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>,
     host.sync(&app, &settings);
     // Keep the other window in step (island ⇄ settings window).
     let _ = app.emit("settings-changed", settings);
+    Ok(())
 }
 
 /// Hidden island → shrink the window to the invisible wake strip and park the

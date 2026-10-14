@@ -5,7 +5,7 @@
 import { Bridge } from "../../core/bridge";
 import { type GithubData, type IntegrationUpdate, IntegrationsBridge } from "./bridge";
 import type { Disposer, HomeRequest, IslandApi } from "../../core/moduleApi";
-import { CLAUDE_SERVICE, type TaskCard, type TaskNews } from "../claude/api";
+import type { BoardCard, BoardFocus, BoardNews } from "../board/api";
 import { Sound } from "../../core/sound";
 import { State } from "../../core/state";
 import { GITHUB, PROVIDERS, cleanups, info, rt, steps, type IntegrationInfo, type Provider } from "./store";
@@ -170,7 +170,7 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
     redraw();
   }
 
-  // ── What the Claude overview and its cards ask for ─────────────────────────
+  // ── What the board and the result cards ask for ────────────────────────────
 
   const cardHooks: IntegrationCardHooks = {
     get detailOpen() { return detailOpen; },
@@ -186,15 +186,15 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
     },
   };
 
-  function taskCard(taskId: string): TaskCard | null {
+  function boardCard(taskId: string): BoardCard | null {
     const task = State.pills.find((t) => t.id === taskId);
     if (taskId !== id || !task || !owned) return null;
     const own = info[id];
     const key = [id, detailOpen, task.mood, steps.get(id)?.join("|"), own?.loaded, own?.error, own?.configured, JSON.stringify(own?.data ?? {})].join("~");
-    return { key, build: () => renderIntegrationCard(task, cardHooks) };
+    return { key, build: () => renderIntegrationCard(task, cardHooks), target: true };
   }
 
-  function taskNews(taskId: string): TaskNews | null {
+  function boardNews(taskId: string): BoardNews | null {
     const news = taskId === id && owned ? info[id]?.news : null;
     if (!news) return null;
     return {
@@ -213,9 +213,9 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
     return true;
   }
 
-  /** Without the Claude module there is no overview: the GitHub panel is home. */
+  /** Without the board there is no home tab: the GitHub panel is home. */
   function homeView(): HomeRequest | null {
-    return State.modules.claude !== true && owned ? { view: "github", priority: 5 } : null;
+    return api.use("board.host") === undefined && owned ? { view: "github", priority: 5 } : null;
   }
 
   const offs: Disposer[] = [
@@ -230,8 +230,10 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
     api.listen<IntegrationUpdate>("integration", handle),
     api.listen("secrets-changed", () => void refreshConfigured()),
     api.provide("pillOpen", openTarget),
-    api.provide(CLAUDE_SERVICE.taskCard, taskCard),
-    api.provide(CLAUDE_SERVICE.taskNews, taskNews),
+    api.provide("board.card", boardCard),
+    api.provide("board.news", boardNews),
+    // A click on this pill in the board's list (the board plays the blip).
+    api.provide<BoardFocus>("board.focus", (taskId) => { if (taskId === id && owned) api.pills.focus(id); }),
   ];
   if (isGithub) {
     offs.push(

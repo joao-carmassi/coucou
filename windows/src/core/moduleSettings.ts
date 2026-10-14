@@ -17,7 +17,7 @@ export function moduleSettings(id: string, defaults: Readonly<Record<string, unk
       for (const k of Object.keys(defaults)) snap[k] = structuredClone(k in stored && stored[k] !== undefined ? stored[k] : defaults[k]);
       return Object.freeze(snap) as Readonly<T>;
     },
-    save(patch) {
+    async save(patch) {
       const bad = Object.keys(patch).filter((k) => !(k in defaults));
       if (bad.length) throw new Error(`module ${id}: settings key(s) not declared in its manifest: ${bad.join(", ")}`);
       Object.assign(State.settings, patch);

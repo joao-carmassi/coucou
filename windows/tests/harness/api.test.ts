@@ -96,10 +96,12 @@ describe("module settings", () => {
     expect((State.settings as unknown as Record<string, unknown>).unrelated).toBe("keep");
   });
 
-  it("a key the module did not declare is refused", () => {
+  it("a key the module did not declare is refused (rejected promise, never a sync throw)", async () => {
     const n = patches().length;
-    expect(() => dummy().saveSettings({ soundVolume: 1 })).toThrow(/not declared/);
-    expect(() => other().saveSettings({ dummyGreeting: "x" })).toThrow(/not declared/);
+    let p: Promise<void> | undefined;
+    expect(() => { p = dummy().saveSettings({ soundVolume: 1 }); }).not.toThrow();
+    await expect(p).rejects.toThrow(/not declared/);
+    await expect(other().saveSettings({ dummyGreeting: "x" })).rejects.toThrow(/not declared/);
     expect(patches()).toHaveLength(n);
   });
 });

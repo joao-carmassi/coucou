@@ -57,6 +57,7 @@ per module; a disabled module has no tab, view, pill, timer, thread or listener.
 
 | Module | Default | What it does |
 |---|---|---|
+| Painel (`board`) | on | The **Início** tab: the focused pill's card and the list of the others. Needs nothing; every module's pills use it |
 | Claude Code (`claude`) | on | Hooks, sessions, approvals, questions, Sessions tab |
 | Mídia (`media`) | on | Screenshots, game-bar clips and dropped files in a grid |
 | Timer (`timer`) | off | Countdown (1 to 600 min) or stopwatch, shown as a pill |
@@ -64,7 +65,7 @@ per module; a disabled module has no tab, view, pill, timer, thread or listener.
 | Voz (`voice`) | off | Speech to a new Claude Code session. Needs `claude`; under **Claude** |
 | GitHub, Vercel, Stripe, n8n, Resend, Cal.com, Notion | off | Read-only pills, under **Integrações** |
 
-Turning `claude` off turns `voice` and `upload` off with it. The contract is in
+Turning `claude` off turns `voice` and `upload` off with it; the board and the service modules stay. The contract is in
 [`docs/MODULES-CONTRACT.md`](../docs/MODULES-CONTRACT.md).
 
 ### Hotkeys

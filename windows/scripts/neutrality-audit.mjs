@@ -233,7 +233,8 @@ for (const [owner, file, kind, name, nested, scope] of [
 const lintCounts = { stateImports: stateImports.length, stateWrites: stateWrites.length, foreignCoreImports: foreignImports.length, deadFields: deadFields.length };
 if (process.argv.includes("--write-ratchet")) {
   const next = Object.fromEntries(Object.entries(lintCounts).map(([k, v]) => [k, Math.min(v, ratchet[k] ?? v)]));
-  writeFileSync(ratchetFile, JSON.stringify(next, null, 2) + "\n");
+  // `reasons` (why a count stays above zero) is hand-written: keep it.
+  writeFileSync(ratchetFile, JSON.stringify({ ...next, ...(ratchet.reasons && { reasons: ratchet.reasons }) }, null, 2) + "\n");
   Object.assign(ratchet, next);
 }
 console.log("\nLINTS (fail on a count above the ratchet; --warn-lints only prints)");

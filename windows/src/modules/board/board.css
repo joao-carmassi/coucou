@@ -1,0 +1,139 @@
+/* The island's home: the focused pill's card on the left, the other pills on the right. */
+.overview {
+  display: flex;
+  gap: 10px;
+  height: 100%;
+}
+.overview > .left {
+  flex: 0 0 322px;
+  width: 322px;
+}
+.overview > .right {
+  flex: 1 1 auto;
+}
+/* Only one pill is active: no empty right card, the left one is full width. */
+.overview.solo > .left {
+  flex: 1 1 auto;
+  width: auto;
+  /* Else a long unwrapped command line widens the card past the island. */
+  min-width: 0;
+}
+.overview.solo > .right {
+  display: none;
+}
+/* ── Agent pills ────────────────────────────────────────────────────────── */
+
+.pills {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: 28px;
+  gap: 4px;
+  align-content: center;
+  padding: 0 8px;
+}
+.pill {
+  position: relative;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--card-flat);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  display: flex;
+  align-items: center;
+  cursor: default;
+  transition: transform 0.2s cubic-bezier(0.3, 1.2, 0.4, 1), background 0.18s, border-color 0.18s,
+    box-shadow 0.18s, filter 0.18s;
+}
+.pill .mini {
+  margin-left: 7px;
+}
+.pill .lbl {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font: 600 10px var(--font);
+  color: var(--dim-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 6px;
+  pointer-events: none;
+}
+.pill:hover {
+  transform: scale(1.04);
+  filter: brightness(1.06);
+}
+.pill-badge {
+  position: absolute;
+  top: -3px;
+  right: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #0b0c0e;
+  display: grid;
+  place-items: center;
+}
+.pill-badge i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #000;
+}
+.pill-badge svg {
+  width: 6px;
+  height: 6px;
+}
+
+/* The cards a module draws for a pill in the home's left card (the tile-* pieces): providers dress in them (see api.ts). */
+
+.left-body {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+}
+.tile-card {
+  padding: 10px 12px 0 108px;
+  display: flex;
+  flex-direction: column;
+}
+.tile-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding-right: 24px;
+}
+.tile-head b {
+  font: 600 12px var(--font);
+  color: var(--ink);
+}
+.tile-head > span {
+  font: 400 11px var(--font);
+  color: var(--dim-2);
+  white-space: nowrap;
+}
+.tile-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding-top: 4px;
+  font: 400 11px var(--font);
+  color: var(--dim-3);
+}
+.tile-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 6px;
+}
+
+/* A card that opens something: the whole card is the button. */
+.card.opens:hover {
+  background: color-mix(in srgb, var(--card), #fff 2.5%);
+}

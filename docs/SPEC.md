@@ -50,7 +50,7 @@ Common: header with tabs (from the modules that have one) and sound button; card
 | View | Owner | Content |
 |---|---|---|
 | `empty`, `confused`, `note`, `settings`, `greeting` | core | idle card, "too many slaps", short message (closes by itself), settings, launch greeting |
-| `overview` | claude | focused task card (title, current step with its icon and target, lines it read or the diff), pills on the right |
+| `overview` | board | focused pill's card (drawn by the module that owns the pill: for Claude's, title, current step with its icon and target, lines it read or the diff), pills on the right |
 | `approval` | claude | permission request: command or diff; Aguardar, Negar, Aprovar (plan mode: Aguardar, Continuar planejando, Manual, Modo auto) |
 | `question` | claude | the question with options; multi-select, "Other", skip, Aguardar |
 | `error`, `finished` | claude | failed or finished turn; Claude's reply |

@@ -47,7 +47,7 @@ test("avatar: override > signal > fallback", () => {
 
 test("resolveEnabled: defaults and requirements", () => {
   assert.deepEqual(resolveEnabled(MODULE_INFO, {}), {
-    claude: true, media: true, upload: true, timer: false, voice: false, github: false, vercel: false, stripe: false, n8n: false, resend: false, calcom: false, notion: false,
+    board: true, claude: true, media: true, upload: true, timer: false, voice: false, github: false, vercel: false, stripe: false, n8n: false, resend: false, calcom: false, notion: false,
   });
   const r = resolveEnabled(MODULE_INFO, { claude: false, voice: true });
   assert.equal(r.voice, false);
@@ -133,4 +133,9 @@ test("Services: several providers, removed on dispose, missing is empty", () => 
   assert.deepEqual(Services.all("x.y"), [2]);
   b();
   assert.deepEqual(Services.all("x.y"), []);
+});
+
+test("resolveEnabled: the board is on by default, requires nothing, and claude off leaves it on", () => {
+  assert.equal(resolveEnabled(MODULE_INFO, {}).board, true);
+  assert.equal(resolveEnabled(MODULE_INFO, { claude: false }).board, true);
 });

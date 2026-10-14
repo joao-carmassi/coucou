@@ -4,7 +4,7 @@ Authoritative spec for the module system. Written by the Opus advisor against `m
 to the **core-only** tree (tag `m3b-core-only`): there is no legacy code to adapt, modules are
 ported one by one in M5 from `git show m3-ok:<path>`.
 
-Decisions: modules ON by default: `claude`, `media`, `upload`. OFF: `timer`, `voice`, and the
+Decisions: modules ON by default: `board`, `claude`, `media`, `upload`. OFF: `timer`, `voice`, and the
 seven service modules (`github`, `vercel`, `stripe`, `n8n`, `resend`, `calcom`, `notion`). `voice` and `upload` require `claude`. A disabled module has no tab, view,
 pill, timer, thread, or listener. One status line: highest priority wins. Commands are NOT
 gated in M4 (a command only answers a request); `host.require(id)` exists for M5.
@@ -209,12 +209,13 @@ Nothing below is verified at runtime beyond the checks in `docs/idle-baseline.md
 
 | Module | Default | Notes |
 |---|---|---|
-| claude | ON | Backend `src-tauri/src/modules/claude`, frontend `src/modules/claude`. Integration news on its finished/error cards comes through the `taskNews` hook |
+| board | ON | TS only (no Rust, no `requires`). Owns the home tab ("Início") and the `overview` view; asks the owner of each pill for its card via `board.*` services (0.4.0) |
+| claude | ON | Backend `src-tauri/src/modules/claude`, frontend `src/modules/claude`. Integration news on its finished/error cards comes through the `board.news` service; it provides `board.card`/`board.pill`/`board.focus` for its own pills |
 | media | ON | Mochi drag-out ghost lives in the module (core hooks: `mochiDrop`, `Overlay.cursor(down)`). `attach_window` and the core `inbox_ingest` share `core/inbox.rs` |
 | upload | ON, requires claude | The drop animation starts after the island opens |
 | timer | OFF | Countdown and stopwatch |
 | voice | OFF, requires claude | English only (Cactus `needle.exe` + Whistle model). The "go to alert" hotkey belongs to claude |
-| github, vercel, stripe, n8n, resend, calcom, notion | OFF | One module per service (group "Integrações"). One shared scheduler, no task while none is on. Hooks used: `taskCard`, `taskNews`, `avatar.tint` |
+| github, vercel, stripe, n8n, resend, calcom, notion | OFF | One module per service (group "Integrações"). One shared scheduler, no task while none is on. Services used: `board.card`, `board.news`, `board.focus`; hook, `avatar.tint` |
 
 Known limit: the compact grid shows at most 4 mini pills (display limit, not a limit on modules).
 
@@ -255,7 +256,7 @@ After M1 (bridge split) the comment-only warnings dropped 99 -> 56 (findings unc
 
 ## Module CSS (M2)
 
-- `src/style/index.ts` imports only the shared sheets (ui, core, overview, settings). Every module imports its own sheets from its `index.ts` (claude: base, chat, panel, claude; upload; integrations (in `provider.ts`); media; timer).
+- `src/style/index.ts` imports only the shared sheets (ui, core, text, kit panel/code, settings). Every module imports its own sheets from its `index.ts` (board: board; claude: base, chat, claude; upload; integrations (in `provider.ts`); media; timer).
 - `src/main.ts` imports `./style` before anything that reaches `modules/index`, so module sheets land AFTER the shared ones (needed for ties such as `.sess-newbtn` vs `.btn`).
 - Inter-module order = the glob order of `modules/index.ts` (M8: alphabetical by folder: claude, integrations, media, timer, upload, voice), NOT the catalog order. M8 moved only the upload sheet (after integrations/media/timer); the single selector pair that crosses (`#island.upload-on #bot-canvas` vs `#island.ghost-on #bot-canvas`) has identical declarations, so the cascade is unchanged. Sheets that were interleaved before (upload between claude chat and panel; integrations between claude panel and claude.css) now follow all claude sheets; checked: no tie between rules that can hit the same element.
 - The settings window must never import a module `index.ts` (it would pull the island CSS: `html,body{overflow:hidden}`). It loads `src/modules/settings.ts` (`SETTINGS_SECTIONS`, glob of each folder's `settings.ts` export `settingsSections: Record<moduleId, SettingsSection>`); each module's `settings.css` is imported from its `settings.ts`. `ModuleDef.settings` was removed.
@@ -269,10 +270,13 @@ Services are module-to-module and invisible to the core: `api.provide("<module>.
 | Key | Provider | Consumer | Type |
 |---|---|---|---|
 | `claude.launchFile` | claude | media ("Abrir no Claude" entry), upload | `(path, ingest) => Promise<void>` |
-| `claude.taskCard` | each integration, for its own pill | claude overview (first non-null) | `(taskId) => TaskCard \| null` |
-| `claude.taskNews` | each integration, for its own pill | claude finished/error cards | `(taskId) => TaskNews \| null` |
+| `board.card` | every module, for the pills it owns (claude: its session, idle and agent cards; each integration its own) | board home, left slot (first non-null) | `(taskId) => BoardCard \| null` |
+| `board.news` | each integration, for its own pill | claude finished/error cards | `(taskId) => BoardNews \| null` |
+| `board.pill` | claude (Claude's pill name, agents' badges) | board list | `(taskId) => BoardPill \| null` |
+| `board.focus` | every module, for the pills it owns | board list (a click on a pill) | `(taskId) => void` (the owner calls `api.pills.focus`) |
+| `board.host` | board | integrations (github: home is its panel while the board is absent) | `true` |
 
-`taskCard`/`taskNews` use the claude namespace because claude owns the slot; the providers are the many integrations, so lookups are lazy and survive claude restarts. Without claude, nobody asks and integrations show no card.
+The board (`modules/board`, types in `board/api.ts`) owns the home. It draws the pill list and the empty note itself and nothing pill-specific: the left card of a pill is asked of the modules (`useAll`, lazy, first non-null; a pill nobody answers for gets a plain name card). Providers `import type` from `board/api`; the board imports no module. Without claude the board, the integrations and any module with pills work; with only the board on, home shows the empty note. `BoardCard` carries `key`, `build(actions)`, and optionally `sync`, `open` (the whole card is a button; the board plays the blip), `hint`, `room` (extra island height) and `target` (the arrow works). `askPill` lives in `kit/ask.ts`. Home tab and `overview` layout are the board's; `tabOf`/`lightsHome` keep lighting the tab flagged `home`.
 
 ## M6/M7 - settings, events and commands leave the core
 
@@ -351,7 +355,7 @@ Honest limits: (a) Rust code still needs the three edits in `modules/mod.rs`; (b
 ## Shared UI kit and CSS conventions (0.3.1)
 
 - `src/kit` is the shared, module-agnostic UI kit: `dom.ts`, `icons.ts` (header glyphs and icons used by 2+ modules), `format.ts`, `palette.ts`, a parametrised code/diff view (`code.ts`, `code.css`, `diff-*` classes) and the panel kit (`pane-*` classes, `pane.css`). Modules and core may import `kit/*`; `kit/` imports nothing from `modules/`, `island/`, `core/state` or `core/bridge` and its CSS uses no module prefix (enforced by `neutrality-audit`, scope includes `src/kit/**`). `src/views` keeps only the core header/views host (`views.ts`). `style/index.ts` imports `../kit/pane.css` and `../kit/code.css` at their old cascade positions.
-- A module's own icons live in `modules/<id>/icons.ts` (`ICONS = { ...CORE, ...own }`). `tile-*` is the overview card layout, hosted by the claude module; other modules dress their cards in it through the `taskCard` service.
+- A module's own icons live in `modules/<id>/icons.ts` (`ICONS = { ...CORE, ...own }`). `tile-*` is the home card layout (`board.css`); modules dress their `board.card` in it.
 - Module prefixes (`sess-`, `gh-`, `int-`, ...) are forbidden in core selectors: `neutrality-audit` derives them from `modules/*/*.css` and fails the build on a hit. The audit also fails on comments that name a module.
 - Mood, badge and sound aliases of the old names were removed in 0.3.1 (`alert`, `ask`, `done`, `waiting`; `alert.wav`, `ask.wav`, `wait.wav`).
 

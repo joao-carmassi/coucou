@@ -3,19 +3,18 @@
 // (store.ts); the core only receives a status line, an avatar signal, a pill, and hooks.
 
 import type { ModuleDef, ViewContext, ViewDef } from "../../core/moduleApi";
+import { svg } from "../../kit/dom";
 import "./base.css";
 import "./chat.css";
-import "./panel.css";
 import "./claude.css";
 import { PANEL_H } from "../../core/layout";
-import { svg } from "../../kit/dom";
+import type { BoardCardOf, BoardFocus, BoardPillOf } from "../board/api";
+import { CLAUDE_ID } from "./types";
 import { claudeOf } from "./claude";
 import { ICONS } from "./icons";
 import { CARDS } from "./views/cards";
 import { buildSession } from "./views/session";
 import { buildSessionsView } from "./views/sessions";
-
-const HOUSE = "M12 3.2 2.8 10.6V21h6.6v-5.4h5.2V21h6.6V10.6L12 3.2z";
 
 const view = (
   name: string,
@@ -27,8 +26,6 @@ const view = (
 export const claude: ModuleDef = {
   id: "claude",
   views: [
-    view("overview", { height: 160, botX: 68, botY: null, botDiameter: 58 },
-      (ctx) => CARDS.buildOverview(claudeOf(ctx.api), ctx)),
     view("approval", { height: 160, botX: 62, botY: null, botDiameter: 56, extraHeight: PANEL_H - 160 },
       (ctx) => CARDS.buildApproval(claudeOf(ctx.api), ctx)),
     // 196 as docs/SPEC.md has it: a question, its options, and a line for what the option under the mouse means.
@@ -41,13 +38,24 @@ export const claude: ModuleDef = {
     // 240 = what the Ask view always was with an empty conversation.
     view("sessions", { height: 240, botX: 52, botY: null, botDiameter: 44 },
       (ctx) => buildSessionsView(claudeOf(ctx.api), ctx)),
-    // What a Claude Code session did: the files it changed, each one's diff. Lights the Home tab.
+    // What a Claude Code session did: the files it changed, each one's diff. Lights the Home tab (the board's).
     view("session", { height: PANEL_H, botX: 67, botY: 108, botDiameter: 71 },
       (ctx) => buildSession(claudeOf(ctx.api), ctx), "overview"),
   ],
   tabs: [
-    { view: "overview", title: "Início", icon: () => svg(HOUSE, 13), order: 0, home: true },
     { view: "sessions", title: "Sessões", icon: () => svg(ICONS.bubble, 13), order: 20 },
   ],
-  start: (api) => claudeOf(api).start(),
+  start(api) {
+    const c = claudeOf(api);
+    const offs = [
+      c.start(),
+      // The board (home) asks the owner of each pill: Claude's and the agents' are ours.
+      api.provide<BoardCardOf>("board.card", CARDS.boardCardOf(c)),
+      api.provide<BoardPillOf>("board.pill", (id) => c.owns(id)
+        ? { label: id === CLAUDE_ID ? c.store.clientName : undefined, badge: c.store.badges.get(id) }
+        : null),
+      api.provide<BoardFocus>("board.focus", (id) => { if (c.owns(id)) c.focusPill(id); }),
+    ];
+    return () => offs.reverse().forEach((off) => off());
+  },
 };

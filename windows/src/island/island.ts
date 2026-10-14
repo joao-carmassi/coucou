@@ -93,6 +93,8 @@ export class Island implements IslandHost {
   private collapsed = false;
   private collapseTimer: number | null = null;
   private wasInIsland = false;
+  /** The view being opened, read by the home transition (forceHome runs it synchronously). */
+  private homeTarget: string | null = null;
   /** Last shape handed to Rust for the click-through test. */
   private pushedRect = { x: -1, y: -1, w: -1, h: -1 };
   private homeCollapseAt: number | null = null;
@@ -225,9 +227,13 @@ export class Island implements IslandHost {
           break;
         case "home": {
           const r = Requests.front();
-          if (r) Requests.parked = false; // reopened on a waiting request: it holds the island again
+          const target = this.homeTarget;
+          this.homeTarget = null;
+          // Reopened on the waiting request (hover, or opened on its own view): it holds the island again.
+          // Opened on some other view, the parked request stays parked.
+          if (r && (target === null || target === r.view)) Requests.parked = false;
           this.syncPin();
-          this.expand(r?.view ?? State.defaultView());
+          this.expand(target ?? r?.view ?? State.defaultView());
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
         }
@@ -296,7 +302,9 @@ export class Island implements IslandHost {
     this.tintRequest = null;
     if (view !== State.view) for (const o of this.overlays) o.leaving?.(view);
     if (State.mode !== "expanded") {
+      this.homeTarget = view;
       this.fsm.forceHome();
+      this.homeTarget = null;
       State.view = view;
       this.animateGeometry(false);
       State.notify();
@@ -319,8 +327,12 @@ export class Island implements IslandHost {
 
   /** Navigation: open on this view. Pinning belongs to requests (addRequest). */
   open(view: IslandViewName) {
+    this.homeTarget = this.guard(view);
     this.fsm.forceHome();
+    this.homeTarget = null;
     this.expand(view);
+    // Already home (no transition ran): the mouse is elsewhere, so the auto-close countdown starts here.
+    if (this.fsm.state === "home" && !this.wasInIsland) this.fsm.mouseLeft();
   }
 
   /** The only write of fsm.pinned: the front request's pin. */
@@ -344,7 +356,9 @@ export class Island implements IslandHost {
     if (!Requests.remove(r)) return;
     this.syncPin();
     const next = Requests.front();
-    if (wasFront && State.mode === "expanded") {
+    // A quiet request behind the screen's view, dropped on that view: the next one's card takes over.
+    const onScreen = !wasFront && State.mode === "expanded" && State.view === r.view;
+    if ((wasFront || onScreen) && State.mode === "expanded") {
       if (next) this.setView(next.view);
       else if (this.fsm.state === "home" && !this.wasInIsland) {
         this.fsm.mouseLeft(); // unpinned: the auto-close countdown starts

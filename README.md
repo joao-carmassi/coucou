@@ -26,6 +26,7 @@ It has no chat of its own and needs no Anthropic API key: everything about Claud
 
 | Module | Default | What it does |
 |---|---|---|
+| `board` | on | Início: the home tab, with the focused pill's card and the others' list. Pure TS; any module's pills show up here |
 | `claude` | on | Claude Code sessions, approvals, questions, session panel, terminals, WSL |
 | `media` | on | Screenshots, recordings and dropped files; drag Mochi onto a window |
 | `upload` | on, needs `claude` | Drop a file on the island and open it in a Claude Code session |
