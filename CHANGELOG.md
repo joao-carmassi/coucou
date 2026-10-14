@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2
+
+- Settings: upload and voice (which need Claude Code) are grouped under "Precisam do Claude Code".
+- The Home button is hidden in the navbar while the Claude module is off.
+- Voice: no review page; the transcript shows on the voice card, Enter sends, Esc cancels.
+
 ## 0.2.1
 
 - Home falls back to the first enabled module's view (timer, media) instead of the "no module" card.
