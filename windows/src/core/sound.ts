@@ -19,21 +19,45 @@ class SoundEngine {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private buffers = new Map<string, AudioBuffer>();
+  /** Every sound that should be loaded: the core ones and what modules registered (name -> url). */
+  private wanted = new Map<string, string>(SOUND_NAMES.map((n) => [n, `/sounds/${n}.wav`]));
+  private pending = new Map<string, Promise<void>>();
   private loading: Promise<void> | null = null;
   private idleTimer: number | null = null;
   private loaded = false;
 
-  private async load(name: string, url: string) {
+  private load(name: string, url: string): Promise<void> {
     const ctx = this.ctx;
-    if (!ctx) return;
-    try {
-      const res = await fetch(url);
-      if (!res.ok) return;
-      const buf = await ctx.decodeAudioData(await res.arrayBuffer());
-      this.buffers.set(name, buf);
-    } catch {
-      /* a missing sound must never break the island */
-    }
+    if (!ctx) return Promise.resolve();
+    const p = (async () => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const buf = await ctx.decodeAudioData(await res.arrayBuffer());
+        // Unregistered (or replaced) while it was loading: do not bring it back.
+        if (this.wanted.get(name) === url) this.buffers.set(name, buf);
+      } catch {
+        /* a missing sound must never break the island */
+      }
+    })().finally(() => { if (this.pending.get(name) === p) this.pending.delete(name); });
+    this.pending.set(name, p);
+    return p;
+  }
+
+  /**
+   * Adds a sound under `name`; it loads at once if the audio context exists, else with preload().
+   * Only same-origin URLs. The returned function removes it.
+   */
+  register(name: string, url: string): () => void {
+    if (new URL(url, location.href).origin !== location.origin) throw new Error(`sound ${name}: only same-origin URLs`);
+    this.wanted.set(name, url);
+    this.buffers.delete(name);
+    void this.load(name, url);
+    return () => {
+      if (this.wanted.get(name) !== url) return;
+      this.wanted.delete(name);
+      this.buffers.delete(name);
+    };
   }
 
   /** Creates the context and decodes every WAV. Safe to call more than once. */
@@ -48,7 +72,7 @@ class SoundEngine {
       master.gain.value = this.volume;
       master.connect(ctx.destination);
       this.master = master;
-      await Promise.all(SOUND_NAMES.map((name) => this.load(name, `/sounds/${name}.wav`)));
+      await Promise.all([...this.wanted].map(([name, url]) => this.pending.get(name) ?? this.load(name, url)));
       this.loaded = true;
       this.idle();
     })();
@@ -97,8 +121,9 @@ class SoundEngine {
     const master = this.master;
     const buf = this.buffers.get(name);
     if (!ctx || !master || !buf) {
-      // Not loaded yet (first event after boot): load, then play once.
-      if (!this.loaded) void this.preload().then(() => this.loaded && this.buffers.has(name) && this.play(name));
+      // Still decoding (first event after boot, or just registered): wait for it, play once.
+      const wait = this.pending.get(name) ?? (this.loaded ? null : this.preload());
+      void wait?.then(() => this.buffers.has(name) && this.play(name));
       return;
     }
     if (this.idleTimer != null) {

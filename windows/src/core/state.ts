@@ -4,7 +4,7 @@ import { Hooks, homeOf } from "./hooks";
 import { Requests } from "./requests";
 import type { TabDef } from "./moduleApi";
 import type { BotEmoteName, BotStateName, IslandMode, IslandViewName } from "./layout";
-import type { EyeShape } from "../mochi/engine";
+import type { EyeShape } from "../mochi/moods";
 import { applyBadge, type PillBadge } from "./badge";
 export type { PillBadge };
 

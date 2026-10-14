@@ -9,6 +9,7 @@ import { moduleSettings } from "./moduleSettings";
 import { dropPills, focusPill, putPill } from "./pills";
 import { Requests } from "./requests";
 import { Sound } from "./sound";
+import { registerEmote, registerMood } from "../mochi/moods";
 import { createMiniBot, freeMochi, mochiSprite } from "../mochi/minibots";
 import { resolveEnabled } from "./moduleApi";
 import type { AvatarSignal, Disposer, IslandApi, IslandHooks, IslandHost, ModuleDef, StatusLine } from "./moduleApi";
@@ -76,7 +77,14 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
         };
       },
     },
-    sound: { play: (name) => Sound.play(name) },
+    sound: {
+      play: (name) => Sound.play(name),
+      register(local, url) {
+        const name = `${id}.${local}`;
+        scope.add(Sound.register(name, url));
+        return name;
+      },
+    },
     mochi: { mini: createMiniBot, free: freeMochi, sprite: mochiSprite },
     settings: <T extends object>() => mySettings.get<T>(),
     saveSettings: (patch) => mySettings.save(patch),
@@ -113,6 +121,16 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
       gulp: () => host.avatarGulp(),
       tint: (c) => host.avatarTint(c),
       bodyColor: () => host.avatarBodyColor(),
+      defineMood(local, def) {
+        const name = `${id}.${local}` as const;
+        scope.add(registerMood(name, def));
+        return name;
+      },
+      defineEmote(local, def) {
+        const name = `${id}.${local}` as const;
+        scope.add(registerEmote(name, def));
+        return name;
+      },
     },
     island: {
       open: (view) => host.open(view),
