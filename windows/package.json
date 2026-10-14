@@ -11,6 +11,7 @@
     "icons": "node scripts/gen-icons.mjs",
     "idle-audit": "node scripts/idle-audit.mjs",
     "neutrality-audit": "node scripts/neutrality-audit.mjs",
+    "check": "tsc --noEmit && npm test && npm run idle-audit && npm run neutrality-audit",
     "tauri": "tauri",
     "predev": "cargo build --release -p coucou-hook",
     "prebuild": "cargo build --release -p coucou-hook",

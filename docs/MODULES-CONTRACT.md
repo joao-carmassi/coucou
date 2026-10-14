@@ -220,7 +220,7 @@ Known limit: the compact grid shows at most 4 mini pills (display limit, not a l
 
 ## Neutrality baseline
 
-`npm run neutrality-audit` (warn mode; `-- --fail` exits 1; `-- --verbose` lists lines). Findings = hits in code, warnings = comment-only hits. Baseline at M0 (before M1/M2): **172 findings, 99 warnings**.
+`npm run neutrality-audit` (fails by default, exit 1 on any finding; `-- --warn` only prints; `-- --verbose` lists lines; `npm run check` = tsc + test + idle-audit + this). Findings = hits in code, warnings = comment-only hits. Baseline at M0 (before M1/M2): **172 findings, 99 warnings**.
 
 ```
 file                                    findings  warnings

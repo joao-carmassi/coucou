@@ -111,7 +111,8 @@ mod tests {
                 v => want.push(v),
             }
         }
-        // Tests run in debug builds: devOnly modules are in the catalog.
+        // devOnly modules are in the catalog of debug builds only.
+        want.retain(|m| cfg!(debug_assertions) || m["devOnly"] != true);
         want.sort_by(|a, b| (a["order"].as_i64(), a["id"].as_str()).cmp(&(b["order"].as_i64(), b["id"].as_str())));
         assert_eq!(want.len(), super::CATALOG.len());
         for (w, c) in want.iter().zip(super::CATALOG) {

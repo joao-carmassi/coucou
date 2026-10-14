@@ -1,7 +1,8 @@
 // Static neutrality audit: "the core (island + Mochi) knows no module".
 // Scope: src/{core,island,views,mochi,settings,style}/**, src/main.ts, src-tauri/src/core/**, src-tauri/src/lib.rs.
-// WARN mode by default (prints, exit 0). `--fail` exits 1 on any non-allowlisted finding.
-// Run: npm run neutrality-audit [-- --fail] [-- --verbose]
+// FAIL by default: exit 1 on any non-allowlisted finding (comment-only hits are warnings and never fail).
+// `--warn` keeps the old behaviour (print, exit 0).
+// Run: npm run neutrality-audit [-- --warn] [-- --verbose]
 //
 // Rules:
 //   1. TS import path containing `/modules/` (core/registry.ts and settings/main.ts may import modules/settings + catalog).
@@ -17,13 +18,21 @@ import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(fileURLToPath(import.meta.url), "..", "..");
-const fail = process.argv.includes("--fail");
+const fail = !process.argv.includes("--warn");
 
 const ALLOWLIST = [
   ["src/core/registry.ts", "modules/index", "the only core file that loads the module list"],
   ["src/core/registry.ts", "modules/catalog", "registry reads the catalog"],
   ["src/settings/main.ts", "modules/settings", "settings window loads the sections only (no island code or CSS)"],
   ["src/settings/main.ts", "modules/catalog", "settings window lists the modules"],
+  // Legacy alias maps: old persisted/emitted names still accepted for one version window; delete with the window.
+  ["src/core/badge.ts", "LegacyBadgeName", "legacy alias (one-version window)"],
+  ["src/core/badge.ts", "BADGE_ALIAS", "legacy alias (one-version window)"],
+  ["src/core/layout.ts", "MOOD_ALIAS", "legacy alias (one-version window)"],
+  ["src/core/layout.ts", "LegacyMoodName", "legacy alias (one-version window)"],
+  ["src/core/sound.ts", "const FILE", "sound file names keep the old wav names (alias window)"],
+  ["src/core/sound.ts", "SOUND_ALIAS", "legacy alias (one-version window)"],
+  ["src-tauri/src/core/drop_target.rs", "self.emit(", "generic enter/leave/drop of the OS drag, relayed as `file-drag`: not module events"],
 ];
 const CORE_EVENTS = ["cursor", "tray", "screen-changed", "settings-changed", "settings-shown", "modules-changed", "file-drag", "hotkey-error", "inbox-added"];
 const CONCEPTS = ["approval", "session", "overview", "github", "wsl", "transcript", "claude", "voice", "media"];
