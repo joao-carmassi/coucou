@@ -45,7 +45,7 @@ Status line (compact, no other pill, or `overGrid`): one at a time, highest prio
 
 ## 5. Views
 
-Common: header with tabs (from the modules that have one) and sound button; cards radius 20 on `#141518`; a coloured wash from the bottom matches the task state. Views other than `overview` put the other tasks in a column on the right.
+Common: header with tabs (from the modules that have one) and sound button; cards radius 20 on `#141518`; a coloured wash from the bottom matches the task state. Views other than `overview` put the other tasks in a column on the right. With the board off, `claude` provides the home itself (`claude-home`: the session card, no tab).
 
 | View | Owner | Content |
 |---|---|---|
@@ -90,7 +90,7 @@ Canvas 2D (`src/mochi/engine.ts`), a port of the prototype's `Bot` class.
 | sleeping | `#94A3B8` |
 | dizzy | `#F472B6` |
 
-Modules can publish an avatar signal (state, priority, optional emote, ttl); override beats the strongest signal, which beats the focused task's state.
+Modules can publish an avatar signal (state, priority, optional emote, ttl); override beats the strongest signal, which beats the focused task's state. Modules can also define their own moods, emotes and sounds (`api.avatar.defineMood/defineEmote`, `api.sound.register`; names `<moduleId>.<local>`, removed when the module stops, drawn as `idle` if gone): `docs/MODULES-CONTRACT.md`.
 
 ### Emotes
 

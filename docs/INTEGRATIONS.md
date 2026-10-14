@@ -83,7 +83,7 @@ Each service answers for its own pill through the board's `board.card`, `board.n
 
 1. Fetcher in `integrations.rs` and an entry in `PROVIDERS` (`scheduler.rs`) with its first delay and interval.
 2. Key names in `secrets.rs`.
-3. Module id in `providers()` (`integrations/mod.rs`), `CATALOG` (`modules/mod.rs`), `MODULE_INFO` (`catalog.ts`), and the frontend provider in `src/modules/integrations/`.
+3. Module id in `providers()` (`integrations/mod.rs`), a manifest entry (`src/modules/integrations/manifest.json`; Rust `CATALOG` and TS `MODULE_INFO` are generated from it), and the frontend provider in `src/modules/integrations/`.
 4. Keep the id order identical in both catalogs.
 
 ## 3. Dropped files (modules `upload`, `media`)

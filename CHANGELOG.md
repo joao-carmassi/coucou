@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+- Rust modules are zero-edit: a folder `src-tauri/src/modules/<id>/mod.rs` (`PREFIXES`, `modules()`, `handler()`) is all a module needs; `build.rs` generates the registry and the prefix-routed commands and fails on prefix collisions. Audit rule R checks the TS bridges.
+- Modules define their own Mochi moods, emotes and sounds (`api.avatar.defineMood/defineEmote`, `api.sound.register`, names `<moduleId>.<local>`), removed with the module; `api.avatar.glow(mood)` gives the glow of any mood. The last hard-coded glow table (`botGlowColor`) is gone.
+- Generic kit builders (`panel`, `tile`, `row`) with public `pane-*`, `tile-*`, `diff-*` classes and the `--tile-inset`, `--pane-side-w`, `--pane-side-top` variables; Claude's sessions list, file list and idle cards and the integrations idle card use them (same markup). Audit rule K2 keeps modules out of the kit's class namespaces.
+- Claude has its own home without the board (`claude-home`: the session card, priority 10 over GitHub's 5).
+- `scripts/css-rules.mjs` snapshot copies the built CSS on Windows paths again.
+
 ## 0.5.0
 
 - Modules reach the island only through the IslandApi: no `State`/`Bridge`/`Sound`/mochi imports; ratchet zero (stateImports, stateWrites, foreignCoreImports, crossModuleImports, deadFields all 0, enforced by `neutrality-audit` regardless of the ratchet file).

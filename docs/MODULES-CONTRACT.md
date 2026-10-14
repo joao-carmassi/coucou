@@ -15,6 +15,8 @@ Rule for `compact.ts`, `avatar.ts`, `moduleApi.ts`, `modules/catalog.ts`: only `
 
 ## Rust (M4a)
 
+> Since 0.6.0 the registration lines shown below (`pub mod`, `registry()`, `handler!`) are generated: see "Rust modules are zero-edit". The host API itself is unchanged.
+
 `core/host.rs` (new). Module trait, ModuleCtx, TaskSet, ModuleHost:
 
 ```rust
@@ -209,7 +211,7 @@ Nothing below is verified at runtime beyond the checks in `docs/idle-baseline.md
 | Module | Default | Notes |
 |---|---|---|
 | board | ON | TS only (no Rust, no `requires`). Owns the home tab ("Início") and the `overview` view; asks the owner of each pill for its card via `board.*` services (0.4.0) |
-| claude | ON | Backend `src-tauri/src/modules/claude`, frontend `src/modules/claude`. Integration news on its finished/error cards comes through the `board.news` service; it provides `board.card`/`board.pill`/`board.focus` for its own pills |
+| claude | ON | Without the board it is home itself (`claude-home`, see "Home"). Backend `src-tauri/src/modules/claude`, frontend `src/modules/claude`. Integration news on its finished/error cards comes through the `board.news` service; it provides `board.card`/`board.pill`/`board.focus` for its own pills |
 | media | ON | Mochi drag-out ghost lives in the module (core hooks: `mochiDrop`, `Overlay.cursor(down)`). `attach_window` and the core `inbox_ingest` share `core/inbox.rs` |
 | upload | ON, requires claude | The drop animation starts after the island opens |
 | timer | OFF | Countdown and stopwatch |
@@ -338,8 +340,8 @@ Modules read `State` (pills, focusId, mode, view) but never write it; the three 
 
 - **Pill** (`core/state.ts`): `{ id, label, color, mood, emote?, eye?, badge?, owner? }`. A module puts pills in the compact grid / overview row through `api.pills`: `set(pill, at?)` (a new pill needs `label` + `color`; later calls patch fields, `null` clears `emote`/`eye`/`badge`), `remove(id)` (`clear()` is gone: remove each id). `at`: `"start"`, `{ after: id }` (missing anchor = start), `{ before: id }` (missing anchor = end), default the end. The registry stamps `owner` (a module cannot touch another's pill) and removes all of a module's pills when it stops (focus moves off a removed pill). Modules never write `State.pills`. Data only one module needs (the steps of an agent pill) stays in that module, keyed by pill id.
 - **Badge**: `"alert" | "done" | "error"` (`core/badge.ts`). Old names (`approval`, `finished`) are no longer accepted.
-- **Mood** (`BotStateName`): `idle working thinking searching alert ask error done waiting sleeping dizzy`. Old names (`approval`, `question`, `finished`, `ratelimit`) are no longer accepted by `api.avatar.publish` / `api.pills.set`; `Mochi.setState` ignores unknown moods. Sound names are the neutral ones and match `sounds/<name>.wav`. Emote names are unchanged. View names (`approval`, `question`, `finished`) are Claude's own views, not moods.
-- **Sounds**: neutral names (`SOUND_NAMES` in `core/sound.ts`) are the WAV file names in `sounds/`. `api.sound.play(name)` plays one of them (`api.sound.register` is gone: a module cannot add WAVs).
+- **Mood** (`BotStateName`): the 11 built-ins `idle working thinking searching alert ask error done waiting sleeping dizzy`, plus any `"<moduleId>.<local>"` a module defines (see "Moods, emotes and sounds a module defines"). Old names (`approval`, `question`, `finished`, `ratelimit`) are no longer accepted by `api.avatar.publish` / `api.pills.set`; `Mochi.setState` ignores unknown moods. Sound names are the neutral ones and match `sounds/<name>.wav`. Emote names are unchanged. View names (`approval`, `question`, `finished`) are Claude's own views, not moods.
+- **Sounds**: neutral names (`SOUND_NAMES` in `core/sound.ts`) are the WAV file names in `sounds/`. `api.sound.play(name)` plays one of them or one the module registered with `api.sound.register(local, url)`.
 - **Status priority**: the core only says "higher wins, tie goes to the most recent" (+ optional `BAND`). Numbers the shipped modules use today:
 
 | Priority | Who |
@@ -354,6 +356,49 @@ Modules read `State` (pills, focusId, mode, view) but never write it; the three 
 | 20 | media |
 | 10 | integrations |
 
+## Rust modules are zero-edit (0.6.0)
+
+A Rust module is a folder: `src-tauri/src/modules/<id>/mod.rs`. No other Rust file is edited. `build.rs` finds every folder holding a `mod.rs`, declares `pub mod <id>;`, generates `registry()` and the command routing (`handlers()`), and reads the catalog from `src/modules/*/manifest.json`. The id must be in a manifest (shared with the TS side). Full text and a template: `windows/src-tauri/src/modules/README.md`.
+
+The folder's `mod.rs` exports:
+
+```rust
+pub const PREFIXES: &[&str] = &["<id>_"];       // every prefix ends with '_'; commands are routed by prefix
+pub fn modules() -> Vec<Box<dyn Module>>;        // the Module impls (an empty vec when there is none)
+pub fn handler() -> crate::core::host::Handler;  // crate::core::host::handler(tauri::generate_handler![...])
+```
+
+Build-time checks (`build.rs` panics): a prefix does not end with `_`; one folder's prefix starts another's; a `#[tauri::command]` under `<id>/**` does not start with one of its prefixes; a core command (anywhere else under `src/`) starts with any module prefix. Audit rule R (`neutrality-audit`) closes the TS side: every string given to `command`/`commandOrThrow` in `src/modules/**` must start with a prefix some folder declares. A catalog id with no folder (TS-only module) is on/off by setting only.
+
+## Moods, emotes and sounds a module defines (0.6.0)
+
+Mochi's vocabulary is data (`mochi/moods.ts`): the 11 built-in moods are rows; a module adds its own with the API, no core edit.
+
+- `api.avatar.defineMood(local, def: MoodDef)` returns `"<moduleId>.<local>"`; `api.avatar.defineEmote(local, def: EmoteDef)` likewise. Use the returned name in `avatar.publish`, `pills.set` (`mood`, `emote`), `mochi.free` / `sprite`. `api.avatar.glow(mood)` returns `{ color, opacity }` for any mood (what the expanded island glows with; idle's for an unknown name).
+- `MoodDef`: `color` (#RRGGBB body), `tint?` (0..1), `eye` (`pill wide dot line flat happy closed spiral heart star tired wink cup`), `badge?` (`{ kind: dots|bang|question|dot, color? }` or `null`), `glow?` (`{ color, opacity }`, default `color` at 0.65), `motion?` (`bounces scans breathes zz sweat look tilt`), `enter?` (`none blink hop shake roll roll2 spark-roll sweat`, default `blink`), `sound?` (played on entering).
+- `EmoteDef`: `eye`, `ms?` (default 1800), `particles?` (`{ kind: heart|star|spark|z, n }`), `blush?`, `motion?` (`hop tilt squash none`), `sound?`.
+- Sounds: `api.sound.register(local, url)` (same-origin URL, throws otherwise) returns `"<moduleId>.<local>"`; `MoodDef.sound` / `EmoteDef.sound` and `api.sound.play` take it. A name that is not loaded stays silent.
+- Namespacing: the API prefixes every name with the module's own id, so a module cannot define or replace another's names or a built-in.
+- Lifecycle: everything a module defines is removed when it stops. Anything still wearing a removed mood draws as `idle` (the fallback for any unknown mood); a removed emote does nothing; a removed sound is silent. Defining the same name again replaces the earlier definition, and the earlier disposer then leaves the new one alone.
+
+## Kit public API (0.6.0)
+
+`src/kit` is the module-agnostic UI kit. Its classes are public and live in kit stylesheets only; modules dress their DOM in them through the builders and add their own prefixed classes on top.
+
+| Namespace | Stylesheet | Builder | What |
+|---|---|---|---|
+| `pane-*` | `kit/pane.css` | `panel()` (`kit/panel.ts`), `row()` (`kit/list.ts`) | A panel: `.pane-view .pane-card .pane-side(.pane-side-who) .pane-col .pane-main .pane-head .pane-list .pane-code`; rows `.pane-row .pane-row-icon .pane-row-title .pane-row-where .pane-right .pane-ago .pane-file .pane-file-status` |
+| `tile-*` | `kit/tile.css` | `tile()` (`kit/tile.ts`) | The home card: `.tile-card` (`detail` variant), `.tile-head`, `.tile-status`, `.tile-actions` |
+| `diff-*`, `code-*`, `file-ext`, `hl-*` | `kit/code.css` | `diffLine()`, `plusMinus()`, `extBadge()` (`kit/code.ts`) | A diff: `.code-diff`, `.diff-line` (`.add .del .hunk`; `.n .s .t .gone`), `.diff-pm` (`.diff-add .diff-del`), the file badge |
+
+- `panel({ cls?, side?: { title, sub?, body? }, main })`, `tile({ title, sub?, dot?, status?, actions?, cls? })` and `row({ icon, title, where?, ago?, status?, cls?, attrs? })` produce exactly the markup modules used to write by hand (`tests/harness/kit.test.ts` compares each with the old literal's `outerHTML`).
+- CSS variables a module may set on an ancestor: `--tile-inset` (left room of `.tile-card` for the avatar, default 108px), `--pane-side-w` (width of `.pane-side`, default 113px), `--pane-side-top` (its top padding, default 119px).
+- The audit keeps it honest: rule K (kit imports only kit and `@tauri-apps/*`) and K2 (kit CSS uses only kit prefixes; a module stylesheet may not define a class in a kit namespace).
+
+## Home (0.6.0)
+
+Home is the strongest `homeView` request, else the tab flagged `home`, else the first tab, else `empty` (`core/hooks.ts: homeOf`). With the board on, `overview` is home. With the board off (`api.use("board.host") === undefined`), modules that have their own surface ask for home: `claude` returns `{ view: "claude-home", priority: 10 }`, `github` `{ view: "github", priority: 5 }`, so Claude wins when both are on. `claude-home` is Claude's `board.card` for the front Claude pill on a card of its own (click opens the session, the arrow answers `pillOpen`); it has no tab and does not light one. With the board and claude off, home is `github` if on, else `empty`. `tests/harness/home.test.ts` covers board off + claude on, board on, and both off.
+
 ## How to add a module (M8)
 
 Goal: a module is one folder, `src/modules/<id>/`. Nothing in `core/`, `island/`, `settings/` or `lib.rs` changes.
@@ -361,11 +406,30 @@ Goal: a module is one folder, `src/modules/<id>/`. Nothing in `core/`, `island/`
 1. `manifest.json`: `{ "id", "label", "default", "requires"?, "group"?, "order", "devOnly"?, "settingsDefaults"? }` (an array when a folder holds several modules, as `integrations/`). `order` is start order and settings order (a requirement needs a lower `order`; ties break by id). `devOnly: true` = debug builds only (TS: `import.meta.env.DEV`; Rust: `#[cfg(debug_assertions)]` in the generated catalog), so release catalogs and `settings.json` never list it.
 2. `index.ts`: exports a `ModuleDef` (`{ id, views?, tabs?, start(api) }`). `modules/index.ts` finds it by `import.meta.glob("./*/index.ts")` and takes every export that has `id` and a `start` function. Import the module's own CSS here. Use only `core/moduleApi` types and what `api` gives; never import another module (share through `api.provide` / `api.use`).
 3. Optional `settings.ts`: `export const settingsSections = { <id>: (settings) => ({ el, dispose? }) }`; the settings window renders it while the module is on. Settings values live in the flat `settings.json` (unknown keys travel in `extra`): declare them in the manifest as `settingsDefaults` with keys prefixed by the module id, read with `settings.get<T>()` / `api.settings<T>()`, write with `settings.save(patch)` / `api.saveSettings(patch)`.
-4. Optional Rust side, only if the module needs native code: `pub mod x;` + one entry in `registry()` + its commands in `handler!` (all in `src-tauri/src/modules/mod.rs`). A catalog id with no `Module` is fine: the host treats it as on/off by setting, with no start/stop.
+4. Optional Rust side, only if the module needs native code: create `src-tauri/src/modules/<id>/mod.rs` with `PREFIXES`, `modules()` and `handler()` (see "Rust modules are zero-edit"). Nothing else changes. A catalog id with no folder is fine: the host treats it as on/off by setting, with no start/stop.
+
+### Recipe: a TypeScript-only module
+
+1. `src/modules/<id>/manifest.json` (`id`, `label`, `default`, `order`, ...).
+2. `src/modules/<id>/index.ts` exporting a `ModuleDef`: views (build them with `panel()`, `tile()`, `row()`), tabs, `start(api)`. Define moods/emotes/sounds with `api.avatar.defineMood/defineEmote` and `api.sound.register`. To be home when there is no board, provide a `homeView` hook gated on `api.use("board.host") === undefined`.
+3. Its CSS next to it, with the module's own prefix; reuse kit classes, never redefine them.
+4. `npm run check` (tsc, unit tests, harness, idle-audit, neutrality-audit) must stay green; ratchet counts stay 0.
+
+### Recipe: a module with Rust code
+
+Steps 1 to 4 above, plus `src-tauri/src/modules/<id>/mod.rs`: `pub const PREFIXES: &[&str] = &["<id>_"];`, an `impl Module` (`start`/`stop`/`apply`; threads only through `ctx.spawn`), `pub fn modules()`, `pub fn handler()`. Name every `#[tauri::command]` with the prefix and call it from the module's bridge by the same name. Then `cargo check` and `cargo test` in `src-tauri` (`build.rs` runs the collision checks).
+
+### Audit rules a module must pass (`npm run neutrality-audit`, part of `npm run check`)
+
+- Ratchet zero: `stateImports`, `stateWrites`, `foreignCoreImports`, `crossModuleImports`, `deadFields` all 0 (the count is zero regardless of the ratchet file).
+- Names: no module names or prefixes in core code, core CSS or core comments; no legacy mood/badge/sound aliases.
+- K: the kit imports only kit and `@tauri-apps/*`. K2: kit CSS uses only kit prefixes, and no module stylesheet defines a class in a kit namespace (`pane-`, `tile-`, `diff-`, `code-`, `file-`, `hl-`).
+- R: every command a module bridge calls starts with a prefix some Rust folder declares.
+- `idle-audit`: no raw timers, top-level listeners or thread spawns outside the allowlist.
 
 Catalog: `build.rs` generates Rust `CATALOG` from the manifests; TS builds `MODULE_INFO` from the same files. Node tests cannot use `import.meta.glob`: `modules/resolve.ts` (`buildCatalog`, `collectDefs`) is pure and `tests/catalog.ts` feeds it manifests read from disk.
 
-Honest limits: (a) Rust code still needs the three edits in `modules/mod.rs`; (b) glob order is alphabetical by folder, so module CSS must not rely on cascade order between modules; (c) `devOnly` modules' JS is still in the release bundle (never started, not in the catalog); (d) `order` must be unique in practice for a stable start order across modules written by different people.
+Honest limits: (a) glob order is alphabetical by folder, so module CSS must not rely on cascade order between modules; (b) `devOnly` modules' JS is still in the release bundle (never started, not in the catalog); (c) `order` must be unique in practice for a stable start order across modules written by different people.
 
 ## Shared UI kit and CSS conventions (0.3.1)
 
