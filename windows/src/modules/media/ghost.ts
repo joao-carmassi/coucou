@@ -3,12 +3,9 @@
 // (overlay.cursor's `down`); the ghost, the release and the attach live here.
 
 import { h } from "../../kit/dom";
-import { wipe } from "../../core/canvas";
+import { wipe } from "../../kit/canvas";
 import { MediaBridge } from "./bridge";
 import type { Disposer, IslandApi } from "../../core/moduleApi";
-import { Sound } from "../../core/sound";
-import { State } from "../../core/state";
-import { BotEngine, hexToRGB } from "../../mochi/engine";
 import type { MediaCtl } from "./view";
 
 const BOT_OVERHANG = 40;
@@ -18,13 +15,14 @@ const PIN_MS = 8000;
 
 export function armMochiDrop(api: IslandApi, ctl: MediaCtl): Disposer {
   let canvas: HTMLCanvasElement | null = null;
-  const engine = new BotEngine();
+  const engine = api.mochi.sprite({ overhang: BOT_OVERHANG });
   let last = 0;
 
   const move = () => {
     if (!canvas) return;
-    canvas.style.left = `${State.mouse.x - GHOST_W / 2}px`;
-    canvas.style.top = `${State.mouse.y - BOT_OVERHANG / 2 - GHOST_H / 2}px`;
+    const m = api.island.mouse();
+    canvas.style.left = `${m.x - GHOST_W / 2}px`;
+    canvas.style.top = `${m.y - BOT_OVERHANG / 2 - GHOST_H / 2}px`;
   };
   const end = () => {
     canvas?.remove();
@@ -39,7 +37,7 @@ export function armMochiDrop(api: IslandApi, ctl: MediaCtl): Disposer {
       .then((file) => {
         // Not sent to Claude: it is already in the inbox and the Mídia list; the user picks the action there.
         api.avatar.emote("wink");
-        Sound.play("attach");
+        api.sound.play("attach");
         ctl.highlight(file.name);
         api.island.request({ view: "media", priority: 20, pin: true, ms: PIN_MS });
       })
@@ -57,11 +55,10 @@ export function armMochiDrop(api: IslandApi, ctl: MediaCtl): Disposer {
     document.body.append(canvas);
     api.avatar.emote("surprised");
     const body = api.avatar.bodyColor();
-    engine.bodyColor = body ? hexToRGB(body) : null; // inherits the island Mochi's color
+    engine.color(body ?? null); // inherits the island Mochi's color
     engine.setState("idle", true);
-    engine.triggerEmote("surprised", 60);
-    engine.particleOverhang = BOT_OVERHANG;
-    Sound.play("pop");
+    engine.emote("surprised", 60);
+    api.sound.play("pop");
     last = 0;
     move();
   });

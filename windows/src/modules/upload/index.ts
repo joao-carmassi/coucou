@@ -3,12 +3,9 @@
 // the flow that used to live in the island (file-drag events, abandon grace, progress ticks).
 // The core only sees an Overlay and three views; the file goes to Claude through the launchFile hook.
 
-import { Bridge } from "../../core/bridge";
+import { App } from "../../kit/app";
 import "./upload.css";
-import { EXPANDED_W } from "../../core/layout";
-import type { Disposer, IslandApi, ModuleDef, Overlay } from "../../core/moduleApi";
-import { Sound } from "../../core/sound";
-import { State } from "../../core/state";
+import { EXPANDED_W, type Disposer, type IslandApi, type ModuleDef, type Overlay } from "../../core/moduleApi";
 import type { FsmState } from "../../island/fsm";
 import { UploadCanvas } from "./canvas";
 import { USC, UploadSeq } from "./sequence";
@@ -27,7 +24,7 @@ interface DragPayload { type: "enter" | "over" | "drop" | "leave" | "end"; paths
 /** Cancel on the drop card. The file goes with it, so the next flow doesn't carry it. */
 function cancelDrop(api: IslandApi) {
   Up.droppedFile = null;
-  api.island.setView(State.defaultView());
+  api.island.setView(api.island.home());
 }
 
 function start(api: IslandApi): Disposer {
@@ -77,10 +74,10 @@ function start(api: IslandApi): Disposer {
     if (since == null) return;
     const p = Math.max(0, Math.min(1, (since - PRE_PROGRESS) / Up.duration));
     const t = Math.floor(p * 10);
-    if (t > tens && t < 10) { tens = t; Sound.play("tick"); }
+    if (t > tens && t < 10) { tens = t; api.sound.play("tick"); }
     if (!done && since >= PRE_PROGRESS + Up.duration) {
       done = true;
-      Sound.play("approve");
+      api.sound.play("approve");
       api.avatar.emote("happy");
     }
     // The extra second is the grow-back, after which the choose card is up.
@@ -100,7 +97,7 @@ function start(api: IslandApi): Disposer {
     if (!o || Up.dragOver || UploadSeq.dropped) return;
     // The user moved on to something else in the meantime: leave it alone.
     if (api.island.mode() !== "expanded" || api.island.view() !== "upload") return;
-    void Bridge.log(`drag abandoned, back to ${o.state}/${o.view}`);
+    void App.log(`drag abandoned, back to ${o.state}/${o.view}`);
     UploadSeq.deactivate();
     if (o.state === "hidden") {
       // Still under the cursor (an Escape over the island): stay reachable.
@@ -120,7 +117,7 @@ function start(api: IslandApi): Disposer {
     tens = 0;
     done = false;
     api.avatar.gulp();
-    Sound.play("approve");
+    api.sound.play("approve");
     api.avatar.emote("happy");
     api.avatar.morph(0);
     Up.progress = 0;
@@ -128,19 +125,19 @@ function start(api: IslandApi): Disposer {
     // setView on a closed island goes through forceHome, which stops the sequence;
     // without a restart nothing advances past "0 %" or reaches `choose`.
     if (!UploadSeq.isActive) {
-      void Bridge.log("drop: sequence was not running, restarted");
-      UploadSeq.enterZone(State.mouseInIsland.x, State.mouseInIsland.y);
+      void App.log("drop: sequence was not running, restarted");
+      UploadSeq.enterZone(api.island.mouseLocal().x, api.island.mouseLocal().y);
     }
     UploadSeq.performDrop(Up.duration);
     api.island.redraw();
-    Up.ingest = Bridge.inboxIngest(path);
+    Up.ingest = App.inboxIngest(path);
     Up.ingest
       .then((file) => { Up.droppedFile = { name: file.name, path: file.path }; Up.ingested = true; api.island.redraw(); })
       .catch((err) => { UploadSeq.deactivate(); api.avatar.morph(0); api.island.error(err); });
   }
 
   function onDrag(e: DragPayload) {
-    if (e.type !== "over") void Bridge.log(`drag ${e.type} ${e.paths?.length ?? 0} file(s)`);
+    if (e.type !== "over") void App.log(`drag ${e.type} ${e.paths?.length ?? 0} file(s)`);
     if (api.paused()) return;
     switch (e.type) {
       case "enter":
@@ -153,7 +150,7 @@ function start(api: IslandApi): Disposer {
         api.island.open("upload");
         // After open, not before: opening an island that is hidden or folded goes through
         // forceHome, which stops a running sequence; the drop then sat on "0 %" forever.
-        UploadSeq.enterZone(State.mouseInIsland.x, State.mouseInIsland.y);
+        UploadSeq.enterZone(api.island.mouseLocal().x, api.island.mouseLocal().y);
         api.island.redraw();
         break;
       case "leave":
@@ -174,7 +171,7 @@ function start(api: IslandApi): Disposer {
         origin = null;
         Up.dragOver = false;
         const path = e.paths?.[0];
-        if (!path) { api.avatar.morph(0); api.island.setView(State.defaultView()); return; }
+        if (!path) { api.avatar.morph(0); api.island.setView(api.island.home()); return; }
         swallow(path);
         break;
       }

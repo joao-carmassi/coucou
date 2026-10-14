@@ -1,5 +1,5 @@
 import { h, clear, replay } from "../../kit/dom";
-import { card } from "../../views/views";
+import { card } from "../../kit/card";
 import type { ViewContext, ViewHost } from "../../core/moduleApi";
 import type { TimerClock } from "./timer";
 
