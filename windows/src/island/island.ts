@@ -143,7 +143,11 @@ export class Island implements IslandHost {
 
   private makeActions(): ViewActions {
     return {
-      setView: (v) => this.setView(v),
+      setView: (v) => {
+        // The user picked home (the default): that drops every focus. Automatic landings go through this.setView.
+        if (v === State.defaultView()) Holds.clear();
+        this.setView(v);
+      },
       toggleSound: () => {
         State.settings.soundEnabled = !State.settings.soundEnabled;
         Sound.setEnabled(State.settings.soundEnabled);

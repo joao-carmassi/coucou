@@ -138,6 +138,31 @@ describe("sessions hold", () => {
   });
 });
 
+describe("home tab clears holds", () => {
+  it("clicking the home tab drops the focus; a new hold still works", async () => {
+    dummyProbe.api!.island.open("sessions"); tick(10); await settle();
+    expect(State.view).toBe("sessions");
+    const home = State.tabs.find((t) => t.view === State.defaultView())!;
+    [...document.querySelectorAll<HTMLElement>("#header .tabs button")].find((b) => b.title === home.title || b.textContent === home.title)!.click();
+    tick(10);
+    folded(); reopen();
+    expect(lands()).toBe(State.defaultView());
+    const release = dummyProbe.api!.island.hold("sessions");
+    folded(); reopen();
+    expect(lands()).toBe("sessions");
+    release(); Holds.clear();
+  });
+
+  it("automatic landing on home keeps the holds", async () => {
+    const release = dummyProbe.api!.island.hold("sessions");
+    dummyProbe.api!.island.open("dummy-a"); tick(10);
+    dummyProbe.api!.island.setView(State.defaultView()); tick(10);
+    folded(); reopen();
+    expect(lands()).toBe("sessions");
+    release(); Holds.clear();
+  });
+});
+
 describe("upload choice hold", () => {
   const drop = async () => {
     handlers["file-drag"]({ payload: { type: "enter" } });

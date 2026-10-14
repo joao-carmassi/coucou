@@ -79,6 +79,27 @@ describe("timer hold", () => {
   });
 });
 
+describe("timer hold after expiry", () => {
+  it("retaken on the next visit; released again on cancel", () => {
+    api().island.open("timer"); tick(10);
+    click("button", "5 min");
+    api().island.setView("dummy-a"); tick(1100);
+    folded();
+    vi.setSystemTime(Date.now() + 61_000); // hold expired while unseen
+    reopen();
+    expect(State.view).toBe(State.defaultView());
+    folded();
+    expect(landsOn("timer")).toBe(false);
+    api().island.open("timer"); tick(1100); // visit: fresh hold
+    expect(landsOn("timer")).toBe(true);
+    api().island.open("timer"); tick(10);
+    click("button", "Cancelar");
+    folded(); reopen();
+    expect(State.view).toBe(State.defaultView());
+    folded();
+  });
+});
+
 describe("media hold", () => {
   const openMedia = async () => { api().island.open("media"); tick(10); await vi.advanceTimersByTimeAsync(10); };
 
