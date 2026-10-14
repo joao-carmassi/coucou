@@ -11,6 +11,7 @@ const Timer = new TimerClock();
 function start(api: IslandApi): Disposer {
   let tick: Disposer | null = null;
   let done: Disposer | null = null;
+  let hold: Disposer | null = null;
   const refresh = () => {
     api.status.set(Timer.active ? { priority: 50, text: Timer.text(), overGrid: true } : null);
     api.island.redraw();
@@ -25,6 +26,9 @@ function start(api: IslandApi): Disposer {
   };
   const arm = () => {
     disarm();
+    // A configured-but-unstarted timer is still a task in progress.
+    if (Timer.status !== "idle") hold ??= api.island.hold("timer");
+    else { hold?.(); hold = null; }
     if (Timer.status === "running") {
       // One-shot, so the end still rings (and is shown) if the island is hidden.
       if (Timer.kind === "countdown") done = api.timeout(finish, Timer.remaining());
@@ -39,6 +43,7 @@ function start(api: IslandApi): Disposer {
   const offVis = api.onVisibility((mode) => { if (mode !== "hidden" && Timer.status === "running") refresh(); });
   return () => {
     disarm();
+    hold?.();
     offKeep();
     offVis();
     Timer.reset();

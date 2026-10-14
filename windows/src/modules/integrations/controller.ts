@@ -46,6 +46,12 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
 
   // ── Pill ───────────────────────────────────────────────────────────────────
 
+  /** Idle with no news: stays listed but neither takes the compact grid nor hides the status line. */
+  const syncAmbient = () => {
+    const t = api.pills.get(id);
+    if (t) api.pills.set({ id, ambient: t.mood === "idle" && !t.badge });
+  };
+
   /** On while its module is on (we are running) AND its key is in the Credential Manager. */
   function syncPill(keyPresent: boolean) {
     if (!alive) return;
@@ -61,12 +67,13 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
       const order = PROVIDERS.map((x) => x.id);
       // In catalog order, after Claude's pill and the agents.
       const next = api.pills.all().find((t) => order.indexOf(t.id) > order.indexOf(id));
-      api.pills.set({ id, label: def.name, color: def.color, mood: "idle" }, next ? { before: next.id } : undefined);
+      api.pills.set({ id, label: def.name, color: def.color, mood: "idle", ambient: true }, next ? { before: next.id } : undefined);
       info[id] ??= empty(true);
       info[id].configured = true;
       steps.set(id, []);
       void IntegrationsBridge.refreshIntegration(id);
     }
+    syncAmbient();
     redraw();
   }
 
@@ -98,6 +105,7 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
       api.pills.set({ id, mood: "idle" });
       steps.set(id, []);
     }
+    syncAmbient();
     api.island.redraw();
   }
 
@@ -164,6 +172,7 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
       clearTimer?.();
       clearTimer = api.timeout(() => settle(), isGithub ? NEWS_MS : SETTLE_MS);
     }
+    syncAmbient();
     redraw();
   }
 
