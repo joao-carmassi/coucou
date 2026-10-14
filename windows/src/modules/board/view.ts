@@ -4,8 +4,9 @@
 import type { ViewContext, ViewHost } from "../../core/moduleApi";
 import type { Pill } from "../../core/state";
 import { askPill } from "../../kit/ask";
-import { clear, dot, h, svg } from "../../kit/dom";
+import { clear, h, svg } from "../../kit/dom";
 import { ICONS } from "../../kit/icons";
+import { tile } from "../../kit/tile";
 import type { BoardCard, BoardCardOf, BoardFocus, BoardPillOf } from "./api";
 
 /** The layout's height (see index.ts). */
@@ -15,19 +16,13 @@ export const BOARD_H = 160;
 function plainCard(task: Pill): BoardCard {
   return {
     key: [task.id, task.mood, task.label].join("~"),
-    build: () => h("div", { class: "tile-card" },
-      h("div", { class: "tile-head" }, dot(task.color, 7), h("b", { text: task.label })),
-      h("div", { class: "tile-status" }),
-    ),
+    build: () => tile({ title: task.label, dot: task.color }),
   };
 }
 
 /** Nothing to show: no module has put a pill here. */
 function emptyCard(): HTMLElement {
-  return h("div", { class: "tile-card" },
-    h("div", { class: "tile-head" }, h("b", { text: "Nada por aqui" })),
-    h("div", { class: "tile-status" }, h("span", { text: "O que os módulos ligados fizerem aparece aqui" })),
-  );
+  return tile({ title: "Nada por aqui", status: "O que os módulos ligados fizerem aparece aqui" });
 }
 
 export function buildBoard(ctx: ViewContext): ViewHost {
