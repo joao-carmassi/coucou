@@ -1,7 +1,7 @@
 // The launch "coucou" — port of GreetingCanvasView.swift.
 // Everything is laid out in the same 640×150 reference space as on macOS.
 
-import { wipe } from "../core/canvas";
+import { wipe } from "../kit/canvas";
 import { Sound } from "../core/sound";
 import { COMPACT_BOT_CX, NOTCH_H, NOTCH_W, compactWidth } from "../core/layout";
 
@@ -30,7 +30,6 @@ const T = {
   COLLAPSE: 0.34,
 };
 
-export const GREETING_END = T.end;
 
 // ── Geometry (640×150) ────────────────────────────────────────────────────────
 

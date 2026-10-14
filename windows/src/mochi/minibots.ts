@@ -119,10 +119,6 @@ export function mochiSprite(opts: { overhang?: number } = {}): MochiSprite {
   };
 }
 
-export function releaseMiniBot(canvas: HTMLCanvasElement) {
-  live.delete(canvas);
-}
-
 /** Drops every canvas no longer in the document (views are rebuilt wholesale). */
 export function pruneMiniBots() {
   for (const [canvas] of live) {

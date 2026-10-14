@@ -72,7 +72,7 @@ test("pill badge: applyBadge reports change only", async () => {
 
 test("old mood/badge/sound aliases are gone", async () => {
   const badge = await import("../src/core/badge.ts");
-  // layout re-exports kit/moduleApi values by extensionless path, which plain node cannot load: read its source.
+  // layout imports core/moduleApi values by extensionless path, which plain node cannot load: read its source.
   const layout = (await import("node:fs")).readFileSync(new URL("../src/core/layout.ts", import.meta.url), "utf8");
   const sound = await import("../src/core/sound.ts");
   for (const k of ["badgeName", "BADGE_ALIAS"]) assert.equal(k in badge, false);

@@ -1,14 +1,14 @@
 {
-  "stateImports": 11,
+  "stateImports": 0,
   "stateWrites": 0,
-  "foreignCoreImports": 35,
-  "crossModuleImports": 1,
-  "deadFields": 12,
+  "foreignCoreImports": 0,
+  "crossModuleImports": 0,
+  "deadFields": 0,
   "reasons": {
-    "stateImports": "Read-only observation of what the island shows, no API yet: State.pills / focusPill / otherPills / focusId (board view, claude cards, integrations controller), State.mode / view / defaultView() (claude, integrations, upload), State.mouse / mouseInIsland (media ghost, upload drag zone), State.subscribe / notify (claude, integrations, voice view). Every write and every settings/paused access already goes through the API. 10 -> 11 in 0.4.0: the home view left claude cards.ts for its own file in the board module (same reads, one more file).",
-    "stateWrites": "Zero is the rule: focus, pause and settings are API-only. A module writing State.<field> fails the audit.",
-    "foreignCoreImports": "Shared plumbing, not module-to-core coupling: core/bridge (Tauri commands/events a module calls through its own bridge.ts), core/sound, core/layout and core/canvas (value helpers), mochi/engine + minibots (avatar drawing), views/{views,palette,format,code} (UI kit; the kit part is done). To go down as the kit takes them.",
-    "deadFields": "12 -> 0 as the modules migrate onto the WP0 API: WP-A/B/C consumers pending for pills.all/get/front/others, sound.play, mochi.mini/free/sprite, island.onChange/home/mouse/mouseLocal. Settings.screen/autostart/modulesEnabled are now read by the settings window or main.ts, so they no longer count; invoke, pills.clear, sound.register, isVisible, layoutHint, lastActivity and effectiveState are gone.",
-    "crossModuleImports": "voice/view.ts value-imports claude/bridge (WP-A moves it behind claude/api). Zero is the rule: a module reaches another only through its api.ts."
+    "stateImports": "Zero is the rule",
+    "stateWrites": "Zero is the rule",
+    "foreignCoreImports": "Zero is the rule",
+    "deadFields": "Zero is the rule",
+    "crossModuleImports": "Zero is the rule"
   }
 }

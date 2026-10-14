@@ -3,16 +3,18 @@
 
 import { Tracked, Spring, clamp, mixColor } from "../core/anim";
 import { Bridge, IS_TAURI } from "../core/bridge";
-import { wipe } from "../core/canvas";
+import { wipe } from "../kit/canvas";
 import {
-  COMPACT_BOT_CX, COMPACT_CONTENT_X, COMPACT_PAD, EXPANDED_CORNER, EXPANDED_W, PANEL_H, PANEL_W,
-  ROUNDED_CORNER, botGlowColor, botGlowOpacity, botPosition, registerLayout, viewLayout,
+  COMPACT_BOT_CX, COMPACT_CONTENT_X, COMPACT_PAD, EXPANDED_CORNER, PANEL_W,
+  ROUNDED_CORNER, botGlowOpacity, botPosition, registerLayout, viewLayout,
   compactWidth, islandSize, miniGridSize,
 } from "../core/layout";
 import type { BotEmoteName, IslandMode, IslandViewName } from "../core/layout";
 import { Avatar } from "../core/avatar";
 import { Compact } from "../core/compact";
 import { Hooks, emitMode } from "../core/hooks";
+import { botGlowColor } from "../kit/palette";
+import { EXPANDED_W, PANEL_H } from "../core/moduleApi";
 import type { Disposer, IslandHost, Overlay, TabDef, ViewContext, ViewDef } from "../core/moduleApi";
 import { Requests, type Req, type RequestSpec } from "../core/requests";
 import { Sound } from "../core/sound";

@@ -13,7 +13,7 @@
 //      only `import type`.
 //   B. dead fields: every field of Settings, AppState, ViewLayout and IslandApi must be READ in src/{core,island,views,mochi,kit}
 //      (Settings: also src/settings/** and src/main.ts; IslandApi: used by any src file but moduleApi.ts/registry.ts, since modules are its readers).
-// scripts/neutrality-ratchet.json holds the counts; they may only go down (`--write-ratchet` lowers them).
+// scripts/neutrality-ratchet.json holds the counts; they may only go down (zero is enforced regardless).
 //
 // Rules:
 //   1. TS import path containing `/modules/` (core/registry.ts and settings/main.ts may import modules/settings + catalog).
@@ -274,7 +274,7 @@ perModule(crossImports, "cross import  ", (x) => ` (${x.what})`);
 for (const d of deadFields) console.log(`  dead field    ${(d.owner + "." + d.field).padEnd(30)} ${d.mods ? `mentioned ${d.mods}x in modules` : "unused"}`);
 let lintBad = 0;
 for (const [k, v] of Object.entries(lintCounts)) {
-  const cap = ratchet[k];
+  const cap = 0; // zero is the rule: the ratchet file is informational, any nonzero count fails
   const state = cap == null ? "no ratchet" : v > cap ? "ABOVE ratchet" : v < cap ? "below ratchet (lower it with --write-ratchet)" : "at ratchet";
   if (cap == null || v > cap) lintBad++;
   console.log(`  ${k.padEnd(20)} ${String(v).padStart(3)} / ${cap ?? "-"}  ${state}`);

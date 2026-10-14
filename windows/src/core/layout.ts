@@ -1,15 +1,10 @@
 // Island geometry — ported from IslandTypes.swift + IslandWindowController.islandSize
 // + IslandRootView.botPosition. All values are logical pixels, identical to the
 // macOS app's points.
-import { EXPANDED_W, PANEL_H } from "./moduleApi";
-export { EXPANDED_W, PANEL_H };
-export { botGlowColor } from "../kit/palette";
-export { washRGBA } from "../kit/card";
-export type { Wash } from "../kit/card";
+import { EXPANDED_W } from "./moduleApi";
 
 export type IslandMode = "hidden" | "compact" | "expanded";
 
-export type CoreViewName = "empty" | "confused" | "note" | "settings" | "greeting";
 /** Core views plus whatever modules register. */
 export type IslandViewName = string;
 

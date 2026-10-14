@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0
+
+- Modules reach the island only through the IslandApi: no `State`/`Bridge`/`Sound`/mochi imports; ratchet zero (stateImports, stateWrites, foreignCoreImports, crossModuleImports, deadFields all 0, enforced by `neutrality-audit` regardless of the ratchet file).
+- API: `api.mochi.{mini,free,sprite}`, `api.pills` reads (`all`, `get`, `front`, `others`), `api.island.onChange/home/mouse/mouseLocal/redraw`, `api.sound.play`.
+- Voice sends prompts via the `claude.launchPrompt` service instead of importing claude's bridge.
+- Compatibility shims removed (`core/canvas`, `card`/`Wash` re-exports in `views`, `washRGBA`/`botGlowColor`/`PANEL_H`/`EXPANDED_W` in `core/layout`); unused exports dropped (`Bridge.quit`, `onDragDrop`, `BridgeEvent`, `STATE_SOUND`, `GREETING_END`, `releaseMiniBot`, `CoreViewName`).
+
 ## 0.4.0
 
 - **Board module** (`board`, default on, TS only): owns the Início tab and the `overview` view. It asks the module that owns each pill for its card (`board.card`, `board.news`, `board.pill`, `board.focus`, typed in `modules/board/api.ts`), so pills of any module have a surface without `claude`. Claude provides its own pill's session card; integrations their own. `claude.taskCard`/`claude.taskNews` are gone. With only the board on, Início shows the pill list or an empty note.
