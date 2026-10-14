@@ -7,6 +7,7 @@
 import { Ease, lerp, type EaseFn } from "../core/anim";
 import { Sound } from "../core/sound";
 import type { BotEmoteName, BotStateName } from "../core/layout";
+import { moodName } from "../core/layout";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -223,6 +224,8 @@ export class BotEngine {
   // ── Public API ──────────────────────────────────────────────────────────────
 
   setState(next: BotStateName, force = false) {
+    next = moodName(next as string);
+    if (!BOT_STATES[next]) return;
     if (this.state === next && !force) return;
     const prev = this.state;
     this.state = next;

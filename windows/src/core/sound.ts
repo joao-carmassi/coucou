@@ -36,7 +36,9 @@ class SoundEngine {
     try {
       const res = await fetch(url);
       if (!res.ok) return;
-      this.buffers.set(name, await ctx.decodeAudioData(await res.arrayBuffer()));
+      const buf = await ctx.decodeAudioData(await res.arrayBuffer());
+      // A module sound unregistered while it loaded must not come back.
+      if (SOUND_NAMES.includes(name as never) || this.extra.has(name)) this.buffers.set(name, buf);
     } catch {
       /* a missing sound must never break the island */
     }
@@ -65,6 +67,8 @@ class SoundEngine {
         ...SOUND_NAMES.map((name) => this.load(name, `/sounds/${FILE[name] ?? name}.wav`)),
         ...[...this.extra].map(([name, url]) => this.load(name, url)),
       ]);
+      // A sound registered while the rest was loading missed the snapshot above.
+      await Promise.all([...this.extra].filter(([n]) => !this.buffers.has(n)).map(([n, u]) => this.load(n, u)));
       this.loaded = true;
       this.idle();
     })();
