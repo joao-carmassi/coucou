@@ -10,12 +10,12 @@ use crate::core::platform;
 
 /// The island may only ask whether a key exists — never read it.
 #[tauri::command]
-pub fn secret_present(key: String) -> bool {
+pub fn integrations_secret_present(key: String) -> bool {
     secrets::present(&key)
 }
 
 #[tauri::command]
-pub fn secret_set(app: AppHandle, host: State<ModuleHost>, key: String, value: String) -> Result<(), String> {
+pub fn integrations_secret_set(app: AppHandle, host: State<ModuleHost>, key: String, value: String) -> Result<(), String> {
     host.require(secrets::provider_of(&key).ok_or_else(|| format!("chave desconhecida: {key}"))?)?;
     secrets::set(&key, &value)?;
     secrets_changed(&app, &key);
@@ -23,7 +23,7 @@ pub fn secret_set(app: AppHandle, host: State<ModuleHost>, key: String, value: S
 }
 
 #[tauri::command]
-pub fn secret_clear(app: AppHandle, host: State<ModuleHost>, key: String) -> Result<(), String> {
+pub fn integrations_secret_clear(app: AppHandle, host: State<ModuleHost>, key: String) -> Result<(), String> {
     host.require(secrets::provider_of(&key).ok_or_else(|| format!("chave desconhecida: {key}"))?)?;
     secrets::clear(&key)?;
     secrets_changed(&app, &key);
@@ -75,7 +75,7 @@ pub async fn github_detail(
 
 /// Opens the configured n8n instance — the URL lives in the Credential Manager.
 #[tauri::command]
-pub fn open_n8n(host: State<ModuleHost>) {
+pub fn n8n_open(host: State<ModuleHost>) {
     if !host.is_enabled("n8n") {
         return;
     }
@@ -88,7 +88,7 @@ pub fn open_n8n(host: State<ModuleHost>) {
 
 /// Refresh buttons in the integration cards.
 #[tauri::command]
-pub async fn refresh_integration(app: AppHandle, host: State<'_, ModuleHost>, id: String) -> Result<(), String> {
+pub async fn integrations_refresh(app: AppHandle, host: State<'_, ModuleHost>, id: String) -> Result<(), String> {
     // id is `integration_<short>`; the gate is that provider's module.
     if !id.strip_prefix("integration_").is_some_and(|short| host.is_enabled(short)) {
         return Ok(());

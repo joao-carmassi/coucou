@@ -3,38 +3,38 @@ import { command, commandOrThrow } from "../../core/bridge";
 
 export const ClaudeBridge = {
   openInVSCode: (path: string | null, wslDistro: string | null = null) =>
-    command<boolean>("open_in_vscode", { path, wslDistro }),
-  openClaudeApp: () => command<void>("open_claude_app"),
+    command<boolean>("claude_open_in_vscode", { path, wslDistro }),
+  openClaudeApp: () => command<void>("claude_open_app"),
   openTerminal: (path: string | null, wslDistro: string | null, terminalPids: number[]) =>
-    command<boolean>("open_terminal", { path, wslDistro, terminalPids }),
-  startClaudeTerminal: () => command<boolean>("start_claude_terminal"),
-  hooksStatus: (configDir?: string) => command<HookStatus>("hooks_status", { configDir }),
+    command<boolean>("claude_open_terminal", { path, wslDistro, terminalPids }),
+  startClaudeTerminal: () => command<boolean>("claude_start_terminal"),
+  hooksStatus: (configDir?: string) => command<HookStatus>("claude_hooks_status", { configDir }),
   hooksPreview: (install: boolean, configDir?: string) =>
-    commandOrThrow<HookPreview>("hooks_preview", { install, configDir }),
+    commandOrThrow<HookPreview>("claude_hooks_preview", { install, configDir }),
   hooksApply: (install: boolean, fingerprint: string, configDir?: string) =>
-    commandOrThrow<string>("hooks_apply", { install, fingerprint, configDir }),
+    commandOrThrow<string>("claude_hooks_apply", { install, fingerprint, configDir }),
   claudeProfiles: () => command<ClaudeProfile[]>("claude_profiles"),
-  sessionsAll: () => command<ManagedSession[]>("sessions_all"),
-  sessionsLive: () => command<LiveSession[]>("sessions_live"),
+  sessionsAll: () => command<ManagedSession[]>("claude_sessions_all"),
+  sessionsLive: () => command<LiveSession[]>("claude_sessions_live"),
   sessionLaunch: (r: LaunchRequest) =>
-    commandOrThrow<void>("session_launch", { profile: r.profile, cwd: r.cwd, resume: r.resume, attach: r.attach, prompt: r.prompt ?? null }),
-  sessionErase: (profile: string, id: string) => commandOrThrow<void>("session_erase", { profile, id }),
-  wslDistros: () => command<string[]>("wsl_distros"),
-  wslStatus: (distro: string) => commandOrThrow<WslStatus>("wsl_status", { distro }),
+    commandOrThrow<void>("claude_session_launch", { profile: r.profile, cwd: r.cwd, resume: r.resume, attach: r.attach, prompt: r.prompt ?? null }),
+  sessionErase: (profile: string, id: string) => commandOrThrow<void>("claude_session_erase", { profile, id }),
+  wslDistros: () => command<string[]>("claude_wsl_distros"),
+  wslStatus: (distro: string) => commandOrThrow<WslStatus>("claude_wsl_status", { distro }),
   wslHooksPreview: (distro: string, install: boolean) =>
-    commandOrThrow<HookPreview>("wsl_hooks_preview", { distro, install }),
+    commandOrThrow<HookPreview>("claude_wsl_hooks_preview", { distro, install }),
   wslHooksApply: (distro: string, install: boolean, fingerprint: string) =>
-    commandOrThrow<string>("wsl_hooks_apply", { distro, install, fingerprint }),
+    commandOrThrow<string>("claude_wsl_hooks_apply", { distro, install, fingerprint }),
   approvalDecision: (requestId: string, decision: "allow" | "deny" | "skip" | "plan-keep" | "plan-manual" | "plan-auto") =>
-    command<void>("approval_decision", { requestId, decision }),
-  approvalAck: (requestId: string) => command<void>("approval_ack", { requestId }),
-  approvalDecline: (requestId: string) => command<void>("approval_decline", { requestId }),
+    command<void>("claude_approval_decision", { requestId, decision }),
+  approvalAck: (requestId: string) => command<void>("claude_approval_ack", { requestId }),
+  approvalDecline: (requestId: string) => command<void>("claude_approval_decline", { requestId }),
   approvalAnswer: (requestId: string, answers: Record<string, string>) =>
-    command<void>("approval_answer", { requestId, answers }),
+    command<void>("claude_approval_answer", { requestId, answers }),
   resumeInTerminal: (id: string, cwd: string | null) =>
-    commandOrThrow<void>("resume_in_terminal", { id, cwd }),
+    commandOrThrow<void>("claude_resume_in_terminal", { id, cwd }),
   /** Copies a file into the inbox (the only place a session may attach from). */
-  ingestClaudeFile: (path: string) => commandOrThrow<ClaudeInboxFile>("ingest_file", { path }),
+  ingestClaudeFile: (path: string) => commandOrThrow<ClaudeInboxFile>("claude_ingest_file", { path }),
 
 };
 

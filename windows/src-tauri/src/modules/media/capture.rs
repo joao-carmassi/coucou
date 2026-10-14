@@ -1,4 +1,4 @@
-// Screenshot of the window under the cursor: Mochi dropped on it (attach_window).
+// Screenshot of the window under the cursor: Mochi dropped on it (media_attach_window).
 // The pixels go through inbox::save_capture into the inbox, then the Mídia list.
 
 use ::windows::core::PWSTR;

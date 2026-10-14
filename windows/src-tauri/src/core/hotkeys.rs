@@ -74,6 +74,11 @@ pub fn clean(s: &str, default: &str) -> String {
     }
 }
 
+/// `hotkey-error {name, error}`: why `name`'s combo could not be registered ("" = fine now).
+fn emit_error(app: &AppHandle, name: &str, error: &str) {
+    let _ = app.emit("hotkey-error", serde_json::json!({ "name": name, "error": error }));
+}
+
 fn rebuild(app: &AppHandle) {
     let entries = ENTRIES.lock().unwrap().clone();
     let want: Vec<_> = entries.iter().map(|e| (e.name, e.combo.clone())).collect();
@@ -81,15 +86,18 @@ fn rebuild(app: &AppHandle) {
     if *running == want {
         return;
     }
-    let had = !running.is_empty();
+    let gone: Vec<&'static str> = running.iter().map(|(n, _)| *n).collect();
     quit_thread();
     *ERROR.lock().unwrap() = String::new();
     *running = want.clone();
     if want.is_empty() {
-        if had {
-            let _ = app.emit("voice-hotkey-error", String::new());
+        for name in &gone {
+            emit_error(app, name, "");
         }
         return;
+    }
+    for name in gone.iter().filter(|n| !entries.iter().any(|e| e.name == **n)) {
+        emit_error(app, name, ""); // a name that dropped out must not keep showing its old error
     }
     let app = app.clone();
     *HANDLE.lock().unwrap() = Some(std::thread::spawn(move || hotkey_loop(app, entries)));
@@ -116,22 +124,24 @@ fn hotkey_loop(app: AppHandle, entries: Vec<Entry>) {
         let mut msg = MSG::default();
         let _ = PeekMessageW(&mut msg, None, WM_USER, WM_USER, PM_NOREMOVE); // creates the queue
         THREAD.store(GetCurrentThreadId(), Ordering::SeqCst); // before RegisterHotKey, so quit_thread can always stop us
-        let mut errors = Vec::new();
+        let mut errors: Vec<(&'static str, String)> = Vec::new();
         let mut ids = Vec::new();
         for (i, e) in entries.iter().enumerate() {
             let id = i as i32 + 1;
             let Some((mods, vk)) = parse_hotkey(&e.combo) else {
-                errors.push(format!("{}: atalho inválido ({})", e.label, e.combo));
+                errors.push((e.name, format!("{}: atalho inválido ({})", e.label, e.combo)));
                 continue;
             };
             match RegisterHotKey(None, id, HOT_KEY_MODIFIERS(mods) | MOD_NOREPEAT, vk) {
                 Ok(()) => ids.push(id),
-                Err(err) => errors.push(format!("{}: não foi possível registrar {} ({err})", e.label, e.combo)),
+                Err(err) => errors.push((e.name, format!("{}: não foi possível registrar {} ({err})", e.label, e.combo))),
             }
         }
-        let error = errors.join(" · ");
-        *ERROR.lock().unwrap() = error.clone();
-        let _ = app.emit("voice-hotkey-error", error);
+        *ERROR.lock().unwrap() = errors.iter().map(|(_, m)| m.as_str()).collect::<Vec<_>>().join(" · ");
+        for e in &entries {
+            let own: Vec<&str> = errors.iter().filter(|(n, _)| *n == e.name).map(|(_, m)| m.as_str()).collect();
+            emit_error(&app, e.name, &own.join(" · "));
+        }
         while GetMessageW(&mut msg, None, 0, 0).0 > 0 {
             if msg.message == WM_HOTKEY {
                 if let Some(e) = entries.get((msg.wParam.0 as usize).wrapping_sub(1)) {

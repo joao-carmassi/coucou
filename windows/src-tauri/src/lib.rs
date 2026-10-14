@@ -41,9 +41,7 @@ pub struct BootInfo {
 fn boot(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>) -> BootInfo {
     let settings = {
         let mut current = shared.settings.lock().unwrap();
-        if host.is_enabled("claude") {
-            modules::claude::cfg::refresh_hooks_installed(&mut current);
-        }
+        host.boot(&mut current);
         current.clone()
     };
     let screen = island::screen_info(&app, &settings.screen);
@@ -57,25 +55,16 @@ fn boot(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>) -> BootI
 }
 
 #[tauri::command]
-fn save_settings(app: AppHandle, shared: State<Shared>, mut settings: Settings) {
+fn save_settings(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>, mut settings: Settings) {
     let (screen_changed, autostart_changed) = {
         let mut current = shared.settings.lock().unwrap();
         // A caller that does not know about modules must not wipe the switches.
         if settings.modules_enabled.is_empty() {
             settings.modules_enabled = current.modules_enabled.clone();
         }
-        modules::claude::cfg::keep_rust_owned(&current, &mut settings);
-        if let Some(v) = settings.extra.get_mut("alertHotkey") {
-            if let Some(s) = v.as_str() {
-                *v = serde_json::json!(core::hotkeys::clean(s, ""));
-            }
-        }
+        host.on_save(&current, &mut settings);
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
-        // Legacy mirror: rolling back to the old exe keeps the voice choice.
-        if let Some(on) = settings.modules_enabled.get("voice").copied() {
-            settings.extra.insert("voiceEnabled".into(), serde_json::json!(on));
-        }
         *current = settings.clone();
         (screen_changed, autostart_changed)
     };
@@ -94,7 +83,7 @@ fn save_settings(app: AppHandle, shared: State<Shared>, mut settings: Settings) 
         island::apply_geometry(&app, &settings.screen, collapsed);
     }
     // After the Shared lock is released: a module's start may need it.
-    app.state::<ModuleHost>().sync(&app, &settings);
+    host.sync(&app, &settings);
     // Keep the other window in step (island ⇄ settings window).
     let _ = app.emit("settings-changed", settings);
 }
@@ -152,11 +141,10 @@ fn quit_app(app: AppHandle) {
     app.exit(0);
 }
 
-/// Tray → Pause. Core polls nothing itself; the integrations module parks its scheduler.
+/// Tray → Pause. Core polls nothing itself; each module parks what it runs.
 #[tauri::command]
-fn set_paused(paused: bool) {
-    // The flag is a static: set it even with the module off so enabling it later starts right.
-    modules::integrations::set_paused(paused);
+fn set_paused(host: State<ModuleHost>, paused: bool) {
+    host.pause(paused);
 }
 
 /// Lets the island write to the same log as the Rust side.
@@ -280,7 +268,8 @@ fn open_settings_window(app: AppHandle) {
 pub fn run() {
     platform::prepare_environment();
     let (mut loaded, ok) = settings::load();
-    let migrated = settings::migrate_modules(&mut loaded);
+    let host = ModuleHost::new(modules::CATALOG, modules::registry());
+    let migrated = host.migrate(&mut loaded);
     if migrated && ok {
         let _ = settings::save(&loaded);
     }
@@ -291,14 +280,13 @@ pub fn run() {
             let _ = app.emit_to(island::WINDOW_LABEL, "tray", "open".to_string());
         }))
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
-        .manage(modules::claude::pipe::Pending::default())
-        .manage(ModuleHost::new(modules::CATALOG, modules::registry()))
+        .manage(host)
         .manage(Shared {
             settings: Mutex::new(loaded.clone()),
             gate: gate.clone(),
             settings_section: Mutex::new(String::new()),
         })
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler(modules::handler!(
             boot,
             save_settings,
             set_collapsed,
@@ -311,52 +299,10 @@ pub fn run() {
             open_settings_window,
             take_settings_section,
             set_paused,
-            modules::claude::commands::open_claude_app,
-            modules::claude::commands::open_in_vscode,
-            modules::claude::commands::open_terminal,
-            modules::claude::commands::start_claude_terminal,
-            modules::claude::commands::resume_in_terminal,
-            modules::claude::commands::claude_profiles,
-            modules::claude::commands::sessions_all,
-            modules::claude::commands::sessions_live,
-            modules::claude::commands::session_launch,
-            modules::claude::commands::session_erase,
-            modules::claude::commands::hooks_status,
-            modules::claude::commands::hooks_preview,
-            modules::claude::commands::hooks_apply,
-            modules::claude::commands::wsl_distros,
-            modules::claude::commands::wsl_status,
-            modules::claude::commands::wsl_hooks_preview,
-            modules::claude::commands::wsl_hooks_apply,
-            modules::claude::commands::approval_decision,
-modules::voice::voice::voice_start,
-modules::voice::voice::voice_stop,
-modules::voice::voice::voice_cancel,
-modules::voice::voice::voice_model_status,
-modules::voice::voice::voice_download_model,
-            modules::claude::commands::approval_ack,
-            modules::claude::commands::approval_decline,
-            modules::claude::commands::approval_answer,
-            modules::claude::commands::ingest_file,
-            modules::media::commands::attach_window,
-            modules::media::commands::media_list,
-            modules::media::commands::media_thumb,
-            modules::media::commands::media_open,
-            modules::media::commands::media_open_with,
-            modules::media::commands::media_reveal,
-            modules::media::commands::media_remove,
-            modules::integrations::commands::secret_present,
-            modules::integrations::commands::secret_set,
-            modules::integrations::commands::secret_clear,
-            modules::integrations::commands::github_test,
-            modules::integrations::commands::github_project,
-            modules::integrations::commands::github_day,
-            modules::integrations::commands::github_detail,
-            modules::integrations::commands::open_n8n,
-            modules::integrations::commands::refresh_integration,
-        ])
+        ))
         .setup(move |app| {
             let handle = app.handle().clone();
+            handle.state::<ModuleHost>().setup(&handle);
             tray::build(&handle)?;
             // Before the island: see create_settings_window.
             create_settings_window(&handle);

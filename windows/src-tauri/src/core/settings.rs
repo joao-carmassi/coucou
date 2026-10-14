@@ -77,24 +77,13 @@ pub fn load() -> (Settings, bool) {
     }
 }
 
-/// One module per service; on when the legacy `activeIntegrations` listed `integration_<short>`.
-const INTEGRATIONS: [&str; 7] = ["github", "vercel", "stripe", "n8n", "resend", "calcom", "notion"];
-
-/// Fills the switches a pre-module settings.json lacks; keys present are the user's. True when something was added.
-pub fn migrate_modules(s: &mut Settings) -> bool {
-    let voice = s.extra.get("voiceEnabled").and_then(|v| v.as_bool()).unwrap_or(false);
-    let listed = |short: &str| {
-        let id = format!("integration_{short}");
-        s.extra.get("activeIntegrations").and_then(|v| v.as_array()).is_some_and(|a| a.iter().any(|x| x.as_str() == Some(&id)))
-    };
-    // m7 era: the master switch was explicitly off, so the listed providers stay off.
-    let off = s.modules_enabled.get("integrations") == Some(&false);
-    let providers = INTEGRATIONS.map(|short| (short, listed(short) && !off));
+/// Fills the switches a pre-module settings.json lacks with the catalog default; keys present are the
+/// user's. Legacy shapes are the modules' business (`Module::migrate`, run first). True when something was added.
+pub fn fill_defaults(catalog: &[crate::core::host::ModuleInfo], s: &mut Settings) -> bool {
     let mut added = false;
-    let base = [("claude", true), ("media", true), ("upload", true), ("timer", false), ("voice", voice)];
-    for (id, on) in base.into_iter().chain(providers) {
-        if !s.modules_enabled.contains_key(id) {
-            s.modules_enabled.insert(id.into(), on);
+    for m in catalog {
+        if !s.modules_enabled.contains_key(m.id) {
+            s.modules_enabled.insert(m.id.into(), m.default_enabled);
             added = true;
         }
     }
@@ -145,49 +134,21 @@ mod tests {
     }
 
     #[test]
-    fn migrate_installed_baseline() {
+    fn fill_defaults_installed_baseline() {
+        let cat = crate::modules::CATALOG;
         let mut s: Settings = serde_json::from_str(SAMPLE).unwrap();
-        assert!(migrate_modules(&mut s));
-        assert!(!migrate_modules(&mut s), "second call changes nothing");
-        let want: BTreeMap<String, bool> =
-            [("claude", true), ("media", true), ("upload", true), ("timer", false), ("voice", false)]
-                .into_iter()
-                .chain(INTEGRATIONS.map(|k| (k, false)))
-                .map(|(k, v)| (k.to_string(), v))
-                .collect();
+        assert!(fill_defaults(cat, &mut s));
+        assert!(!fill_defaults(cat, &mut s), "second call changes nothing");
+        let want: BTreeMap<String, bool> = cat.iter().map(|m| (m.id.to_string(), m.default_enabled)).collect();
         assert_eq!(s.modules_enabled, want);
         assert_keys_kept(&s);
     }
 
     #[test]
-    fn migrate_keeps_user_choice() {
+    fn fill_defaults_keeps_user_choice() {
         let mut s: Settings = serde_json::from_str(r#"{"modulesEnabled":{"timer":true,"claude":false}}"#).unwrap();
-        migrate_modules(&mut s);
+        fill_defaults(crate::modules::CATALOG, &mut s);
         assert!(s.module_on("timer", false));
         assert!(!s.module_on("claude", true));
-    }
-
-    #[test]
-    fn migrate_from_legacy() {
-        let mut s: Settings = serde_json::from_str(
-            r#"{"voiceEnabled":true,"activeIntegrations":["integration_github","integration_vercel","integration_notion"],"modulesEnabled":{"notion":false}}"#,
-        )
-        .unwrap();
-        assert!(migrate_modules(&mut s));
-        assert!(s.module_on("voice", false));
-        for (id, on) in [("github", true), ("vercel", true), ("stripe", false), ("n8n", false), ("notion", false)] {
-            assert_eq!(s.module_on(id, !on), on, "{id}");
-        }
-        assert!(!migrate_modules(&mut s), "idempotent");
-    }
-
-    #[test]
-    fn migrate_master_off_keeps_providers_off() {
-        let mut s: Settings = serde_json::from_str(
-            r#"{"activeIntegrations":["integration_github"],"modulesEnabled":{"integrations":false}}"#,
-        )
-        .unwrap();
-        migrate_modules(&mut s);
-        assert!(!s.module_on("github", true));
     }
 }

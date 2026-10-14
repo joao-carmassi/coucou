@@ -3,12 +3,12 @@ import { command, commandOrThrow } from "../../core/bridge";
 
 export const IntegrationsBridge = {
   /** Only ever tells you whether a key exists, never its value. */
-  secretPresent: (key: string) => command<boolean>("secret_present", { key }),
-  secretSet: (key: string, value: string) => commandOrThrow<void>("secret_set", { key, value }),
-  secretClear: (key: string) => commandOrThrow<void>("secret_clear", { key }),
-  refreshIntegration: (id: string) => command<void>("refresh_integration", { id }),
+  secretPresent: (key: string) => command<boolean>("integrations_secret_present", { key }),
+  secretSet: (key: string, value: string) => commandOrThrow<void>("integrations_secret_set", { key, value }),
+  secretClear: (key: string) => commandOrThrow<void>("integrations_secret_clear", { key }),
+  refreshIntegration: (id: string) => command<void>("integrations_refresh", { id }),
   /** Opens the configured n8n instance in the browser. */
-  openN8n: () => command<void>("open_n8n"),
+  openN8n: () => command<void>("n8n_open"),
   /** Settings: runs on the stored token; the token never comes back. */
   githubTest: () => commandOrThrow<GithubAccount>("github_test"),
   /** A project sheet, fetched on the click. `force` skips the minute of cache. */

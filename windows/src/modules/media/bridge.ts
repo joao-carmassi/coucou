@@ -6,7 +6,7 @@ export interface InboxFile { name: string; path: string; size: number }
 
 export const MediaBridge = {
   /** Screenshots the window under the cursor into the inbox (Mochi dragged onto it). */
-  attachWindow: () => commandOrThrow<InboxFile>("attach_window"),
+  attachWindow: () => commandOrThrow<InboxFile>("media_attach_window"),
   list: () => commandOrThrow<MediaItem[]>("media_list"),
   /** The file's preview as PNG bytes. */
   thumb: (path: string, px: number) => commandOrThrow<ArrayBuffer>("media_thumb", { path, px }),

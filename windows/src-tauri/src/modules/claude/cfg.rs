@@ -69,9 +69,33 @@ pub fn keep_rust_owned(current: &Settings, incoming: &mut Settings) {
     }
 }
 
+/// `save_settings`: Rust's bookkeeping survives a stale window, and the alert combo is normalised.
+pub fn on_save(current: &Settings, incoming: &mut Settings) {
+    keep_rust_owned(current, incoming);
+    if let Some(v) = incoming.extra.get_mut("alertHotkey") {
+        if let Some(s) = v.as_str() {
+            *v = json!(crate::core::hotkeys::clean(s, ""));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn on_save_cleans_alert_hotkey_and_keeps_owned() {
+        let mut cur = Settings::default();
+        set_wsl_prompted(&mut cur, true);
+        let mut inc = Settings::default();
+        inc.extra.insert("alertHotkey".into(), json!("ctrl + alt+a"));
+        on_save(&cur, &mut inc);
+        assert_eq!(alert_hotkey(&inc), "Ctrl+Alt+A");
+        assert!(wsl_prompted(&inc));
+        inc.extra.insert("alertHotkey".into(), json!("nonsense"));
+        on_save(&cur, &mut inc);
+        assert_eq!(alert_hotkey(&inc), "");
+    }
 
     #[test]
     fn rust_owned_keys_survive_a_stale_save() {

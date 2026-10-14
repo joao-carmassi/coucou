@@ -24,11 +24,11 @@ pub fn inbox_dir() -> PathBuf {
     settings::local_dir().join("inbox")
 }
 
-/// Tells the Mídia list about a file that came onto the island. It is an event
+/// Announces (`inbox-added`) a file that came onto the island. It is an event
 /// because the list lives in the media module, which listens for it; no handle means no event.
 fn note_drop(app: Option<&AppHandle>, path: &str) {
     if let Some(app) = app {
-        let _ = app.emit("media-note-drop", path);
+        let _ = app.emit("inbox-added", path);
     }
 }
 

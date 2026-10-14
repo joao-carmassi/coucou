@@ -30,6 +30,19 @@ pub trait Module: Send + Sync {
     fn stop(&self, _ctx: &ModuleCtx) {}
     /// Settings saved while running.
     fn apply(&self, _ctx: &ModuleCtx, _s: &Settings) {}
+    /// Builder time, once per module (on or off): register Tauri state only. No threads, no timers.
+    fn setup(&self, _app: &AppHandle) {}
+    /// Legacy settings.json shapes -> `modulesEnabled` / own keys. Only fill what is missing; true if changed.
+    fn migrate(&self, _s: &mut Settings) -> bool {
+        false
+    }
+    /// `save_settings`: `current` is what Rust holds, `incoming` what the window sent (edit it in place).
+    /// Keep Rust-owned keys, clean values, write legacy mirrors. Runs for every module, on or off.
+    fn on_save(&self, _current: &Settings, _incoming: &mut Settings) {}
+    /// `boot`, while the module is on: refresh what the window must see fresh.
+    fn boot(&self, _s: &mut Settings) {}
+    /// Tray Pause. Runs for every module, on or off (the flag outlives the module).
+    fn pause(&self, _paused: bool) {}
 }
 
 enum Task {
@@ -183,6 +196,34 @@ impl ModuleHost {
             }
             (false, None) => {}
         }
+    }
+
+    /// Settings loaded from disk: modules migrate their legacy keys, then every id still missing gets
+    /// its catalog default. True when settings.json should be rewritten.
+    pub fn migrate(&self, s: &mut Settings) -> bool {
+        let mut changed = false;
+        for m in &self.modules {
+            changed |= m.migrate(s);
+        }
+        crate::core::settings::fill_defaults(self.catalog, s) | changed
+    }
+
+    pub fn setup(&self, app: &AppHandle) {
+        self.modules.iter().for_each(|m| m.setup(app));
+    }
+
+    pub fn on_save(&self, current: &Settings, incoming: &mut Settings) {
+        self.modules.iter().for_each(|m| m.on_save(current, incoming));
+    }
+
+    pub fn boot(&self, s: &mut Settings) {
+        for m in self.modules.iter().filter(|m| self.is_enabled(m.id())) {
+            m.boot(s);
+        }
+    }
+
+    pub fn pause(&self, paused: bool) {
+        self.modules.iter().for_each(|m| m.pause(paused));
     }
 
     pub fn is_enabled(&self, id: &str) -> bool {

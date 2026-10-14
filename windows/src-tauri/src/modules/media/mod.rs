@@ -15,8 +15,8 @@ impl Module for Media {
     }
 
     fn start(&self, ctx: &ModuleCtx, _s: &Settings) {
-        // The claude module's ingest emits this for every file that came onto the island.
-        ctx.listen("media-note-drop", |ev| media::note_drop_event(ev.payload()));
+        // core::inbox emits this for every file that came onto the island.
+        ctx.listen("inbox-added", |ev| media::note_drop_event(ev.payload()));
         media::start(ctx);
     }
 

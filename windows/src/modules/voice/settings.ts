@@ -41,7 +41,7 @@ export function voiceSettingsSection(): { el: HTMLElement; dispose(): void } {
   }) as HTMLInputElement;
   input.addEventListener("change", () => {
     cfg().voiceHotkey = input.value.trim();
-    // Rust tries the new combo on save; the verdict comes back as `voice-hotkey-error`.
+    // Rust tries the new combo on save; the verdict comes back as `hotkey-error`.
     void Bridge.saveSettings(State.settings).then(() => setTimeout(() => void refresh(), 300));
   });
 
@@ -49,7 +49,7 @@ export function voiceSettingsSection(): { el: HTMLElement; dispose(): void } {
     onEvent<{ file: string; received: number; total: number }>("voice-download", (p) => {
       status.textContent = `Baixando ${p.file}… ${p.total ? Math.round((100 * p.received) / p.total) + "%" : ""}`;
     }),
-    onEvent<string>("voice-hotkey-error", showError),
+    onEvent<{ name: string; error: string }>("hotkey-error", (p) => { if (p.name === "voice") showError(p.error); }),
   ];
   void refresh();
   const el = h("section", { id: "voice" },

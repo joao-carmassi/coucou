@@ -36,6 +36,18 @@ impl Module for Claude {
         set_alert(ctx, s);
     }
 
+    fn setup(&self, app: &AppHandle) {
+        app.manage(pipe::Pending::default());
+    }
+
+    fn on_save(&self, current: &Settings, incoming: &mut Settings) {
+        cfg::on_save(current, incoming);
+    }
+
+    fn boot(&self, s: &mut Settings) {
+        cfg::refresh_hooks_installed(s);
+    }
+
     fn stop(&self, ctx: &ModuleCtx) {
         hotkeys::clear(&ctx.app, "alert");
         // Release the pipe: handlers waiting for a reply end when their sender is dropped.

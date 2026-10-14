@@ -9,7 +9,7 @@ use crate::core::inbox::{self, DroppedFile};
 
 /// Screenshots the window under the cursor into the inbox (Mochi dragged onto it).
 #[tauri::command]
-pub async fn attach_window(handle: AppHandle) -> Result<DroppedFile, String> {
+pub async fn media_attach_window(handle: AppHandle) -> Result<DroppedFile, String> {
     let (app, w, h, rgb) = capture::capture_under_cursor()?;
     let file = inbox::save_capture(Some(&handle), &app, w, h, &rgb)?;
     log::line(format!("window attached: {app} {w}x{h}"));

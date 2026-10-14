@@ -21,7 +21,7 @@ const CLAUDE_APP_URL: &str = "claude://";
 /// Brings the Claude desktop app forward. The address is fixed here: nothing
 /// the interface sends is run.
 #[tauri::command]
-pub fn open_claude_app() {
+pub fn claude_open_app() {
     platform::open_url(CLAUDE_APP_URL);
 }
 
@@ -32,7 +32,7 @@ pub fn open_claude_app() {
 /// path, so VS Code opens it through Remote WSL and Explorer through
 /// `\\wsl.localhost\<distro>`.
 #[tauri::command]
-pub fn open_in_vscode(path: Option<String>, wsl_distro: Option<String>) -> bool {
+pub fn claude_open_in_vscode(path: Option<String>, wsl_distro: Option<String>) -> bool {
     let path = path.filter(|p| !p.is_empty());
     let wsl = wsl_target(wsl_distro, path.as_deref());
 
@@ -80,7 +80,7 @@ pub fn open_in_vscode(path: Option<String>, wsl_distro: Option<String>) -> bool 
 /// forward, or open one in the session folder — Windows Terminal when installed,
 /// a PowerShell console otherwise; a WSL session gets a shell in its own distro.
 #[tauri::command]
-pub fn open_terminal(
+pub fn claude_open_terminal(
     path: Option<String>,
     wsl_distro: Option<String>,
     terminal_pids: Option<Vec<u32>>,
@@ -141,7 +141,7 @@ pub fn open_terminal(
 /// interactive Claude Code in a new console, in that session's own folder
 /// (`--resume` looks sessions up by it), on the "Account folder" account.
 #[tauri::command]
-pub fn resume_in_terminal(app: AppHandle, id: String, cwd: Option<String>) -> Result<(), String> {
+pub fn claude_resume_in_terminal(app: AppHandle, id: String, cwd: Option<String>) -> Result<(), String> {
     app.state::<ModuleHost>().require("claude")?;
     if !sessions::is_session_id(&id) {
         return Err("ID de sessão inválido.".into());
@@ -157,7 +157,7 @@ pub fn resume_in_terminal(app: AppHandle, id: String, cwd: Option<String>) -> Re
 }
 
 #[tauri::command]
-pub fn start_claude_terminal() -> bool {
+pub fn claude_start_terminal() -> bool {
     let Some(cli) = local_claude::windows_cli() else { return false };
     let config = cfg::claude_config_dir();
     claude_console(&cli, &[], &platform::home_dir(), config.as_deref(), None).is_ok()
@@ -252,19 +252,19 @@ pub fn any_hooks_installed() -> bool {
 }
 
 #[tauri::command]
-pub fn hooks_status(config_dir: Option<String>) -> Result<HookStatus, String> {
+pub fn claude_hooks_status(config_dir: Option<String>) -> Result<HookStatus, String> {
     Ok(hooks::status_in(profile_dir(config_dir)?.as_deref()))
 }
 
 /// Returns the diff the user has to look at before anything is written.
 #[tauri::command]
-pub fn hooks_preview(install: bool, config_dir: Option<String>) -> Result<HookPreview, String> {
+pub fn claude_hooks_preview(install: bool, config_dir: Option<String>) -> Result<HookPreview, String> {
     hooks::preview_in(profile_dir(config_dir)?.as_deref(), install)
 }
 
 /// Only ever called from an explicit click in the settings window.
 #[tauri::command]
-pub fn hooks_apply(
+pub fn claude_hooks_apply(
     app: AppHandle,
     shared: State<crate::Shared>,
     install: bool,
@@ -291,12 +291,12 @@ pub fn hooks_apply(
 
 /// Installed distros. Cheap: listing them starts nothing.
 #[tauri::command]
-pub async fn wsl_distros() -> Vec<String> {
+pub async fn claude_wsl_distros() -> Vec<String> {
     blocking(wsl::distros).await.unwrap_or_default()
 }
 
 #[tauri::command]
-pub async fn wsl_status(app: AppHandle, distro: String) -> Result<wsl::WslStatus, String> {
+pub async fn claude_wsl_status(app: AppHandle, distro: String) -> Result<wsl::WslStatus, String> {
     let status = blocking(move || wsl::status(&distro)).await?;
     if status.error.is_none() {
         remember_wsl_hooks(&app, &status.distro, status.installed);
@@ -305,13 +305,13 @@ pub async fn wsl_status(app: AppHandle, distro: String) -> Result<wsl::WslStatus
 }
 
 #[tauri::command]
-pub async fn wsl_hooks_preview(distro: String, install: bool) -> Result<HookPreview, String> {
+pub async fn claude_wsl_hooks_preview(distro: String, install: bool) -> Result<HookPreview, String> {
     blocking(move || wsl::preview(&distro, install)).await?
 }
 
 /// Only ever called from an explicit click in the settings window.
 #[tauri::command]
-pub async fn wsl_hooks_apply(
+pub async fn claude_wsl_hooks_apply(
     app: AppHandle,
     distro: String,
     install: bool,
@@ -348,7 +348,7 @@ fn remember_wsl_hooks(app: &AppHandle, distro: &str, installed: bool) {
 }
 
 #[tauri::command]
-pub fn approval_decision(app: AppHandle, request_id: String, decision: String) {
+pub fn claude_approval_decision(app: AppHandle, request_id: String, decision: String) {
     pipe::answer(&app, &request_id, &decision);
 }
 
@@ -356,20 +356,20 @@ pub fn approval_decision(app: AppHandle, request_id: String, decision: String) {
 /// Until this arrives the relay only waits a few hundred milliseconds, which is
 /// what stops a paused or unresponsive island from freezing Claude Code.
 #[tauri::command]
-pub fn approval_ack(app: AppHandle, request_id: String) {
+pub fn claude_approval_ack(app: AppHandle, request_id: String) {
     pipe::acknowledge(&app, &request_id);
 }
 
 /// Nobody can act on this request — the island is paused, or another card is
 /// already up. Claude Code falls back to asking in the terminal immediately.
 #[tauri::command]
-pub fn approval_decline(app: AppHandle, request_id: String) {
+pub fn claude_approval_decline(app: AppHandle, request_id: String) {
     pipe::decline(&app, &request_id);
 }
 
 /// The island answered a question Claude asked with its question tool.
 #[tauri::command]
-pub fn approval_answer(app: AppHandle, request_id: String, answers: serde_json::Map<String, serde_json::Value>) {
+pub fn claude_approval_answer(app: AppHandle, request_id: String, answers: serde_json::Map<String, serde_json::Value>) {
     pipe::answer_question(&app, &request_id, &answers);
 }
 
@@ -381,12 +381,12 @@ pub fn claude_profiles() -> Vec<sessions::Profile> {
 }
 
 #[tauri::command]
-pub async fn sessions_all() -> Result<Vec<sessions::ManagedSession>, String> {
+pub async fn claude_sessions_all() -> Result<Vec<sessions::ManagedSession>, String> {
     blocking(sessions::list_all).await
 }
 
 #[tauri::command]
-pub async fn sessions_live() -> Result<Vec<sessions::LiveSession>, String> {
+pub async fn claude_sessions_live() -> Result<Vec<sessions::LiveSession>, String> {
     blocking(sessions::live).await
 }
 
@@ -394,7 +394,7 @@ pub async fn sessions_live() -> Result<Vec<sessions::LiveSession>, String> {
 /// is not running, and/or `attach` a file from the inbox. Everything the
 /// interface sends is validated here; none of it reaches a command line unchecked.
 #[tauri::command]
-pub async fn session_launch(
+pub async fn claude_session_launch(
     app: AppHandle,
     profile: String,
     cwd: Option<String>,
@@ -463,13 +463,13 @@ fn strip_verbatim(p: &std::path::Path) -> String {
 
 /// Erases a session's transcript — the island has already asked twice.
 #[tauri::command]
-pub async fn session_erase(profile: String, id: String) -> Result<(), String> {
+pub async fn claude_session_erase(profile: String, id: String) -> Result<(), String> {
     blocking(move || sessions::erase(&profile, &id)).await?
 }
 
 /// Copies a dropped file into the inbox and reports its name back.
 #[tauri::command]
-pub async fn ingest_file(handle: AppHandle, path: String) -> Result<DroppedFile, String> {
+pub async fn claude_ingest_file(handle: AppHandle, path: String) -> Result<DroppedFile, String> {
     // Off the main thread: a big copy must not freeze the webview.
     log::line("ingest start");
     let r = blocking(move || inbox::ingest(Some(&handle), &path)).await?;

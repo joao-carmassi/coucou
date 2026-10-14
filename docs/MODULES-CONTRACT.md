@@ -273,3 +273,21 @@ Services are module-to-module and invisible to the core: `api.provide("<module>.
 | `claude.taskNews` | each integration, for its own pill | claude finished/error cards | `(taskId) => TaskNews \| null` |
 
 `taskCard`/`taskNews` use the claude namespace because claude owns the slot; the providers are the many integrations, so lookups are lazy and survive claude restarts. Without claude, nobody asks and integrations show no card.
+
+## M6/M7 - settings, events and commands leave the core
+
+`Module` (core/host.rs) gains default methods; the host loops over every module, so lib.rs names none:
+
+| method | when | use |
+|---|---|---|
+| `setup(&AppHandle)` | once per module in the builder `setup`, on or off | register Tauri state only (claude: `pipe::Pending`). No threads, no timers |
+| `migrate(&mut Settings) -> bool` | after load, before sync | legacy keys -> `modulesEnabled` / own keys; only fill what is missing |
+| `on_save(current, incoming)` | `save_settings`, every module | keep Rust-owned keys (claude: wslHooks/wslPrompted/hooksInstalled), clean values (alertHotkey), legacy mirrors (voiceEnabled) |
+| `boot(&mut Settings)` | `boot`, module on | refresh state the window must see fresh (claude: hooksInstalled) |
+| `pause(bool)` | tray Pause, every module | integrations parks its scheduler (static flag, set even when off) |
+
+`settings::fill_defaults(CATALOG, s)` is the only generic migration: ids still missing get `default_enabled`. `ModuleHost::migrate` runs the modules first, then it.
+
+Core events are generic: `hotkey-error {name, error}` (one per registered name; "" = fine) and `inbox-added` (path of a file that came onto the island).
+
+Module commands are named `<id>_*` (claude_*, media_*, voice_*, github_*, n8n_*; shared integrations use `integrations_*`). The list lives in `modules::handler!` (modules/mod.rs), which expands to one `tauri::generate_handler!`; lib.rs passes only the core commands: `modules::handler!(boot, save_settings, ...)`. A new module command is added in that macro.

@@ -21,6 +21,14 @@ impl Module for Voice {
         set_hotkey(&ctx.app, s);
     }
 
+    fn migrate(&self, s: &mut Settings) -> bool {
+        cfg::migrate(s)
+    }
+
+    fn on_save(&self, _current: &Settings, incoming: &mut Settings) {
+        cfg::mirror_legacy(incoming);
+    }
+
     fn apply(&self, ctx: &ModuleCtx, s: &Settings) {
         set_hotkey(&ctx.app, s);
     }
