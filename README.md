@@ -4,123 +4,76 @@
 
 # Coucou
 
-**A tiny friend that lives at the top of your screen on Windows and keeps an eye on your AI coding agent sessions.**
-
-> This branch (`refactor/modules`) is **Windows-only**: the macOS app and Linux support were removed. The app lives in `windows/`.
-
-Approve permissions, watch your agents work, answer Claude's questions, drop a file - all without leaving what you're doing.
+**Mochi, a small animated character at the top of your Windows screen, shows your Claude Code sessions and lets you approve, answer and drop files without leaving what you are doing.**
 
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?logo=windows&logoColor=white)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=black)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
-![GitHub stars](https://img.shields.io/github/stars/Louis-CFM/coucou?style=social)
 
-<img src="docs/media/demo.gif" width="760" alt="Coucou in action">
 
 </div>
 
 ---
 
-## Why
+This branch (`refactor/modules`) is Windows-only. The app lives in `windows/` (Tauri 2: Rust + TypeScript).
+It has no chat of its own and needs no Anthropic API key: everything about Claude Code comes from its hooks.
 
-Some studios showed off gorgeous notch companions… and never let anyone use them.
-**Coucou is the open version.** Every line of code, every animation, every sound — free to use, read, fork and remix.
+## Architecture
 
-Meet **Mochi**: a soft little squircle with big eyes that pops out of your notch, waves hello, follows your cursor with its eyes, gets annoyed when you poke it (and dizzy if you insist), and tells you the moment Claude Code needs you.
+- **Core** is always on: the island, the Mochi avatar, tray, settings window, hotkeys, log, Windows layer.
+- **Modules** are optional and switched on in Settings. A disabled module has no tab, view, pill, timer, thread or listener.
+- Core never imports a module. Contract: [`docs/MODULES-CONTRACT.md`](docs/MODULES-CONTRACT.md).
 
-## Features
+| Module | Default | What it does |
+|---|---|---|
+| `claude` | on | Claude Code sessions, approvals, questions, session panel, terminals, WSL |
+| `media` | on | Screenshots, recordings and dropped files; drag Mochi onto a window |
+| `upload` | on, needs `claude` | Drop a file on the island and open it in a Claude Code session |
+| `timer` | off | Countdown and stopwatch |
+| `voice` | off, needs `claude` | Hotkey dictation, on-device, English only |
+| `github`, `vercel`, `stripe`, `n8n`, `resend`, `calcom`, `notion` | off | One module per service, one coloured pill each, read-only polling |
 
-- 🤖 **Claude Code, Gemini CLI, Antigravity and other agents, live** — see every session in your notch: what it reads, edits and runs, step by step. Tag a hook payload with `coucou_agent` to give any agent its own pill (see [`docs/AGENTS.md`](docs/AGENTS.md)). Finished? Mochi does a happy little jump. Cursor and Codex pills are coming soon.
-- ✅ **Approve from the notch** — Claude Code permission requests show up with **Allow / Deny**. One click, back to work.
-- **Answer from the notch**: reply to Claude Code's questions and resume sessions, no chat window.
-- 📎 **Drop a file on the notch** — Mochi turns into a box and swallows it, then attach it to your Claude Code prompt.
-- 🔌 **Integrations** — Stripe payments, n8n workflows, GitHub, Vercel deployments, Resend emails, Notion, Cal.com. Each one gets its own little colored Mochi.
-- 🎭 **A real character** — idle breathing, blinks, eyes on a sphere that follow your mouse, emotes, 28 handcrafted sounds, a greeting on launch.
-- 🫥 **Invisible when idle** — hides away when nothing is running, peeks out when you hover the top edge of the screen.
-- 🔒 **Private by design** — no telemetry, no account. Keys live in Windows Credential Manager. The app only talks to the services you plug in.
-
-<table>
-<tr>
-<td><img src="docs/media/claude-code.png" alt="Claude Code session"></td>
-<td><img src="docs/media/stripe.png" alt="Stripe payments"></td>
-</tr>
-<tr>
-<td><img src="docs/media/dizzy.png" alt="Too many hits"></td>
-</tr>
-</table>
+Known limit: the compact island shows at most 4 mini pills.
 
 ## Install
 
-### Windows
-
-The Windows installer is **temporarily unavailable**. Microsoft Defender wrongly
-flags the unsigned installer as malware; a false-positive report is under review
-at Microsoft and the installer will come back once it is cleared and signed.
-Until then you can [build it from source](#build-from-source).
-
-There is no notch on a PC, so the island slides out of the top edge of the screen
-instead of hiding inside one. See [`windows/README.md`](windows/README.md) for the
-rest of the differences.
-
-### Build from source
-
-**Windows** — requirements: [Rust](https://rustup.rs), Node 20+, MSVC build tools.
+The installer is temporarily unavailable: Microsoft Defender flags the unsigned build as a false positive.
+Build it from source (Rust, Node 20+, MSVC build tools):
 
 ```powershell
 git clone https://github.com/Louis-CFM/coucou.git
 cd coucou/windows
 npm install
-npm run pack                # installer lands in windows/release/
+npm run tauri dev      # development build
+npm run pack           # installer in windows/release/
 ```
 
 ## Setup
 
-Click the Coucou icon in the system tray → **Settings…**
+Tray icon, then **Settings**.
 
-| What | Why | Where the key goes |
-|---|---|---|
-| **Claude Code hooks** | live sessions and approvals | **Install hooks** — Coucou backs up `~/.claude/settings.json`, merges its hooks and shows you the diff before writing anything |
-| Stripe, n8n, GitHub, Vercel, Resend, Notion, Cal.com | the service pills | Windows Credential Manager, all optional |
+- **Claude Code**: *Install hooks* shows the diff, takes a dated backup of `settings.json`, and writes only after you click. If Coucou is not running the hook exits at once: Claude Code is never blocked.
+- **Services**: switch a service module on and paste its token. Tokens go to Windows Credential Manager.
 
-If Coucou isn't running, the hook exits immediately: **Claude Code is never blocked.**
+Details of the Windows app: [`windows/README.md`](windows/README.md).
 
-## Things to try
+## Docs
 
-| Do this | Mochi does that |
-|---|---|
-| Hover the top edge of the screen | peeks out and says hi 👋 |
-| Click it | opens |
-| Hover Mochi | blinks, eyes grow |
-| Click Mochi | squish + annoyed |
-| Click 3 times fast | 😵‍💫 dizzy for a few seconds |
-| Drag a file onto the island | turns into a box and swallows it |
+[`docs/MODULES-CONTRACT.md`](docs/MODULES-CONTRACT.md) module API and status, [`docs/SPEC.md`](docs/SPEC.md) behaviour,
+[`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) Claude Code hooks and service modules, [`docs/AGENTS.md`](docs/AGENTS.md) other agents,
+[`docs/idle-baseline.md`](docs/idle-baseline.md) idle budget.
 
-## How it works
+## Privacy
 
-**Windows**
-
-- A [Tauri 2](https://tauri.app) app (Rust + TypeScript): the island is a transparent, always-on-top window that never steals focus, Mochi is drawn in Canvas 2D with the same shapes, timings and sounds as on the Mac.
-- Claude Code hooks go through a tiny `coucou-hook.exe` and a named pipe; keys live in Windows Credential Manager.
-- Details and differences in [`windows/README.md`](windows/README.md).
+No telemetry, no account. The only network requests go to the services you configure.
 
 ## Contributing
 
-Issues and PRs are very welcome — new integrations, new emotes, new sounds, bug fixes. See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Credits
-
-Built by [Louis Raillé](https://louisraille.fr) with Claude Code.
-Inspired by the notch-companion concepts shared by design studios — this project is independent and not affiliated with any of them.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-- **Code:** [MIT](LICENSE) — use it, fork it, learn from it, just keep the copyright notice.
-- **Name, Mochi character, icon, sounds and media:** © Louis Raillé, all rights reserved — see [LICENSE-ASSETS.md](LICENSE-ASSETS.md). Shipping your own fork? Give it your own name and character.
-
-<div align="center">
-
-**If Mochi made you smile, a ⭐ helps a lot.**
+- **Code:** [MIT](LICENSE).
+- **Name, Mochi character, icon, sounds and media:** (c) Louis Raillé, all rights reserved, see [LICENSE-ASSETS.md](LICENSE-ASSETS.md).
 
 [Website](https://louis-cfm.github.io/coucou/) · [Privacy](https://louis-cfm.github.io/coucou/privacy.html) · [Terms](https://louis-cfm.github.io/coucou/terms.html) · [Support](https://louis-cfm.github.io/coucou/support.html)
-
-</div>

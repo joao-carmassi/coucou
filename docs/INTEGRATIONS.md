@@ -1,175 +1,102 @@
-Historical: describes the macOS/Linux app; this branch is Windows-only
+# Integrations
 
-# Notch Buddy — intégrations
+Two kinds: Claude Code (module `claude`, through its hooks) and external services (one module each). The island has no chat and uses no Anthropic API key.
 
-Règle d'or : **vérifier la doc officielle au moment d'implémenter**. Les formats ci-dessous sont le plan, pas une garantie. Sources à relire :
-- Hooks Claude Code : https://code.claude.com/docs/en/hooks
-- API Claude (Messages, outil de recherche web, modèles) : https://docs.claude.com/en/api/overview
-- API publique n8n : `{URL de l'instance}/api/v1/docs` (playground de l'instance de Louis)
+Official hook reference: https://code.claude.com/docs/en/hooks. Check it before changing event handling.
 
----
+## 1. Claude Code (module `claude`)
 
-## 1. Claude Code (sessions de Louis)
-
-### Architecture
 ```
-claude (terminal, VS Code, app Claude)
-  └─ hook "command" ─► nb-hook (petit exécutable Swift, livré avec l'app)
-                         └─ socket Unix ─► Notch Buddy.app
-                         ◄─ décision (pour PermissionRequest)
+claude (terminal, VS Code, Claude app, WSL)
+  └─ hook ─► coucou-hook.exe ── named pipe \\.\pipe\coucou-<user-SID> ─► Coucou
+                              ◄─ decision (PermissionRequest, questions)
 ```
-- `nb-hook` (script shell) et `nb-hook.py` (relais Python) : écrits par l'app (`HookServer.swift`). Version GitHub : au lancement, dans `~/Library/Application Support/NotchBuddy/`. Version App Store : à l'installation des hooks, dans `~/.claude/coucou/`. Voir `docs/AGENTS.md` pour les autres agents qui utilisent ces scripts.
-- Socket : `~/Library/Application Support/NotchBuddy/nb.sock` (version GitHub) ou `~/Library/Containers/fr.louisraille.Coucou/Data/nb.sock` (version App Store). Dossier en 0700, socket en 0600. Connexions du même utilisateur seulement (vérification `getpeereid`). 1 Mio et 5 s maximum par message, 32 connexions simultanées.
-- `nb-hook [--agent <nom>] <Event>` lit le JSON du hook sur stdin, ajoute le contexte du terminal (`TERM_PROGRAM`, `ITERM_SESSION_ID`, `TERM_SESSION_ID`, `__CFBundleIdentifier`, le tty trouvé en remontant les processus parents, `cwd`) et, si `--agent` est fourni, le champ `coucou_agent`, puis l'envoie à l'app.
-- **Si l'app ne répond pas en 300 ms, `nb-hook` sort en code 0 sans rien écrire** : Claude Code continue normalement. Jamais de blocage.
-- Champ optionnel `coucou_agent` : nom en minuscules, chiffres et tirets, 24 caractères au plus. Si absent ou invalide, l'événement va dans la pastille Claude. Voir `docs/AGENTS.md` pour les autres agents.
 
-### Événements à brancher et état du bonhomme
-| Hook | Effet dans l'app |
+- `coucou-hook.exe` is copied to `%LOCALAPPDATA%\Coucou\bin\` at launch. Source in `windows/hook/`.
+- The pipe accepts the current user only. One instance per connection.
+- `coucou-hook.exe [--agent <name>] [<Event>]` reads the hook JSON on stdin, adds terminal context and `coucou_agent` if `--agent` is given, and sends it.
+- If the app does not answer within 300 ms, the hook exits 0 with no output: Claude Code carries on. It never blocks.
+- Hooks are written in exec form (`command` = relay path, `args` = event), so no shell is involved. WSL uses `hook/coucou-hook-wsl.sh` in shell form (Settings, WSL section).
+- Profiles: `~/.claude` and every `~/.claude-*` folder, one *Install hooks* row each. Coucou launches `claude.exe` with `CLAUDE_CONFIG_DIR` set to the profile.
+
+### Events and state
+
+| Hook | Effect |
 |---|---|
-| `SessionStart` | crée la tâche (nom = dossier), état `idle` |
-| `UserPromptSubmit` | état `thinking`, ligne du défilé = début du prompt |
-| `PreToolUse` | état `working`, ligne = outil + cible (« Edit Invoice.swift », « Bash npm test ») |
-| `PostToolUse` / `PostToolUseFailure` | met à jour la ligne ; un échec reste `working` |
-| `PermissionRequest` | alerte `approval` (voir plus bas) |
-| `Notification` | selon le type : attente d'entrée → `question` si une question est posée, sinon rien ; limite d'usage → `ratelimit` |
-| `Stop` | état `finished` → vue `finished` 5,2 s, résumé = dernière phrase utile de la réponse si disponible |
-| `StopFailure` (si présent dans la doc) | alerte `error` |
-| `SubagentStart` / `SubagentStop` | afficher « + sous-agent » dans le défilé |
-| `SessionEnd` | retire la tâche |
+| `SessionStart` | creates the task (name = folder or app), state `idle` |
+| `UserPromptSubmit` | `thinking`, journal line with the prompt |
+| `PreToolUse` | `working`, step = tool and target |
+| `PostToolUse` / `PostToolUseFailure` | updates the step; a failure stays `working` |
+| `PermissionRequest` | `approval` card |
+| `Notification` | question or rate limit (`question`, `ratelimit`) |
+| `Stop` | `finished` card with the first lines of Claude's reply |
+| `StopFailure` | `error` card |
+| `SubagentStart` / `SubagentStop` | step added |
+| `SessionEnd` | removes the task |
 
-Vérifier dans la doc la liste exacte des événements et leurs champs.
+Sessions started by a program (plugin review, SDK script) are ignored. Up to four sessions are followed.
 
-### Approuver depuis le notch
-- Sur `PermissionRequest`, `nb-hook` **attend** la décision de l'app (défaut 110 s, réglable) puis écrit sur stdout le JSON de décision du hook (d'après la doc actuelle : `hookSpecificOutput` avec `decision.behavior` = `allow` ou `deny`). Timeout du hook dans settings.json : décision + 10 s.
-- Pas de réponse avant le délai, ou app fermée → aucune sortie, le terminal affiche sa demande habituelle. Si Louis répond dans le terminal, l'app retire l'alerte au prochain événement de la session.
-- Un bug a été signalé où `deny` était ignoré sur `PermissionRequest` (issue GitHub anthropics/claude-code #19298). **Tester allow et deny** ; si deny ne marche pas, basculer la décision sur `PreToolUse` (`permissionDecision`) pour les outils concernés.
-- « Toujours autoriser » : si la doc permet de renvoyer une règle de permission persistante, l'utiliser. Sinon l'app garde sa propre liste (projet + outil + motif de commande) et répond `allow` automatiquement ensuite. Liste visible et supprimable dans les réglages.
-- Raccourcis Y / N quand la vue `approval` est ouverte.
+### Approvals and questions
 
-### Répondre aux questions
-- Si Claude utilise l'outil de question (`AskUserQuestion`), l'intercepter en `PreToolUse` et afficher les options dans la vue `question`.
-- Vérifier dans la doc si un hook peut fournir la réponse. Si oui : clic sur une option = réponse. **Si non** : la vue affiche la question et un bouton « Répondre dans le terminal » qui saute à la session. Ne pas bricoler de frappe clavier simulée.
+- On `PermissionRequest` the relay waits for the decision (110 s; the app answers at 108 s) and prints the hook decision JSON. No answer or app closed: no output, and Claude Code asks in the terminal.
+- Buttons: **Aguardar** (closes the island, sends nothing), **Negar**, **Aprovar**. Plan mode offers **Continuar planejando**, **Manual**, **Modo auto**. Keys `Y` and `N`. Aguardar is also on pinned cards.
+- An edit's permission card shows its diff. The relay reads the target file for that, read-only.
+- Questions from the question tool show their options; pick one or several, type your own, skip, or hand back to Claude.
 
-### Sauter au terminal
-| Contexte capté | Action |
-|---|---|
-| `TERM_PROGRAM=Apple_Terminal` + tty | AppleScript Terminal : sélectionner l'onglet dont le `tty` correspond, activer |
-| `TERM_PROGRAM=iTerm.app` + `ITERM_SESSION_ID` | AppleScript iTerm : sélectionner la session, activer |
-| `TERM_PROGRAM=vscode` | ouvrir le dossier `cwd` dans VS Code ou Cursor (selon `__CFBundleIdentifier`) |
-| Ghostty, Warp, autre | activer l'app |
-| rien (app Claude) | activer l'app Claude |
-Demande l'autorisation Automatisation la première fois (normal).
+### Hooks installation (mandatory procedure)
 
-### Installation des hooks : procédure obligatoire
-1. Lire `~/.claude/settings.json` (le créer s'il n'existe pas).
-2. Copier en `~/.claude/settings.json.bak-AAAAMMJJ-HHMM`.
-3. **Fusionner** : ajouter les hooks Notch Buddy sans toucher aux hooks existants. Chemin de `nb-hook` entre guillemets (il contient un espace).
-4. Montrer le diff à Louis, attendre son OK, écrire.
-5. Bouton « Désinstaller les hooks » dans les réglages qui retire uniquement les entrées Notch Buddy.
+1. Read `<profile>\settings.json` (create if missing).
+2. Back it up with a dated suffix.
+3. Merge Coucou's hooks without touching existing ones.
+4. Show the diff, write only after the user clicks.
+5. *Uninstall* removes only Coucou's entries.
 
----
+### Other agents
 
-## 2. n8n (workflows de Louis)
+See `docs/AGENTS.md`.
 
-- Réglages : URL de l'instance (probablement `https://n8nlouis.dcsys.tech`, **à confirmer avec Louis**) et clé API n8n (Trousseau). La clé se crée dans n8n : Settings → n8n API.
-- Le Mac joint n8n, pas l'inverse : **polling** toutes les 5 s de l'API publique :
-  - noms des workflows : `GET /api/v1/workflows` (cache 10 min) ;
-  - exécutions récentes : `GET /api/v1/executions` avec filtres de statut et `limit`.
-- Mapping :
-  - exécution en cours → tâche `working` (si l'API expose les exécutions en cours ; sinon n8n n'apparaît qu'aux erreurs et aux succès, c'est acceptable) ;
-  - nouvelle exécution en erreur → alerte `error`, détail = nœud en échec + message (`GET /api/v1/executions/{id}?includeData=true`) ;
-  - succès → mini-bonhomme `finished` 3 s en compact, **sans** ouvrir l'island (sinon trop de bruit), sauf réglage contraire.
-- Boutons :
-  - « Relancer » → endpoint de retry de l'API publique (vérifier sa présence et son chemin dans le playground de l'instance). S'il n'existe pas : ouvrir l'exécution dans n8n.
-  - « Ouvrir dans n8n » → ouvrir `{URL}/workflow/{workflowId}/executions/{executionId}` dans le navigateur par défaut.
-- Réglage « workflows suivis » : tous par défaut, liste à cocher.
+## 2. Service modules
 
----
+One module per service: `github`, `vercel`, `stripe`, `n8n`, `resend`, `calcom`, `notion` (group "Integrações" in Settings). All off by default, no limit on how many are on.
 
-## 3. Fichiers déposés
+- Each module owns one pill (`integration_<service>`). The pill id is a stable contract value.
+- Shared code in `src-tauri/src/modules/integrations/`: fetchers, secrets, and **one scheduler** (`scheduler.rs`). The scheduler task exists only while at least one service module is on and configured; with none on, nothing runs. Tray *Pausar* parks it.
+- A service polls only when its module is on and its key is in Windows Credential Manager. Keys never reach the frontend; the island can only ask whether one exists. Accepted key names are listed in `secrets.rs`.
+- A change emits an `integration` event: the island sets the pill badge and plays a sound; the badge clears when the pill is focused.
+- Requests are made by the Rust side, read-only, with a 10 s timeout.
 
-- Glisser-déposer natif sur la panel (types `fileURL`). Copier les fichiers dans `~/Library/Application Support/NotchBuddy/inbox/` (c'est la phase `uploading`).
-- Vue `choose` :
-  - **Poser une question dessus** → vue `prompt` avec une pastille du fichier. Envoi à l'API Claude (§5) : PDF en bloc `document`, images en bloc `image`, texte et code (≤ 200 Ko) en texte. Autres types : message « Je ne sais pas lire ce format, mais je peux l'envoyer par mail. »
-  - **Envoyer par mail** → vue `mail` (§6).
-- Nettoyer l'inbox après 7 jours.
-
----
-
-## 4. Attacher le bonhomme à une fenêtre
-
-1. Au lâcher, trouver la fenêtre sous le point : `CGWindowListCopyWindowInfo(.optionOnScreenOnly)`, première fenêtre de couche 0 qui n'est pas la nôtre et contient le point. Récupérer app, titre, cadre.
-2. Afficher le **halo** : une panel transparente, non cliquable, posée sur le cadre de la fenêtre. Bordure conique arc-en-ciel de 3 pt qui tourne en 3 s (`#FF6B5B → #F7B32B → #2DD4A7 → #38BDF8 → #A78BFA → #F472B6`), voile multicolore en mode multiply qui respire (voir `.attach` du prototype), fondu d'entrée 600 ms. Son `attach`, émote Clin d'œil.
-3. Contexte envoyé à Claude :
-   - capture de la fenêtre avec ScreenCaptureKit (`SCScreenshotManager`), redimensionnée à 1568 px de large max ;
-   - si c'est Safari, Chrome, Arc ou Brave : URL et titre de l'onglet actif via AppleScript.
-4. Vue `prompt` avec la pastille « Safari, escale.fr » (app + domaine), focus sur le champ.
-5. Le halo reste pendant `searching`, disparaît quand le résultat s'affiche ou quand l'island se ferme.
-
-Permissions : Enregistrement de l'écran (capture) et Automatisation (navigateur). Si refusées : on continue sans capture ou sans URL, et on le dit en une ligne dans la vue.
-
----
-
-## 5. API Claude (recherche)
-
-- `POST https://api.anthropic.com/v1/messages`, en-têtes `x-api-key`, `anthropic-version`, `content-type: application/json` (versions à vérifier dans la doc).
-- Modèle par défaut : `claude-sonnet-4-6`, choisi dans Settings → Anthropic API **ou depuis la puce de modèle dans la vue `.prompt`**. La liste est récupérée à l'ouverture des réglages via `GET /v1/models?limit=100` (en-têtes `x-api-key` et `anthropic-version: 2023-06-01`) ; si l'appel échoue ou qu'il n'y a pas de clé, une liste de secours est utilisée (`claude-sonnet-4-6`, `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-haiku-4-5-20251001`). Un champ libre permet d'entrer n'importe quel identifiant. Si le modèle sauvegardé n'est pas dans la liste, le sélecteur reste sur « Custom… ». Dans le chat, si le modèle enregistré n'est pas dans la liste reçue, le premier dont l'identifiant contient « sonnet », sinon le premier de la liste.
-- Erreurs de l'API : affiche `error.message` au lieu du JSON brut. Pour un `not_found_error`, affiche « Model not found: \<id\>. Pick another one in Settings. »
-- Outil de recherche web côté serveur de l'API : l'identifiant de type à jour est dans la doc (au moment d'écrire, `web_search_20250305`) ; `max_uses` 5.
-- Prompt système (français) : répondre court, pour un affichage dans le notch, au format JSON strict :
-  ```json
-  { "title": "…", "items": [ { "label": "…", "detail": "…", "url": "…" } ], "note": "…" }
-  ```
-  3 items maximum. Si le JSON est invalide : afficher le texte brut (3 lignes max) dans la vue `result`.
-- Contenu du message utilisateur : capture (bloc image) + « URL : … / Titre : … / Demande : … », ou fichier (§3) + demande, ou demande seule (onglet Demander).
-- Pendant l'appel : état `searching`, vue `searching`, texte scintillant. Réponse : état `finished`, vue `result`, émote Fier, son `finish`.
-- Boutons du résultat : « Ouvrir » (premier lien, seulement s'il est en http ou https ; sinon le bouton est grisé), « Copier » (texte), « Fermer ».
-- Erreur réseau ou clé invalide : état `error`, vue `note` avec la raison en une phrase et « Ouvre les réglages pour vérifier la clé ».
-- Micro (bouton du champ) : dictée `SFSpeechRecognizer` en `fr-FR`, sur l'appareil si possible. Optionnel (M9). Si la permission est refusée, masquer le bouton.
-
----
-
-## 5bis. Autres fournisseurs du chat (Google AI, OpenAI)
-
-Clés dans Settings → Chat — other providers (Trousseau : `google-api-key`, `openai-api-key`). La liste des modèles est récupérée à l'ouverture du chat selon le fournisseur :
-
-- **Google AI (Gemini)** : `GET https://generativelanguage.googleapis.com/v1beta/openai/models` (en-tête `Authorization: Bearer <clé>`) — on retire le préfixe `models/`, on filtre les modèles dont l'identifiant contient `embed`, `imagen`, `veo`, `aqa`, `tts`, `audio` ou `live`. Dans le chat, si le modèle enregistré n'est pas dans la liste reçue, le premier dont l'identifiant contient « flash », sinon le premier de la liste. Endpoint du chat : `POST https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`.
-- **OpenAI** : `GET https://api.openai.com/v1/models` (en-tête `Authorization: Bearer <clé>`) — triés par champ `created` décroissant, on filtre les modèles dont l'identifiant contient `embed`, `tts`, `whisper`, `dall-e`, `audio`, `realtime`, `moderat`, `codex`, `computer-use`, `transcribe`, `image`, `sora`, `babbage`, `davinci` ou `instruct`. Dans le chat, si le modèle enregistré n'est pas dans la liste reçue, le premier dont l'identifiant contient « mini », sinon le premier de la liste. Endpoint du chat : `POST https://api.openai.com/v1/chat/completions`.
-
-Ce qui est envoyé au fournisseur lors d'un échange : le texte saisi et la conversation en cours. Si une fenêtre est attachée : nom de l'app, titre et URL. Si un fichier est attaché : son nom seulement (le contenu d'un fichier ne part que chez Anthropic).
-
-Voir le catalogue de pastilles dans `docs/SPEC.md` (section « Catalogue de pastilles ») pour les pastilles `ai_google` et `ai_openai`.
-
----
-
-## 6. Mail (app Mail du Mac)
-
-- Vue `mail` : À (obligatoire, validation d'adresse), Objet (prérempli : nom du fichier), Message (optionnel, une ligne).
-- Envoi uniquement au clic sur « Envoyer », via AppleScript (`NSAppleScript`) sur Mail :
-  ```applescript
-  tell application "Mail"
-    set m to make new outgoing message with properties {subject:"…", content:"…", visible:false}
-    tell m
-      make new to recipient at end of to recipients with properties {address:"…"}
-      make new attachment with properties {file name:(POSIX file "…")} at after the last paragraph of content
-    end tell
-    delay 1
-    send m
-  end tell
-  ```
-  Le `delay` laisse le temps à la pièce jointe d'être prise en compte (comportement connu de Mail). `Info.plist` : `NSAppleEventsUsageDescription`.
-- Succès : vue `note` « Mail envoyé à … », émote Clin d'œil, son `send`. Échec : état `error` avec la raison.
-
----
-
-## 7. Permissions macOS demandées (récapitulatif pour Louis)
-
-| Permission | Pourquoi | Quand |
+| Module | First poll, then every | Keys |
 |---|---|---|
-| Automatisation → Mail | envoyer les mails | premier envoi |
-| Automatisation → Terminal / iTerm / navigateur | sauter au bon onglet, lire l'URL | première utilisation |
-| Enregistrement de l'écran | capturer la fenêtre attrapée | première attache |
-| Micro + Reconnaissance vocale (optionnel) | dictée | premier clic sur le micro |
+| n8n | 3 s, 15 s | `n8n-url`, `n8n-api-key` |
+| vercel | 5 s, 30 s | `vercel-token` |
+| stripe | 6 s, 30 s | `stripe-api-key` |
+| resend | 6 s, 60 s | `resend-api-key` |
+| github | 7 s, 120 s (builds every 20 s while one of yours runs) | `github-token` |
+| calcom | 8 s, 300 s | `calcom-api-key` |
+| notion | 9 s, 300 s | `notion-api-key` |
 
-Aucune permission Accessibilité nécessaire.
+GitHub also has a panel (activity, projects, pull requests, runs, threads) and news cards (broken build, merged pull request, new pull request on your project). Details and the token permissions: `windows/README.md`.
+
+Service results can decorate Claude cards through the `taskCard`, `taskNews` and `avatar.tint` hooks, so `claude` never imports a service module.
+
+### Adding a service
+
+1. Fetcher in `integrations.rs` and an entry in `PROVIDERS` (`scheduler.rs`) with its first delay and interval.
+2. Key names in `secrets.rs`.
+3. Module id in `providers()` (`integrations/mod.rs`), `CATALOG` (`modules/mod.rs`), `MODULE_INFO` (`catalog.ts`), and the frontend provider in `src/modules/integrations/`.
+4. Keep the id order identical in both catalogs.
+
+## 3. Dropped files (modules `upload`, `media`)
+
+- Files dropped on the island are copied to `%LOCALAPPDATA%\Coucou\inbox` (originals untouched). Files older than 7 days are swept.
+- `upload` plays the drop sequence, then offers to open the file in a new Claude Code terminal session with the file attached. It requires `claude`.
+- `media` lists what Windows saved (`Pictures\Screenshots`, `Videos\Captures`) plus dropped files and Coucou's captures, newest first (max 300). It stores paths only and never deletes files.
+- Dragging Mochi onto a window captures it and opens a session with the screenshot attached.
+
+## 4. Voice (module `voice`)
+
+A global hotkey (default `Ctrl+Alt+V`) opens the microphone. One phrase ends on about 1 s of silence (25 s max). It is transcribed on-device by `needle.exe` with the Whistle model; the text appears on a card and is sent to Claude Code only when you click **Enviar**. The model files are downloaded only from the Settings button (pinned revisions, SHA-256 checked). English only.
+
+## 5. Timer (module `timer`)
+
+Countdown or stopwatch on the island. While running it takes a status line (priority 50) beside the pills and keeps the island awake. A finished countdown plays `finish` and shows a note.

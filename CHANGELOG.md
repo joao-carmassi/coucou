@@ -1,17 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
-### Windows refactor (branch `refactor/modules`)
+- Module architecture: the island, the Mochi avatar, tray, settings, hotkeys and log are core; everything else is a module switched on in Settings. A disabled module creates no tab, view, pill, timer, thread or listener. See `docs/MODULES-CONTRACT.md`.
+- Windows only: the app lives in `windows/`. The macOS and Linux builds are no longer on this branch.
+- Removed the chat and the Anthropic API key. Claude Code sessions, approvals and answers come from its hooks.
+- New modules: `timer` (countdown and stopwatch), `voice` (hotkey dictation, on-device, English only), `media` (screenshots, recordings, dropped files, Mochi onto a window) and `upload` (drop a file on the island to open it in Claude Code). `claude`, `media` and `upload` are on by default.
+- Integrations are one module per service (github, vercel, stripe, n8n, resend, calcom, notion), each off by default. The 4-pill limit is gone; the modules share one scheduler that does not exist while none is on. The compact island still shows at most 4 mini pills.
+- "Aguardar" on approval and question cards, including pinned ones: closes the island and leaves the request unanswered; nothing is sent.
+- Idle cost: `npm run idle-audit` fails on raw timers or thread spawns outside the module API, and `scripts/idle-measure.ps1` samples a running app. Baseline in `docs/idle-baseline.md`.
 
-- Windows only: the app lives in `windows/`. The macOS and Linux builds are no longer on this branch; the entries below that mention them describe earlier releases.
-- The API-key chat is removed. Claude Code sessions, approvals and answers stay.
-- Core and modules: the island, Mochi, tray, settings, hotkeys and log are core. Claude Code, media, file drop, timer, voice and integrations are modules, switched on in Settings. A disabled module creates no tab, thread, timer or listener. See `docs/MODULES-CONTRACT.md`.
-- New: a timer module (off by default).
-- New: a media section (module `media`) on the island.
-- New: voice module (off by default, English only).
-- New: "Aguardar" on approval and question cards closes the island and leaves the request unanswered; nothing is sent.
-- Idle cost measured and kept low: `npm run idle-audit` fails on raw timers or thread spawns outside the module API, and `scripts/idle-measure.ps1` samples a running app. Baseline in `docs/idle-baseline.md`.
+## Earlier releases
+
+These entries describe the macOS and Linux apps, which are no longer on this branch.
 
 - Declare the tools you use in Settings: Gemini CLI, Antigravity, Anthropic, Google AI and OpenAI pills join the existing ones (Cursor and Codex pills are coming soon), and you pick the main pill.
 - Chat now supports Google AI (Gemini) and OpenAI in addition to Anthropic; switch provider and model by clicking the model name in the chat view, on macOS.

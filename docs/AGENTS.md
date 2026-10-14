@@ -1,34 +1,14 @@
-Historical: describes the macOS/Linux app; this branch is Windows-only
+# Third-party agents
 
-# Coucou — third-party agent integration
-
-Any tool that can write to a Unix domain socket (macOS, Linux) or a named pipe (Windows) can send events to Coucou and have its own pill next to Claude Code.
+Any tool that can run a command on a hook can send events to Coucou and get its own pill next to Claude Code. Transport is the Windows named pipe `\\.\pipe\coucou-<user-SID>` (current user only), normally through `coucou-hook.exe`.
 
 ## The `coucou_agent` field
 
-Add the optional field `coucou_agent` to any hook JSON payload. Coucou will create a pill labelled with the agent name and route all events to it.
+Add `coucou_agent` to the hook JSON payload, or pass `--agent <name>` to the relay. Coucou creates a pill with that name (`agent_<name>`) and routes the events to it.
 
-**Validation:** the name must match `^[a-z0-9-]{1,24}$` (lowercase letters, digits and hyphens, 1–24 characters). An absent or invalid name routes the event to the Claude Code pill instead.
+Validation: `^[a-z0-9-]{1,24}$`. An absent or invalid name routes the event to the Claude Code pill.
 
-## Hook command (macOS)
-
-Configure your tool to call the Coucou relay with `--agent <your-name>` after the hook executable:
-
-```json
-{
-  "hooks": {
-    "UserPromptSubmit": [
-      { "type": "command", "command": "/path/to/nb-hook --agent my-tool" }
-    ]
-  }
-}
-```
-
-The shell wrapper passes `"$@"` to the Python relay, which extracts the agent name and injects it into the payload before forwarding to Coucou.
-
-## Hook command (Windows)
-
-Same pattern with the Windows relay:
+## Hook command
 
 ```json
 {
@@ -40,127 +20,49 @@ Same pattern with the Windows relay:
 }
 ```
 
-## Hook command (Linux)
+The relay is installed at `%LOCALAPPDATA%\Coucou\bin\coucou-hook.exe` when the `claude` module starts. If the app does not answer within 300 ms the relay exits 0 with no output.
 
-Same pattern with the Linux relay. Coucou copies the relay to `~/.local/share/coucou/bin/coucou-hook` at startup.
-
-```json
-{
-  "hooks": {
-    "UserPromptSubmit": [
-      { "type": "command", "command": "/path/to/coucou-hook --agent my-tool" }
-    ]
-  }
-}
-```
-
-## Payload format
-
-The relay adds `coucou_agent` to the JSON it forwards. You can also add it yourself if you talk to the socket directly:
+## Payload
 
 ```json
 {
   "hook_event_name": "UserPromptSubmit",
   "session_id": "my-session-1",
   "coucou_agent": "my-tool",
-  "prompt": "Running task…"
+  "prompt": "Running task..."
 }
 ```
 
-Send newline-terminated JSON to the socket:
-- **macOS (GitHub build):** `~/Library/Application Support/NotchBuddy/nb.sock`
-- **macOS (App Store build):** `~/Library/Containers/fr.louisraille.Coucou/Data/nb.sock`
-- **Windows:** `\\.\pipe\coucou-<user-SID>`
-- **Linux:** `$XDG_RUNTIME_DIR/coucou.sock` (usually `/run/user/<uid>/coucou.sock`). Only your own user account can connect.
+Send newline-terminated JSON to the pipe if you skip the relay.
 
-## Supported events
+## Events
 
-All standard Claude Code hook events are supported, **except `PermissionRequest`**:
-approval cards are not yet implemented for third-party agents (only Claude Code gets
-one). A `PermissionRequest` from an external agent is answered immediately with no
-decision, so the relay writes nothing and the agent re-asks in its terminal.
-Approval support for other agents will be added with Codex support.
-
-The pill lifecycle:
+All standard Claude Code hook events are handled, except `PermissionRequest`: only Claude Code gets an approval card. A `PermissionRequest` from another agent is answered with no decision, so the agent asks in its own terminal.
 
 | Event | Effect |
 |---|---|
-| `SessionStart` | Creates the pill (if absent), sets state to idle |
-| `UserPromptSubmit` | State → thinking; prompt shown in ticker |
-| `PreToolUse` | State → working; tool label shown in ticker |
-| `PostToolUse` / `PostToolUseFailure` | State → working |
-| `Notification` | Rate-limit or question state if applicable |
-| `Stop` | State → finished for 5 s; active declared pills (catalog + checked in Settings) reset to idle — all others are removed |
-| `StopFailure` | State → error |
-| `SessionEnd` | Active declared pills (catalog + checked in Settings) reset to idle — all others are removed |
-| `SubagentStart` / `SubagentStop` | Step added to ticker |
+| `SessionStart` | creates the pill, state idle |
+| `UserPromptSubmit` | `thinking`; prompt shown |
+| `PreToolUse` | `working`; tool label shown |
+| `PostToolUse` / `PostToolUseFailure` | `working` |
+| `Notification` | rate-limit or question state if applicable |
+| `Stop` | `finished`; the pill is then removed |
+| `StopFailure` | `error` |
+| `SessionEnd` | removes the pill |
+| `SubagentStart` / `SubagentStop` | step added |
 
-## Declared pills
+Requires the `claude` module to be on: it owns the pipe.
 
-A **declared pill** is a catalog entry (`PillCatalog.swift`) that has been enabled in **Settings → Active pills**. When a session ends for a declared pill, the pill stays visible and resets to idle instead of disappearing.
-
-A catalog pill that is not checked in Settings behaves like any other agent: it gets an automatic pill when a session starts, and that pill is removed when the session ends.
-
-The GitHub build exposes Gemini CLI (`agent_gemini`) and Antigravity (`agent_antigravity`) in Settings → Active pills. Cursor (`agent_cursor`) and Codex (`agent_codex`, GitHub build only) are there too — their pills can be declared and set as the main pill; session support is coming in a future version.
-
-## Real-world examples
-
-### Gemini CLI (macOS)
-
-Coucou supports Gemini CLI out of the box via **Settings → Gemini CLI → Install hooks**.
-The installer writes to `~/.gemini/settings.json` and uses `--agent gemini` so
-Gemini sessions get their own pill. The relay translates Gemini event names to canonical
-Coucou events automatically.
-
-| Gemini CLI event | Canonical event |
-|---|---|
-| `BeforeTool` | `PreToolUse` |
-| `AfterTool` | `PostToolUse` |
-| `BeforeAgent` | `UserPromptSubmit` |
-| `AfterAgent` | `Stop` |
-
-`AfterModel` is not installed — it fires on every response chunk and would flood the island.
-
-### Antigravity — `agy` (macOS)
-
-Coucou supports Antigravity out of the box via **Settings → Antigravity → Install hooks**.
-The installer writes to `~/.gemini/config/hooks.json` (timeouts in seconds) and uses
-`--agent antigravity`. The relay translates `toolCall.name` / `conversationId` to the
-island's `tool_name` / `session_id`.
-
-| Antigravity event | Canonical event |
-|---|---|
-| `PreInvocation` | `UserPromptSubmit` |
-| `PreToolUse` | `PreToolUse` |
-| `PostToolUse` | `PostToolUse` |
-| `PostInvocation` | `PostToolUse` |
-| `Stop` | `Stop` |
-
-### Any other tool
-
-Follow the generic pattern: call `nb-hook --agent <your-name> <EventName>` (macOS),
-`coucou-hook.exe --agent <your-name> <EventName>` (Windows)
-or `~/.local/share/coucou/bin/coucou-hook --agent <your-name> <EventName>` (Linux)
-and let the relay forward the event.
-
-## Quick test (Linux)
+## Quick test
 
 With Coucou running:
 
-```sh
-echo '{"hook_event_name":"UserPromptSubmit","session_id":"t1","prompt":"hello","coucou_agent":"demo"}' \
-  | ~/.local/share/coucou/bin/coucou-hook --agent demo
+```powershell
+'{"hook_event_name":"UserPromptSubmit","session_id":"t1","prompt":"hello","coucou_agent":"demo"}' | & "$env:LOCALAPPDATA\Coucou\bin\coucou-hook.exe" --agent demo
 ```
 
-A "demo" pill should appear in the island.
+A "demo" pill should appear.
 
-## Quick test (macOS)
+## Other agents' own hook formats
 
-With Coucou running:
-
-```sh
-echo '{"hook_event_name":"UserPromptSubmit","session_id":"t1","prompt":"hello","coucou_agent":"demo"}' \
-  | /bin/sh ~/Library/Application\ Support/NotchBuddy/nb-hook --agent demo
-```
-
-A "demo" pill should appear in the island.
+There are no built-in installers for Gemini CLI or Antigravity. To use them, write their hooks yourself with `--agent gemini` / `--agent antigravity`. The relay does not translate their event names; map them to the events above (Gemini `BeforeTool` = `PreToolUse`, `AfterTool` = `PostToolUse`, `BeforeAgent` = `UserPromptSubmit`, `AfterAgent` = `Stop`).

@@ -4,9 +4,7 @@
 
 # Coucou for Windows
 
-**Mochi doesn't get a notch on a PC — so it lives at the top of your screen instead.**
-
-Approve Claude Code permissions, watch your session work, drop a file, keep an eye on your services — without leaving what you're doing.
+**Mochi lives at the top of your screen: approve Claude Code, drop a file, keep an eye on your services.**
 
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?logo=windows)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=black)
@@ -19,22 +17,20 @@ Approve Claude Code permissions, watch your session work, drop a file, keep an e
 
 ---
 
+Windows only. No chat of its own, no Anthropic API key, no telemetry. The **core**
+is the island and Mochi; everything else is a **module** you can switch on or off.
+
 ## Install
 
-The downloadable installer is **temporarily unavailable**. Microsoft Defender
-wrongly flags the unsigned installer as malware (`Trojan:Win32/Wacatac.H!ml`, a
-machine-learning false positive). A report is under review at Microsoft, and the
-installer will be published again once it is cleared and code-signed.
-
-Until then, [build it yourself](#build-it-yourself): it takes a few minutes and
-installs for the current user only — no admin prompt.
+The downloadable installer is temporarily unavailable: Microsoft Defender wrongly
+flags the unsigned installer. Until it is cleared and signed, [build it
+yourself](#build-it-yourself). It installs for the current user only, with no
+admin prompt.
 
 ## Using it
 
-<img src="screenshots/compact.png" width="292" alt="The compact island, with the integration pills as mini Mochis">
-<img src="screenshots/overview.png" width="640" alt="The overview: the focused integration on the left, the other pills on the right">
-<img src="screenshots/approval.png" width="640" alt="A Claude Code permission request, with Deny and Allow">
-<img src="screenshots/drop.png" width="640" alt="Mochi turned into a box, waiting for a file">
+<img src="screenshots/compact.png" width="292" alt="The compact island with its pills">
+<img src="screenshots/overview.png" width="640" alt="The overview: the focused pill and the others">
 
 | What you do | What happens |
 |---|---|
@@ -42,348 +38,163 @@ installs for the current user only — no admin prompt.
 | Click the small island | It opens |
 | Click Mochi | It gets annoyed. Three times in a row and it goes dizzy |
 | Rest the pointer on Mochi for two seconds | Hearts |
-| Drag a file onto the island | Mochi turns into a box, swallows it, then offers to answer questions about it |
+| Drag a file onto the island | Upload module: Mochi turns into a box and swallows it |
+| Drag Mochi onto a window | A screenshot of that window is captured and attached |
 | `Esc` | Closes the island |
-| Tray icon | Open, Settings…, Pause, Quit |
+| Tray icon | Abrir Coucou, Configurações…, Pausar, Sair |
 
-Everything else happens on its own: a Claude Code permission request opens the
-island with **Deny / Allow**, a finished session shows what it did, and
-your integrations sit in the coloured pills next to Mochi.
+**Idle behaviour:** after you leave the island it closes by itself, then
+minimises, then hides (the delays are in Settings; hiding can be set to never).
+Hidden, it costs about nothing: a disabled module creates no thread, timer or
+listener, and an enabled one only runs while it has work to do. See
+[`docs/idle-baseline.md`](../docs/idle-baseline.md).
+
+## Settings and modules
+
+Tray → **Configurações…**. **Geral** has sound, auto-close and auto-hide delays,
+which screen the island sits on and start with Windows. **Módulos** has one switch
+per module; a disabled module has no tab, view, pill, timer, thread or listener.
+
+| Module | Default | What it does |
+|---|---|---|
+| Claude Code (`claude`) | on | Hooks, sessions, approvals, questions, Sessions tab |
+| Mídia (`media`) | on | Screenshots, game-bar clips and dropped files in a grid |
+| Soltar arquivo (`upload`) | on | Drop a file, open it in Claude Code. Needs `claude` |
+| Timer (`timer`) | off | Countdown (1 to 600 min) or stopwatch, shown as a pill |
+| Voz (`voice`) | off | Speech to a new Claude Code session. Needs `claude` |
+| GitHub, Vercel, Stripe, n8n, Resend, Cal.com, Notion | off | Read-only pills, under **Integrações** |
+
+Turning `claude` off turns `voice` and `upload` off with it. The contract is in
+[`docs/MODULES-CONTRACT.md`](../docs/MODULES-CONTRACT.md).
+
+### Hotkeys
+
+| Hotkey | Default | Module |
+|---|---|---|
+| Voice toggle | `Ctrl+Alt+V` | Voz (empty = none) |
+| "Go to alert" | off | Claude Code (e.g. `Ctrl+Alt+A`); jumps to the card waiting for you |
 
 ## Claude Code
 
 <img src="screenshots/settings.png" width="562" alt="The settings window">
 
-Open **Settings… → Claude Code → Install hooks…**. You get the exact diff of what
-will change in `%USERPROFILE%\.claude\settings.json`, the path of the dated backup
-that will be taken, and nothing is written until you click. Your own hooks are
-never touched, and uninstalling removes only Coucou's entries.
+**Settings → Claude Code → Install hooks…** shows the exact diff for
+`%USERPROFILE%\.claude\settings.json` and the path of the dated backup, and writes
+nothing until you click. Your own hooks are never touched; uninstalling removes
+only Coucou's entries. Other profiles (`~/.claude-*`) get their own row, and an
+optional account folder can be set for the Sessions tab.
 
-The relay is a tiny executable, `coucou-hook.exe`, copied to
-`%LOCALAPPDATA%\Coucou\bin\` at launch. It is given 300 ms to reach Coucou and
-exits cleanly if the app is closed, slow or crashed — **a Claude Code session is
-never blocked or slowed down by Coucou.** If nobody answers a permission request
-in time, Coucou stays quiet and Claude Code asks in the terminal as usual.
+The relay, `coucou-hook.exe`, is copied to `%LOCALAPPDATA%\Coucou\bin\`. It has
+300 ms to reach Coucou and exits cleanly if the app is closed or slow, so a Claude
+Code session is never blocked. If nobody answers a permission request in time,
+Claude Code asks in the terminal as usual. Hooks use Claude Code's exec form (no
+shell involved). It works from the Claude desktop app, VS Code, Windows Terminal,
+PowerShell and Git Bash. **Settings → WSL** installs the same for a WSL
+distribution ([`hook/coucou-hook-wsl.sh`](hook/coucou-hook-wsl.sh)).
 
-It works wherever Claude Code runs — the Claude desktop app, VS Code, Windows
-Terminal, PowerShell, Git Bash. The Claude pill takes the name of the app the
-session is in, and its ↗ brings that app forward.
+<img src="screenshots/approval.png" width="640" alt="A Claude Code permission request, with Deny and Allow">
 
-The hooks are written in Claude Code's *exec form* (`"command"` is the relay's
-path, `"args"` the event name), so no shell is involved: they work the same
-whether Claude Code runs hooks through Git Bash or, on a PC without Git Bash,
-through PowerShell, and spaces in the path are no problem. The relay links the
-Visual C++ runtime statically, so it needs no Redistributable either.
+- **Approvals:** a permission request opens the island with **Deny / Allow**; an
+  edit shows its diff first.
+- **Questions:** Claude's questions show their options on the island; pick,
+  type your own, or hand it back.
+- **Aguardar:** closes the island and leaves the request pending, with no
+  decision sent. Answer later or in the terminal.
+- **Card and panel:** the card shows the step under way and then **Done** with
+  Claude's reply. Click it for the session panel and its journal (reads, diffs,
+  commands, questions, permissions). The island only watches; to write to Claude,
+  use Claude Code.
 
-### Watching a session
+<img src="screenshots/claude-card.png" width="640" alt="A session's card">
+<img src="screenshots/claude-session.png" width="640" alt="The session panel and its journal">
 
-<img src="screenshots/claude-card.png" width="640" alt="A session's card: the step under way with its icon and its file, and the lines it read">
+- **Several sessions:** up to four are followed; a chip opens the list.
+- **Sessions tab:** every Claude Code session of every profile, from
+  `<config dir>/projects`. Start a new one, resume an offline one or focus a
+  running terminal.
 
-A session shows on its card, as the prototype draws it: the conversation's
-title, the step under way — its icon, its name, the file or the command it is at
-— and under it a look at what the step did: the lines of the file it read, the
-diff of its edit, the command it ran with the end of what that printed. Once the
-turn is over the card says **Done** and shows the first lines of what Claude
-replied.
+Everything comes from the hooks. The relay forwards only a few lines of tool
+output; the journal (last 80 lines) lives in memory and nothing of it goes to the
+log. The relay reads from disk only the file an edit asks permission for (to show
+its diff) and the end of the session transcript (title and last message).
 
-<img src="screenshots/claude-session.png" width="640" alt="The session panel: the session's steps on the left, its journal on the right, an edit being typed">
+## Mídia, upload, timer, voice
 
-Click the card for the **session panel**. On the left, Mochi's column: the
-session's name and its last steps, each going, done or failed. On the right, the
-session's **journal**, read like a conversation, in the order things happened:
+- **Mídia:** lists what Windows saved (`Pictures\Screenshots`, `Videos\Captures`)
+  and what came onto the island, newest first. Files are never copied by the
+  list, and removing an entry never deletes the file.
+- **Upload:** a dropped file is copied to `%LOCALAPPDATA%\Coucou\inbox` (swept after
+  a week) and **Abrir no Claude Code** starts a new session with it attached.
 
-| A line of the journal | What it shows |
-|---|---|
-| What you asked | Your words, as you sent them |
-| A file read | Its first lines, numbered |
-| An edit | Its diff, the old line struck and the new ones typed under it |
-| A command | The command, then the end of what it printed |
-| A search | What it found |
-| A question from Claude | Its options, and the ones that were picked — on the island or in Claude Code |
-| A tool that had to ask first | **needs permission**, then **allowed** or **denied** |
-| The end of the turn | What Claude said, as it wrote it — also behind **Read reply** on the finished card |
+  <img src="screenshots/drop.png" width="640" alt="Mochi turned into a box, waiting for a file">
 
-The journal follows the session while you are at its end, and stays where you
-scrolled otherwise. **N files**, at the top right, lists every file the session
-changed, each with its whole diff.
+- **Timer:** pick minutes (or a stopwatch), then **Iniciar**. A sound and a note
+  mark the end.
+- **Voice:** English only. The hotkey opens the microphone for one phrase (about
+  1 s of silence ends it, 25 s at most). `needle.exe` with the `whistle.cact` model
+  (Cactus, telemetry off) transcribes it on your PC, and the text waits on a card:
+  **Enviar** opens a new Claude Code session with it, **Cancelar** drops it. The
+  model (~20 MB) is downloaded only from the button **Baixar modelo** in Settings →
+  Voz, from huggingface.co, pinned and SHA-256 checked, into `%LOCALAPPDATA%\Coucou\voice`.
 
-<img src="screenshots/claude-journal.png" width="640" alt="The journal further up: a question with the option picked, a command that was allowed">
+## Integrations and keys
 
-An edit is shown the moment Claude Code reports it, so the typing is a replay of
-it, about a second behind. Nothing changes at a stroke: a new line rises into
-place, a state's colour fades to the next. The island only watches: to write to
-Claude, there is Claude Code.
+GitHub, Vercel, Stripe, n8n, Resend, Cal.com and Notion each have a switch and a
+key field under **Settings → Integrações**, and show as coloured pills next to
+Mochi. They only read. Per-service details (token permissions, polling rates):
+[`docs/INTEGRATIONS.md`](../docs/INTEGRATIONS.md). GitHub also has its own panel.
 
-### Several sessions at once
+<img src="screenshots/github-card.png" width="640" alt="The GitHub card">
+<img src="screenshots/github-activity.png" width="640" alt="The GitHub panel">
 
-<img src="screenshots/claude-sessions.png" width="640" alt="The list of sessions: the one on show, one at work in a terminal, one that has finished">
+Keys live in the **Windows Credential Manager**, never on disk or in the log, and
+the interface can only ask whether a key exists; every request is made by the Rust
+side. Settings are in `%APPDATA%\Coucou\settings.json`. The log is
+`%LOCALAPPDATA%\Coucou\coucou.log` (restarts past ~1 MB, stays on your machine).
 
-Two conversations in the Claude app, one more in a terminal: each is followed on
-its own, and one of them is in front — the one the card, the panel and Mochi
-show. With more than one, the session's card and the panel's head say how many
-there are: that chip opens the list of them — each with its name, its project
-and where it is at: at work, waiting for you, finished — and a click puts one in
-front. The chip takes a colour when a session behind the one on show wants
-looking at.
-
-The island stays on the session it shows for as long as that one is at work or
-being looked at. Another one takes its place when the first has nothing going
-on, or to ask for something. When two ask at once, the second waits its turn:
-the card says how many are waiting, and the next comes forward once the first is
-answered. Up to four sessions are followed; past that, the one at rest and heard
-from longest ago gives its place. Sessions started by a program rather than a
-person — a review run by a plugin, a script using the SDK — are left alone.
-
-### Answering from the island
-
-<img src="screenshots/claude-question.png" width="640" alt="A question from Claude, each option with what it means">
-<img src="screenshots/claude-approval.png" width="640" alt="A permission request for an edit, with the diff it would make">
-
-- **A question** Claude asks with its question tool opens on the island with
-  its options, each with what it means. Pick one — or several, then **Send** —
-  type your own with **Other…**, **Skip** it, or hand it back with **Answer in
-  Claude**. The session goes on exactly as if you had answered in Claude Code.
-- **A permission request for an edit** shows the diff the edit would make before
-  you click **Allow**.
-
-### What it reads
-
-Everything comes from the hooks Claude Code already sends — nothing is asked of
-Anthropic, and nothing leaves your machine. Of what a tool gives back, the relay
-forwards a few lines and no more: the diff of an edit, the first lines of a file
-that was read, the last lines a command printed, the names a search found, the
-answers to a question. A session's journal is kept in memory and empties as it
-fills — its last 80 lines, the oldest going for each new one — and is gone with
-the session. Two
-things are read from disk by the relay, and only then: the file an edit asks permission for (to show its diff —
-it is never written), and the end of the session's transcript at the start and
-end of a turn (for the conversation's title and Claude's last message). That
-transcript's format is Claude Code's own: if it changes, the title and the last
-message simply stop showing. None of it is written to the log.
-
-### Claude Code under WSL
-
-A Claude Code running inside a WSL distribution works too: WSL interop runs
-`coucou-hook.exe` as a Windows process, which reaches the named pipe like any
-other terminal. What it needs is a small relay script in the distribution,
-[`hook/coucou-hook-wsl.sh`](hook/coucou-hook-wsl.sh), and the hooks in the
-distribution's own `~/.claude/settings.json`.
-
-**Settings… → WSL** lists your distributions and installs both, one
-distribution at a time, with the same rules as on Windows: the exact diff, a
-dated backup next to the file, and nothing written until you click. Uninstalling
-removes Coucou's entries and the script, nothing else. On the first launch after
-installing, if WSL has distributions, Coucou opens the settings on that section
-once. Looking at a distribution starts it, so Coucou only does that while the
-settings window is open.
-
-Once WSL is set up, "Open terminal" and the ↗ button bring the session's
-terminal window forward (any terminal window if that one is closed), or open
-one in the session folder — for a WSL session, a shell in its own distro
-(`wsl.exe -d <distro> --cd <folder>`). "Open Visual Studio Code" opens a WSL
-session through **Remote WSL**. The relay passes `WSL_DISTRO_NAME` through
-`WSLENV` for that.
-Each hook costs about 0.3 s for the WSL → Windows hop. Its hooks stay in shell
-form (`sh "$HOME/…" <event>`): the Linux Claude Code relies on `$HOME`, and the exec form above is only for the Windows hooks.
-
-## Claude Code and keys
-
-Coucou has no chat of its own and no Anthropic API key: everything comes from
-the Claude Code you already use, through its hooks. Sessions, approvals and
-questions arrive as hook events; the **Sessions** view lists your Claude Code
-sessions across every profile (read from `<config dir>/projects`), where you can
-start a new one, resume an offline one or focus a running terminal. Dropped files
-are copied to Coucou's inbox and attached to the prompt. Integration keys go to
-Windows Credential Manager.
-
-### Multiple Claude profiles (claude / claude-qf)
-
-Profiles are discovered automatically: `~/.claude` and every `~/.claude-*`
-folder. **Settings… → Claude Code** shows one *Install hooks…* row per profile,
-each writing to that profile's own `settings.json` through the same reviewed
-diff, dated backup and explicit click. Coucou launches `claude.exe` itself with
-`CLAUDE_CONFIG_DIR` set to the profile; it never calls your PowerShell function.
-If you want the same in your own shell, a function like this works:
-
-```powershell
-function claude-qf { $env:CLAUDE_CONFIG_DIR="$HOME\.claude-qf"; try { & claude.exe @args } finally { Remove-Item Env:CLAUDE_CONFIG_DIR } }
-```
-
-### Dropping files and windows
-
-Dropping a file on the island, or dragging Mochi onto a window, opens a new
-terminal session with that file (or a screenshot of the window) attached.
-
-Integration keys live in the **Windows Credential Manager**, never on disk and
-never in the interface — the island can only ask whether a key exists.
-
-No telemetry. The only network requests Coucou makes are to the services you
-configure yourself.
-
-## GitHub
-
-<img src="screenshots/github-card.png" width="640" alt="The GitHub card in the overview: the year's contributions, the last seven days, the latest activity">
-
-With GitHub as the focused pill, the overview shows your year at a glance and
-your latest activity. Click the figure — or the arrow — and the island opens the
-**GitHub panel**, where everything is read without leaving for the browser.
-
-<img src="screenshots/github-activity.png" width="640" alt="The GitHub panel on its Activity tab: the contribution graph and the latest events">
-
-| Where | What you see |
-|---|---|
-| **Activity** | The contribution graph and your latest events. Click a day of the graph for what was done that day; click a line for its sheet |
-| **Projects** | Your repositories, most recently pushed first, each with its latest build |
-| A project | Description, languages, its last builds, its latest pull request, its latest deployment |
-| A pull request | State, branches, labels, review, checks, the files with their diff |
-| An issue, a push, a release | The same, each as its own sheet: the discussion, the commits and their files, the notes and assets |
-| A run | Its jobs as mini Mochis, each with its steps and how long they took — followed live while it runs |
-| Comments | A pull request's conversation: the description, the reviews, and each thread on the lines it is about |
-| A file | Its diff, syntax-coloured. A thread opens the file on the line it was written on |
-
-<img src="screenshots/github-project.png" width="640" alt="A project's sheet: its build, a pull request, its deployment">
-<img src="screenshots/github-run.png" width="640" alt="A pull request whose checks are running, one mini Mochi per job">
-<img src="screenshots/github-thread.png" width="640" alt="A review thread shown on the line of the diff it is about">
-
-The trail on the left is the way back: every step you went through stays there,
-one click away. The arrow at the top right opens the same thing on github.com.
-
-### News
-
-<img src="screenshots/github-news-merge.png" width="640" alt="The island opened on a merged pull request, with Open and OK">
-
-Three things make Mochi speak up, with a sound and a card: **a build of yours
-breaks**, **a pull request of yours is merged**, and **somebody opens a pull
-request on one of your projects** — the ones the Projects tab lists. **Open**
-goes straight to the run or the pull request. Each project of that tab has a
-bell: click it to mute a project you do not want to hear from, and again to give
-it its voice back. **OK** folds the island and leaves the news on the pill
-for five minutes, so it isn't lost: click Mochi, or the card, to go to it.
-
-### The token
-
-<img src="screenshots/github-settings.png" width="640" alt="Settings: GitHub switched on, its token, the permissions to grant and the connection test">
-
-**Settings… → Integrations → GitHub**: switching it on opens its setup under its
-line. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new)
-with **Repository access: All repositories** and these permissions, all
-**Read-only**:
-
-| Permission | What it is for |
-|---|---|
-| Actions | Builds, runs, jobs and steps |
-| Contents | Commits, diffs and releases |
-| Deployments | A project's latest deployment |
-| Issues | Issues and their comments |
-| Pull requests | Pull requests, reviews and threads |
-| Events (account, optional) | Your activity in private repositories |
-
-Metadata is added by GitHub on its own. **Test connection** checks each of them
-and names the one that is missing; in the panel, a part the token cannot read
-says which permission it needs instead of showing up empty.
-
-Coucou only reads, and nothing else is ever asked of GitHub. The token is stored
-in the Windows Credential Manager like every other key: it never touches the
-disk or the log, and the interface never sees it — every request is made by the
-Rust side.
-
-### How often it asks
-
-- Every **2 minutes** for the activity, the projects and their builds. Answers
-  GitHub says are unchanged (`304`) cost nothing against the rate limit.
-- Every **20 seconds**, builds only, and only while one of your builds is running.
-- A sheet is fetched **when you open it**, and kept for a minute.
-- Nothing while Coucou is paused or GitHub is switched off.
+No telemetry. Network requests go only to the services you configure and, once,
+to huggingface.co if you download the voice model.
 
 ## Build it yourself
 
-You need [Rust](https://rustup.rs), [Node 20+](https://nodejs.org), and the
-**MSVC build tools** (Visual Studio Build Tools with "Desktop development with
-C++"). WebView2 ships with Windows 10/11.
+You need [Rust](https://rustup.rs), [Node 20+](https://nodejs.org) and the MSVC
+build tools ("Desktop development with C++"). WebView2 ships with Windows 10/11.
 
 ```powershell
 cd windows
 npm install
 npm run tauri dev      # live-reloading development build
-npm run pack           # builds the installer and drops it in windows/release/
+npm run pack           # builds the installer into windows/release/
 ```
 
-`npm run dev` alone serves the front end in an ordinary browser, which is enough
-to work on the island's looks.
-
-`npm run pack` leaves two files in `windows/release/`, the same names the release
-workflow publishes:
-
-```
-Coucou-Windows-X.Y.Z-setup.exe    the versioned installer
-Coucou-Windows-setup.exe          the same file under the rolling name
-```
-
-Installing is optional — `target/release/coucou.exe` runs on its own. There is no
-window in the taskbar and no console: the island at the top of the screen and the
-Mochi in the notification area are the whole app, and Quit lives in its menu.
-
-The 28 sounds live in `windows/sounds/` (moved from the removed macOS app). The path
-is declared once, in `SOUNDS_DIR` at the top of `vite.config.ts`.
-
-The app icon and the tray icon are drawn in code, like Mochi itself:
-
-```powershell
-npm run icons          # regenerates src-tauri/icons from scripts/gen-icons.mjs
-```
-
-## Architecture
-
-**Core** is always on: island, Mochi, tray, settings window, hotkeys, log, the
-Windows layer. **Modules** are optional (Claude Code, media, file drop, timer,
-voice, integrations) and switch on in Settings. Core never imports a module.
-
-```
-src/core/        module API (moduleApi.ts), registry, bridge, layout
-src/island/      island state machine and window
-src/mochi/       Mochi and the greeting, Canvas 2D
-src/modules/     catalog.ts (MODULE_INFO), index.ts (MODULES), <id>/ per module
-src-tauri/src/core/     host.rs (ModuleHost, ModuleCtx), hotkeys, island, tray, platform/
-src-tauri/src/modules/  mod.rs (CATALOG, registry()), <id>/ per module
-hook/            coucou-hook.exe, the Claude Code relay
-scripts/         idle-audit, idle-measure, icons, pack
-```
-
-**A module** is a folder under `windows/src/modules/<id>` and
-`windows/src-tauri/src/modules/<id>`, plus one line in each registry: `MODULE_INFO`
-in `src/modules/catalog.ts`, `MODULES` in `src/modules/index.ts`, and `CATALOG` plus
-`registry()` in `src-tauri/src/modules/mod.rs`. Ids and order must match.
-The contract: [`docs/MODULES-CONTRACT.md`](../docs/MODULES-CONTRACT.md). Porting
-status: [`docs/PORTING.md`](../docs/PORTING.md). Idle cost:
-[`docs/idle-baseline.md`](../docs/idle-baseline.md).
-
-A disabled module has no tab, view, pill, timer, thread or listener.
-
-- `npm run idle-audit` (`scripts/idle-audit.mjs`) fails on raw timers or top-level
-  listeners in `src/modules`, and raw thread spawns in `src-tauri/src/modules`.
-  Exceptions are in its ALLOWLIST, one reason each.
-- `scripts/idle-measure.ps1` samples a running Coucou, read-only: CPU, threads and
-  handles over `-Seconds` (default 60). Run it with the island hidden.
+`npm run pack` leaves `Coucou-Windows-X.Y.Z-setup.exe` and
+`Coucou-Windows-setup.exe` (same file, rolling name) in `windows/release/`.
+`npm run dev` alone serves the front end in a browser. `npm run icons`
+regenerates the icons. Sounds live in `windows/sounds/`.
 
 Checks before a commit:
 
 ```powershell
-cd windows
 npx tsc --noEmit && npm run build && npm test && npm run idle-audit
-cd src-tauri
-cargo check && cargo test
+cd src-tauri; cargo check; cargo test
 ```
 
-## Log
+`npm run idle-audit` fails on raw timers, top-level listeners or thread spawns in
+modules; `scripts/idle-measure.ps1` samples a running Coucou's CPU and threads.
 
-`%LOCALAPPDATA%\Coucou\coucou.log` — hook events, permission decisions, poller
-problems. It stays on your machine.
+## Project layout
 
-## Platform and modules
+```
+src/core/               module API (moduleApi.ts), registry, bridge, layout
+src/island/  src/mochi/ island state machine and window; Mochi, Canvas 2D
+src/modules/<id>/       claude, media, upload, timer, voice, integrations
+src/modules/catalog.ts  module list (MODULE_INFO); index.ts holds MODULES
+src-tauri/src/core/     host.rs (ModuleHost), hotkeys, island, tray, settings, platform/
+src-tauri/src/modules/  mod.rs (CATALOG, registry()), <id>/ per module
+hook/                   coucou-hook.exe, the Claude Code relay
+scripts/                pack, icons, idle-audit, idle-measure
+```
 
-- Windows only. The island sits at the top centre and retracts into the top edge.
-- Approval works from any terminal, including Claude Code in WSL.
-- Features are modules (Claude Code, Mídia, integrations) that can each be turned off.
-- Not available: sending a file by email, jumping to a specific terminal window.
-- Cal.com shows the next bookings as a list; GitHub has its own panel.
-
+A module is a folder under `src/modules/<id>` and `src-tauri/src/modules/<id>`
+plus one line in each registry (`catalog.ts`, `index.ts`, `mod.rs`); ids and
+order must match. Core never imports a module.

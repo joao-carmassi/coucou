@@ -4,8 +4,8 @@ Authoritative spec for the module system. Written by the Opus advisor against `m
 to the **core-only** tree (tag `m3b-core-only`): there is no legacy code to adapt, modules are
 ported one by one in M5 from `git show m3-ok:<path>`.
 
-Decisions: modules ON by default: `claude`, `media`, `upload`. OFF: `timer`, `voice`,
-`integrations`. `voice` and `upload` require `claude`. A disabled module has no tab, view,
+Decisions: modules ON by default: `claude`, `media`, `upload`. OFF: `timer`, `voice`, and the
+seven service modules (`github`, `vercel`, `stripe`, `n8n`, `resend`, `calcom`, `notion`). `voice` and `upload` require `claude`. A disabled module has no tab, view,
 pill, timer, thread, or listener. One status line: highest priority wins. Commands are NOT
 gated in M4 (a command only answers a request); `host.require(id)` exists for M5.
 Settings stay one FLAT `settings.json`; unknown keys travel in `extra`.
@@ -197,3 +197,19 @@ Runtime: with an empty `MODULES` the app behaves as the core-only build; the Set
 4. The frame loop's `busy` includes overlay frames, or overlays freeze.
 5. Pass island methods as arrow functions (lost `this`).
 6. `host.sync` runs on the main thread: never under the `Shared` lock.
+
+## Status (branch refactor/modules)
+
+All modules are ported (M5). The pre-refactor code is in git tag `m3-ok` (`git show m3-ok:<path>`).
+Nothing below is verified at runtime beyond the checks in `docs/idle-baseline.md`.
+
+| Module | Default | Notes |
+|---|---|---|
+| claude | ON | Backend `src-tauri/src/modules/claude`, frontend `src/modules/claude`. Integration news on its finished/error cards comes through the `taskNews` hook |
+| media | ON | Mochi drag-out ghost lives in the module (core hooks: `mochiDrop`, `Overlay.cursor(down)`). `attach_window` and claude's `ingest_file` share `core/inbox.rs` |
+| upload | ON, requires claude | The drop animation starts after the island opens |
+| timer | OFF | Countdown and stopwatch |
+| voice | OFF, requires claude | English only (Cactus `needle.exe` + Whistle model). The "go to alert" hotkey belongs to claude |
+| github, vercel, stripe, n8n, resend, calcom, notion | OFF | One module per service (group "Integrações"). One shared scheduler, no task while none is on. Hooks used: `taskCard`, `taskNews`, `avatar.tint` |
+
+Known limit: the compact grid shows at most 4 mini pills (display limit, not a limit on modules).
