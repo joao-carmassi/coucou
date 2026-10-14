@@ -16,6 +16,7 @@ import { Hooks, emitMode } from "../core/hooks";
 import { glowOf } from "../mochi/moods";
 import { EXPANDED_W, PANEL_H } from "../core/moduleApi";
 import type { Disposer, IslandHost, Overlay, TabDef, ViewContext, ViewDef } from "../core/moduleApi";
+import { Holds } from "../core/holds";
 import { Requests, type Req, type RequestSpec } from "../core/requests";
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
@@ -235,7 +236,7 @@ export class Island implements IslandHost {
           // Opened on some other view, the parked request stays parked.
           if (r && (target === null || target === r.view)) Requests.parked = false;
           this.syncPin();
-          this.expand(target ?? r?.view ?? State.defaultView());
+          this.expand(target ?? r?.view ?? this.resting() ?? State.defaultView());
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
         }
@@ -265,6 +266,7 @@ export class Island implements IslandHost {
     this.offsetX.target = 0;
     if (mode === "expanded") Sound.play("open");
     if (prev === "expanded") {
+      Holds.touch(State.view, Date.now());
       Sound.play("close");
       Requests.parked = true;
       this.syncPin();
@@ -282,6 +284,11 @@ export class Island implements IslandHost {
     return view === "greeting" || this.views.has(view);
   }
 
+  /** The held task the island reopens on, if any. */
+  private resting(): string | null {
+    return Holds.front(Date.now(), State.settings.focusHoldMinutes * 60_000, (v) => this.known(v));
+  }
+
   private guard(view: string): string {
     if (this.known(view)) return view;
     void Bridge.log(`ui  unknown view "${view}", using ${State.defaultView()}`);
@@ -290,7 +297,10 @@ export class Island implements IslandHost {
 
   expand(view: IslandViewName) {
     view = this.guard(view);
-    if (view !== State.view) for (const o of this.overlays) o.leaving?.(view);
+    if (view !== State.view) {
+      for (const o of this.overlays) o.leaving?.(view);
+      if (State.mode === "expanded") Holds.touch(State.view, Date.now());
+    }
     State.view = view;
     if (State.mode !== "expanded") this.setMode("expanded");
     else this.animateGeometry(false);
@@ -312,6 +322,7 @@ export class Island implements IslandHost {
       return;
     }
     const grew = viewLayout(view).height >= viewLayout(State.view).height;
+    if (view !== State.view) Holds.touch(State.view, Date.now());
     State.view = view;
     this.animateGeometry(!grew);
     State.notify();
@@ -390,7 +401,7 @@ export class Island implements IslandHost {
     if (this.noteTimer != null) window.clearTimeout(this.noteTimer);
     this.noteTimer = window.setTimeout(() => {
       this.noteTimer = null;
-      if (State.mode === "expanded" && State.view === "note") this.setView(State.defaultView());
+      if (State.mode === "expanded" && State.view === "note") this.setView(this.resting() ?? State.defaultView());
     }, 2400);
   }
 
@@ -415,7 +426,7 @@ export class Island implements IslandHost {
     // A view that knows how tall its content is has the last word.
     const fitted = this.views?.get(State.view)?.height ?? null;
     const line = this.compactLine();
-    const others = this.textOverGrid() ? 0 : State.otherPills.length;
+    const others = this.textOverGrid() ? 0 : State.gridPills.length;
     const cw = compactWidth(others, line ? this.textWidth(line) : 0);
     const { w, h } = islandSize(State.mode, State.view, fitted, cw);
     const r = State.mode === "expanded" ? EXPANDED_CORNER : ROUNDED_CORNER;
@@ -424,12 +435,12 @@ export class Island implements IslandHost {
 
   /** The one-line status the compact island says: the strongest module line. */
   private compactLine(): string {
-    return Compact.resolve(State.otherPills.length)?.text ?? "";
+    return Compact.resolve(State.gridPills.length)?.text ?? "";
   }
 
   /** The line takes the place of the mini grid. */
   private textOverGrid(): boolean {
-    return !!Compact.resolve(State.otherPills.length)?.overGrid;
+    return !!Compact.resolve(State.gridPills.length)?.overGrid;
   }
 
   /** New word rises from below while the old one leaves upward; instant if nothing was showing. */
@@ -981,7 +992,7 @@ export class Island implements IslandHost {
     const showGrid = State.mode === "compact" && !this.textOverGrid();
     this.miniGrid.style.opacity = showGrid ? "1" : "0";
     if (showGrid) {
-      const others = State.otherPills.slice(0, 4);
+      const others = State.gridPills.slice(0, 6);
       const key = others.map((t) => t.id).join("|");
       if (this.miniGrid.dataset.key !== key) {
         this.miniGrid.dataset.key = key;

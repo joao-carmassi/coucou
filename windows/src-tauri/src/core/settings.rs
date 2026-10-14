@@ -16,6 +16,8 @@ pub struct Settings {
     pub autostart: bool,
     /// Seconds the minimized island waits before hiding. 0 = never hide.
     pub compact_hide_interval: f64,
+    /// Minutes a held task view stays the reopen target. 0 = off.
+    pub focus_hold_minutes: f64,
     /// Module switches by id; a missing id means the module's default.
     pub modules_enabled: BTreeMap<String, bool>,
     /// Keys this build no longer knows (the removed chat's `model`, `chatBackend`…):
@@ -37,6 +39,7 @@ impl Default for Settings {
             screen: "primary".into(),
             autostart: false,
             compact_hide_interval: default_compact_hide(),
+            focus_hold_minutes: 10.0,
             modules_enabled: Default::default(),
             extra: Default::default(),
         }

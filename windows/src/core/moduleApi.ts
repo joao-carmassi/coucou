@@ -171,6 +171,12 @@ export interface IslandApi {
     /** Navigation: unfolds the island on `view`. It never pins; to hold the island open use `request`. */
     open(view: string): void;
     /**
+     * Marks `view` as an unfinished task: when the island next reopens it lands there instead of on the home view.
+     * Released by the disposer, by this module stopping, or after the view goes unused for `idleMs` (default: the user's setting).
+     * It never pins the island and never opens it.
+     */
+    hold(view: string, opts?: { idleMs?: number }): Disposer;
+    /**
      * Asks for the screen. The core keeps one list (highest priority in front, the newest wins a tie; cleaned when this module stops).
      * A request below the front one is queued: the view does not switch. Disposing the front shows the next one's view (island still open), else the island may auto-close again.
      * `pin` holds the island open (no auto-close, Esc or click-outside) while it is in front. `ms` disposes it by itself.

@@ -19,6 +19,8 @@ export interface Pill {
   badge?: PillBadge | null;
   /** Module id, stamped by api.pills; never set by hand. */
   owner?: string;
+  /** Nothing to say: still listed with the rest, but never takes the compact grid nor hides the status line. */
+  ambient?: boolean;
 }
 /** A new pill needs label and color; later calls patch fields (null clears emote / eye / badge). */
 export type PillPatch = Pick<Pill, "id"> & Partial<Omit<Pill, "id" | "owner">>;
@@ -33,6 +35,8 @@ export interface Settings {
   autoCloseInterval: number;
   /** Seconds minimized before hiding; 0 = never. */
   compactHideInterval: number;
+  /** Minutes a held task view stays the place the island reopens on; 0 = off. */
+  focusHoldMinutes: number;
   screen: "primary" | "cursor";
   autostart: boolean;
   /** Per-module switches; a missing key means the module default. */
@@ -44,6 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
   soundVolume: 0.12,
   autoCloseInterval: 15,
   compactHideInterval: 60,
+  focusHoldMinutes: 10,
   screen: "primary",
   autostart: false,
   modulesEnabled: {},
@@ -118,6 +123,11 @@ class AppState {
 
   get focusPill(): Pill | null {
     return this.pills.find((t) => t.id === this.focusId) ?? this.pills[0] ?? null;
+  }
+
+  /** The other pills that take the compact grid (every one that is not ambient). */
+  get gridPills(): Pill[] {
+    return this.otherPills.filter((p) => !p.ambient);
   }
 
   get otherPills(): Pill[] {

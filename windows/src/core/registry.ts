@@ -8,6 +8,7 @@ import { Hooks, Services, onMode } from "./hooks";
 import { moduleSettings } from "./moduleSettings";
 import { dropPills, focusPill, putPill } from "./pills";
 import { Requests } from "./requests";
+import { Holds } from "./holds";
 import { Sound } from "./sound";
 import { checkMood, glowOf, registerEmote, registerMood } from "../mochi/moods";
 import { createMiniBot, freeMochi, mochiSprite } from "../mochi/minibots";
@@ -134,6 +135,11 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
     },
     island: {
       open: (view) => host.open(view),
+      hold(view, o) {
+        const off = Holds.add(id, view, o?.idleMs, Date.now());
+        const d = () => { scope.remove(d); off(); };
+        return scope.add(d);
+      },
       request(spec) {
         const r = host.addRequest(id, spec);
         const cancel = spec.ms != null ? timeout(() => off(), spec.ms) : null;

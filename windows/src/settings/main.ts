@@ -22,8 +22,8 @@ const root = document.getElementById("settings-root")!;
 
 /** Only the core's own fields: module keys are saved by their sections as patches, and a stale copy here must not undo them. */
 async function save() {
-  const { soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, screen, autostart, modulesEnabled } = settings;
-  await Bridge.saveSettings({ soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, screen, autostart, modulesEnabled });
+  const { soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, autostart, modulesEnabled } = settings;
+  await Bridge.saveSettings({ soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, autostart, modulesEnabled });
 }
 
 // ── Reusable bits ─────────────────────────────────────────────────────────────
@@ -80,6 +80,17 @@ function generalSection(): HTMLElement {
     void save();
   });
 
+  const hold = h("input", {
+    type: "number", min: "0", max: "120", step: "1",
+    value: String(Math.round(settings.focusHoldMinutes ?? 10)),
+    style: "width:72px",
+  }) as HTMLInputElement;
+  hold.addEventListener("change", () => {
+    settings.focusHoldMinutes = Math.max(0, Math.min(120, Math.round(Number(hold.value)) || 0));
+    hold.value = String(settings.focusHoldMinutes);
+    void save();
+  });
+
   const screen = h("select", {}) as HTMLSelectElement;
   screen.append(
     h("option", { value: "primary", text: "Tela principal" }),
@@ -110,6 +121,11 @@ function generalSection(): HTMLElement {
       hide,
       h("span", { class: "hint", text: "segundos minimizada, depois some · nunca" }),
       hideNever,
+    ),
+    h("div", { class: "row" },
+      h("label", { text: "Voltar à tarefa" }),
+      hold,
+      h("span", { class: "hint", text: "minutos sem usar a aba (0 = desligado)" }),
     ),
     h("div", { class: "row" },
       h("label", { text: "A ilha fica em" }),

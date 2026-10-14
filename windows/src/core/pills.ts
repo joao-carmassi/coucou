@@ -15,7 +15,7 @@ export function putPill(s: PillStore, owner: string, p: PillPatch, at?: PillAt):
   if (cur) {
     if (cur.owner !== owner) return false;
     let changed = false;
-    for (const k of ["label", "color", "mood", "emote", "eye", "badge"] as const) {
+    for (const k of ["label", "color", "mood", "emote", "eye", "badge", "ambient"] as const) {
       if (patch[k] !== undefined && cur[k] !== patch[k]) { Object.assign(cur, { [k]: patch[k] }); changed = true; }
     }
     return changed;
@@ -23,7 +23,7 @@ export function putPill(s: PillStore, owner: string, p: PillPatch, at?: PillAt):
   if (patch.label === undefined || patch.color === undefined) return false;
   // The first pill ever put in front; from then on only api.pills.focus and removal move it.
   if (!s.focusId) s.focusId = p.id;
-  s.pills.splice(pillIndex(s.pills, at), 0, { id: p.id, label: patch.label, color: patch.color, mood: patch.mood ?? "idle", emote: patch.emote, eye: patch.eye, badge: patch.badge, owner });
+  s.pills.splice(pillIndex(s.pills, at), 0, { id: p.id, label: patch.label, color: patch.color, mood: patch.mood ?? "idle", emote: patch.emote, eye: patch.eye, badge: patch.badge, ambient: patch.ambient, owner });
   return true;
 }
 
