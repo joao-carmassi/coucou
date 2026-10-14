@@ -4,12 +4,12 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { calls } from "./setup";
 import { dummyProbe, requestPin } from "./dummyModule";
 
-vi.mock("../../src/modules/index", async () => {
+const loadModules = async () => {
   const { clockModule } = await import("../../src/modules/clock");
   const { dummyModule } = await import("./dummyModule");
   return { MODULES: [clockModule, dummyModule] };
-});
-vi.mock("../../src/modules/catalog", async () => {
+};
+const loadCatalog = async () => {
   const { buildCatalog } = await import("../../src/modules/resolve");
   return {
     MODULE_INFO: buildCatalog([
@@ -17,7 +17,7 @@ vi.mock("../../src/modules/catalog", async () => {
       { id: "dummy", label: "Dummy", default: true, order: 200 },
     ], true),
   };
-});
+};
 
 import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
@@ -30,13 +30,13 @@ let island: Island;
 let errors: ReturnType<typeof vi.spyOn>;
 const tick = (ms: number) => vi.advanceTimersByTime(ms);
 
-beforeAll(() => {
+beforeAll(async () => {
   vi.useFakeTimers();
   errors = vi.spyOn(console, "error");
   document.body.innerHTML = '<div id="root"></div>';
   // Same order as src/main.ts, minus the Tauri event wiring.
   island = new Island(document.getElementById("root")!);
-  Registry.init(island);
+  Registry.init(island, (await loadModules()).MODULES, (await loadCatalog()).MODULE_INFO);
   Registry.apply({ clock: true, dummy: true });
   island.launch();
 });

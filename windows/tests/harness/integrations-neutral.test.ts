@@ -9,12 +9,12 @@ vi.mock("@tauri-apps/api/core", () => ({
 vi.mock("@tauri-apps/api/event", () => ({
   listen: async (name: string, fn: (p: { payload: unknown }) => void) => ((handlers[name] = fn), () => {}),
 }));
-vi.mock("../../src/modules/index", async () => {
+const loadModules = async () => {
   const { dummyModule } = await import("./dummyModule");
   const { vercel } = await import("../../src/modules/integrations");
   return { MODULES: [dummyModule, vercel] };
-});
-vi.mock("../../src/modules/catalog", async () => {
+};
+const loadCatalog = async () => {
   const { buildCatalog } = await import("../../src/modules/resolve");
   return {
     MODULE_INFO: buildCatalog([
@@ -22,7 +22,7 @@ vi.mock("../../src/modules/catalog", async () => {
       { id: "vercel", label: "Vercel", default: true, order: 2 },
     ], true),
   };
-});
+};
 
 import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
@@ -33,7 +33,7 @@ const vercel = () => dummy().pills.get("integration_vercel");
 
 beforeAll(async () => {
   document.body.innerHTML = '<div id="root"></div>';
-  Registry.init(new Island(document.getElementById("root")!));
+  Registry.init(new Island(document.getElementById("root")!), (await loadModules()).MODULES, (await loadCatalog()).MODULE_INFO);
   Registry.apply({ dummy: true, vercel: true });
   await flush();
 });

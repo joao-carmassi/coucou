@@ -3,11 +3,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { calls } from "./setup";
 import { dummyProbe, otherProbe } from "./dummyModule";
 
-vi.mock("../../src/modules/index", async () => {
+const loadModules = async () => {
   const { dummyModule, otherModule } = await import("./dummyModule");
   return { MODULES: [dummyModule, otherModule] };
-});
-vi.mock("../../src/modules/catalog", async () => {
+};
+const loadCatalog = async () => {
   const { buildCatalog } = await import("../../src/modules/resolve");
   return {
     MODULE_INFO: buildCatalog([
@@ -15,7 +15,7 @@ vi.mock("../../src/modules/catalog", async () => {
       { id: "other", label: "Other", default: true, order: 2 },
     ], true),
   };
-});
+};
 
 import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
@@ -25,11 +25,11 @@ const dummy = () => dummyProbe.api!;
 const other = () => otherProbe.api!;
 const patches = () => calls.invoke.filter((c) => c.cmd === "save_settings").map((c) => (c.args as { patch: unknown }).patch);
 
-beforeAll(() => {
+beforeAll(async () => {
   vi.useFakeTimers();
   document.body.innerHTML = '<div id="root"></div>';
   const island = new Island(document.getElementById("root")!);
-  Registry.init(island);
+  Registry.init(island, (await loadModules()).MODULES, (await loadCatalog()).MODULE_INFO);
   Registry.apply({ dummy: true, other: true });
 });
 afterAll(() => vi.useRealTimers());

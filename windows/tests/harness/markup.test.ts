@@ -21,16 +21,6 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: async (name: string, fn: (p: { payload: unknown }) => void) => ((T.handlers[name] ??= []).push(fn), () => {}),
 }));
 // Every real module, its views and apis captured on the way (no production seam needed).
-vi.mock("../../src/modules/index", async (orig) => {
-  const real = await orig<typeof import("../../src/modules/index")>();
-  return {
-    MODULES: real.MODULES.map((m) => ({
-      ...m,
-      views: m.views?.map((v) => ({ ...v, build: (ctx: any) => ((T.hosts[v.name] = v.build(ctx)), T.hosts[v.name]) })),
-      start: (api: any) => ((T.apis[m.id] = api), m.start(api)),
-    })),
-  };
-});
 vi.mock("../../src/modules/claude/claude", async (orig) => {
   const real = await orig<typeof import("../../src/modules/claude/claude")>();
   return { ...real, claudeOf: (api: any) => ((T.claude = real.claudeOf(api)), T.claude) };
@@ -43,7 +33,8 @@ vi.mock("../../src/modules/timer/timer", async (orig) => {
 });
 import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
-import { MODULES } from "../../src/modules/index";
+import { MODULES as REAL } from "../../src/modules/index";
+import { MODULE_INFO } from "../../src/modules/catalog";
 import { info, steps, PROVIDERS } from "../../src/modules/integrations/store";
 import { renderIntegrationCard, type IntegrationCardHooks } from "../../src/modules/integrations/views/integrations";
 import { enterGithubPanel } from "../../src/modules/integrations/views/github";
@@ -53,6 +44,12 @@ import { Voice } from "../../src/modules/voice/view";
 import { enterSessionPanel } from "../../src/modules/claude/views/session";
 import { newSession, newStep, type SessionStep } from "../../src/modules/claude/types";
 
+// Every real module, its views and apis captured on the way (no production seam needed).
+const MODULES = REAL.map((m) => ({
+  ...m,
+  views: m.views?.map((v) => ({ ...v, build: (ctx: any) => ((T.hosts[v.name] = v.build(ctx)), T.hosts[v.name]) })),
+  start: (api: any) => ((T.apis[m.id] = api), m.start(api)),
+}));
 const NOW = new Date("2026-03-10T12:00:00Z");
 let island: Island;
 const flush = async () => { for (let i = 0; i < 6; i++) { await vi.advanceTimersByTimeAsync(10); } vi.setSystemTime(NOW); };
@@ -62,7 +59,7 @@ beforeAll(async () => {
   vi.setSystemTime(NOW);
   document.body.innerHTML = '<div id="root"></div>';
   island = new Island(document.getElementById("root")!);
-  Registry.init(island);
+  Registry.init(island, MODULES, MODULE_INFO);
   Registry.apply(Object.fromEntries(MODULES.map((m) => [m.id, true])));
   island.launch();
   await flush();

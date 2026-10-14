@@ -9,11 +9,11 @@ const { second, secondModule } = vi.hoisted(() => {
   return { second, secondModule };
 });
 
-vi.mock("../../src/modules/index", async () => {
+const loadModules = async () => {
   const { dummyModule } = await import("./dummyModule");
   return { MODULES: [dummyModule, secondModule] };
-});
-vi.mock("../../src/modules/catalog", async () => {
+};
+const loadCatalog = async () => {
   const { buildCatalog } = await import("../../src/modules/resolve");
   return {
     MODULE_INFO: buildCatalog([
@@ -21,7 +21,7 @@ vi.mock("../../src/modules/catalog", async () => {
       { id: "second", label: "Second", default: true, order: 210 },
     ], true),
   };
-});
+};
 
 import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
@@ -32,11 +32,11 @@ const tick = (ms: number) => vi.advanceTimersByTime(ms);
 const a = () => dummyProbe.api!;
 const b = () => second.api!;
 
-beforeAll(() => {
+beforeAll(async () => {
   vi.useFakeTimers();
   document.body.innerHTML = '<div id="root"></div>';
   island = new Island(document.getElementById("root")!);
-  Registry.init(island);
+  Registry.init(island, (await loadModules()).MODULES, (await loadCatalog()).MODULE_INFO);
   Registry.apply({ dummy: true, second: true });
   island.launch();
   tick(15_000); // greeting -> compact

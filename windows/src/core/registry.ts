@@ -1,4 +1,4 @@
-// Starts and stops modules. The ONLY core file that imports ../modules.
+// Starts and stops modules. Gets the module list and catalog injected (src/boot/*): imports no module.
 // Nothing here runs at import time: no timers, no listeners.
 
 import { Avatar } from "./avatar";
@@ -12,10 +12,8 @@ import { Sound } from "./sound";
 import { checkMood, glowOf, registerEmote, registerMood } from "../mochi/moods";
 import { createMiniBot, freeMochi, mochiSprite } from "../mochi/minibots";
 import { resolveEnabled } from "./moduleApi";
-import type { AvatarSignal, Disposer, IslandApi, IslandHooks, IslandHost, ModuleDef, StatusLine } from "./moduleApi";
+import type { AvatarSignal, Disposer, IslandApi, IslandHooks, IslandHost, ModuleDef, ModuleInfo, StatusLine } from "./moduleApi";
 import { State } from "./state";
-import { MODULE_INFO } from "../modules/catalog";
-import { MODULES } from "../modules/index";
 
 /** Disposers, run in reverse; one failing never blocks the rest. */
 export class Scope {
@@ -176,6 +174,8 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
 }
 
 let host: IslandHost | null = null;
+let MODULES: ModuleDef[] = [];
+let MODULE_INFO: ModuleInfo[] = [];
 const running = new Map<string, { def: ModuleDef; scope: Scope }>();
 
 function start(h: IslandHost, def: ModuleDef) {
@@ -206,8 +206,10 @@ function stop(id: string) {
 }
 
 export const Registry = {
-  init(h: IslandHost) {
+  init(h: IslandHost, modules: ModuleDef[], catalog: ModuleInfo[]) {
     host = h;
+    MODULES = modules;
+    MODULE_INFO = catalog;
   },
   defaults: (stored: Readonly<Record<string, boolean>>) => resolveEnabled(MODULE_INFO, stored),
   isOn: (id: string) => State.modules[id] === true,
