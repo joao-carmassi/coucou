@@ -247,6 +247,7 @@ function backupSection(): HTMLElement {
     const f = file.files?.[0];
     file.value = "";
     if (!f) return;
+    if (f.size > 1_000_000) { out.textContent = "Arquivo grande demais."; return; }
     const diff = diffImport(settings as unknown as Record<string, unknown>, await f.text());
     clear(diffBox);
     if (typeof diff === "string") { out.textContent = diff; return; }
@@ -254,7 +255,12 @@ function backupSection(): HTMLElement {
     if (!diff.changes.length) { out.textContent = "Nada muda: o arquivo é igual às configurações atuais."; return; }
     const apply = h("button", { class: "primary", text: `Aplicar ${diff.changes.length} ${diff.changes.length === 1 ? "alteração" : "alterações"}` });
     apply.addEventListener("click", async () => {
-      await Bridge.saveSettings(diff.patch);
+      try {
+        await Bridge.saveSettings(diff.patch);
+      } catch (e) {
+        out.textContent = `Não foi possível importar: ${e instanceof Error ? e.message : String(e)}`;
+        return;
+      }
       put({ ...settings, ...diff.patch } as Settings);
       clear(diffBox);
       out.textContent = "Importado.";
@@ -384,8 +390,11 @@ async function main() {
     renderModules(boot?.modules);
   };
   clear(root);
-  if (settings.onboardedVersion === "") root.append(h("h1", {}, h("span", { text: "Bem-vindo ao Coucou" })), onboarding(hub));
-  else hub();
+  if (settings.onboardedVersion === "") {
+    // Written on first show, so a window closed without finishing does not reopen at every launch.
+    void Bridge.saveSettings({ onboardedVersion: version || "0" });
+    root.append(h("h1", {}, h("span", { text: "Bem-vindo ao Coucou" })), onboarding(hub));
+  } else hub();
 
   void onEvent<Record<string, boolean>>("modules-changed", (m) => { if (root.querySelector(".hub")) renderModules(m); });
 

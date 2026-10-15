@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { diffImport, matchSections, presetModules, PRESETS } from "../src/settings/hub.ts";
-import { catalog } from "./catalog.ts";
+import { catalog, manifests } from "./catalog.ts";
 
 test("matchSections: accent and case insensitive, all words must hit", () => {
   const s = [
@@ -25,13 +25,15 @@ test("presets: set modulesEnabled from catalog data, every id covers the catalog
   assert.equal(ess.board, true);
   assert.equal(ess.github, false);
   assert.equal(presetModules(cat, "tudo").clock, false, "dev-only module is not in tudo");
-  assert.ok(Object.values(presetModules(cat, "vitrine")).every(Boolean));
+  const tudo = presetModules(cat, "tudo");
+  const vit = presetModules(cat, "vitrine");
+  for (const id of Object.keys(tudo)) if (tudo[id]) assert.ok(vit[id], `vitrine includes ${id}`);
   assert.ok(Object.values(presetModules(cat, "nao-existe")).every((v) => !v));
 });
 
 test("diffImport: top-level diff, secrets and version never applied", () => {
   const cur = { soundVolume: 0.1, screen: "primary", modulesEnabled: { a: true } };
-  const file = JSON.stringify({ version: "1", soundVolume: 0.1, screen: "cursor", githubToken: "ghp_LEAK", apiKey: "k", extraKey: 1, modulesEnabled: { a: true } });
+  const file = JSON.stringify({ version: "1", soundVolume: 0.1, screen: "cursor", githubToken: "ghp_LEAK", hooksInstalled: true, onboardedVersion: "1", apiKey: "k", extraKey: 1, modulesEnabled: { a: true } });
   const d = diffImport(cur, file);
   assert.ok(typeof d !== "string");
   assert.deepEqual(d.changes, [{ key: "screen", kind: "alterado" }, { key: "extraKey", kind: "novo" }]);
@@ -39,4 +41,14 @@ test("diffImport: top-level diff, secrets and version never applied", () => {
   assert.ok(!JSON.stringify(d).includes("LEAK"));
   assert.equal(typeof diffImport(cur, "{oops"), "string");
   assert.equal(typeof diffImport(cur, "[1]"), "string");
+});
+
+test("manifests: preset ids are known, essential is boolean, some module is essential", () => {
+  const known = new Set(PRESETS.map((p) => p.id));
+  const all = manifests.flat();
+  for (const m of all) {
+    for (const p of m.presets ?? []) assert.ok(known.has(p), `${m.id}: unknown preset ${p}`);
+    assert.ok(m.essential === undefined || typeof m.essential === "boolean", `${m.id}: essential`);
+  }
+  assert.ok(all.some((m) => m.essential === true), "safe mode needs an essential module");
 });

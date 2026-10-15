@@ -74,6 +74,8 @@ fn save_settings(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>,
             settings.modules_enabled = current.modules_enabled.clone();
         }
         host.on_save(&current, &mut settings);
+        // A changed switch map during safe mode is the user's choice: keep it (and leave safe mode) instead of losing it on exit.
+        core::safe_mode::adopt(&settings.modules_enabled, &current.modules_enabled);
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
         *current = settings.clone();

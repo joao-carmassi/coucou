@@ -31,6 +31,9 @@ export function presetModules(catalog: readonly ModuleInfo[], preset: string): R
 /** Same pattern as the Rust export filter. */
 export const SECRET_KEY = /token|secret|password|api_?key|cookie/i;
 
+/** Per-machine state: a backup from another PC must not carry it over. */
+const MACHINE_KEYS = new Set(["hooksInstalled", "wslHooks", "claudeConfigDir", "onboardedVersion"]);
+
 export type DiffKind = "novo" | "alterado";
 export interface ImportDiff { patch: Record<string, unknown>; changes: { key: string; kind: DiffKind }[] }
 
@@ -42,7 +45,7 @@ export function diffImport(current: Record<string, unknown>, text: string): Impo
   const patch: Record<string, unknown> = {};
   const changes: ImportDiff["changes"] = [];
   for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-    if (k === "version" || SECRET_KEY.test(k)) continue;
+    if (k === "version" || SECRET_KEY.test(k) || MACHINE_KEYS.has(k)) continue;
     if (JSON.stringify(current[k]) === JSON.stringify(v)) continue;
     patch[k] = v;
     changes.push({ key: k, kind: k in current ? "alterado" : "novo" });

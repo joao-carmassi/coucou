@@ -21,11 +21,17 @@ pub struct Settings {
     /// Module switches by id; a missing id means the module's default.
     pub modules_enabled: BTreeMap<String, bool>,
     /// Version whose onboarding was finished; empty = first run (the Hub opens on the onboarding).
+    #[serde(default = "legacy_onboarded")]
     pub onboarded_version: String,
     /// Keys this build no longer knows (the removed chat's `model`, `chatBackend`…):
     /// kept so saving never drops them from an installed settings.json.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// A file without the key predates the Hub: counted as onboarded (only a fresh install, `Default`, is "").
+fn legacy_onboarded() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
 }
 
 fn default_compact_hide() -> f64 {
@@ -196,6 +202,15 @@ mod tests {
         let real: BTreeMap<String, bool> = [("x".to_string(), true), ("y".to_string(), true)].into();
         assert_eq!(for_disk(&s, Some(&real)).modules_enabled, real);
         assert_eq!(for_disk(&s, None).modules_enabled, s.modules_enabled);
+    }
+
+    #[test]
+    fn onboarding_only_for_fresh_installs() {
+        assert_eq!(Settings::default().onboarded_version, "", "fresh install");
+        let old: Settings = serde_json::from_str(r#"{"soundVolume":0.3}"#).unwrap();
+        assert!(!old.onboarded_version.is_empty(), "upgrading user is not onboarded again");
+        let set: Settings = serde_json::from_str(r#"{"onboardedVersion":"0.1.0"}"#).unwrap();
+        assert_eq!(set.onboarded_version, "0.1.0");
     }
 
     #[test]

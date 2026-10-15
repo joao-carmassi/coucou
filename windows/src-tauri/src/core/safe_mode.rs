@@ -41,6 +41,20 @@ pub fn exit(modules: &mut Switches) -> bool {
     left
 }
 
+/// The user changed the module switches while safe mode is on: that choice is kept, so safe mode ends.
+/// A save that repeats the reduced map (any other settings save) changes nothing.
+pub fn adopt(new: &Switches, old: &Switches) -> bool {
+    let left = adopt_in(&REAL, new, old);
+    if left {
+        clean_exit();
+    }
+    left
+}
+
+fn adopt_in(slot: &std::sync::Mutex<Option<Switches>>, new: &Switches, old: &Switches) -> bool {
+    new != old && take_real(slot, &mut Switches::new())
+}
+
 fn take_real(slot: &std::sync::Mutex<Option<Switches>>, modules: &mut Switches) -> bool {
     match slot.lock().unwrap_or_else(|e| e.into_inner()).take() {
         Some(real) => {
@@ -90,6 +104,17 @@ mod tests {
         std::fs::write(dir.join(FILE), "junk").unwrap();
         assert_eq!(bump(&dir), 0, "garbage counts as clean");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn changed_switches_end_safe_mode_unchanged_do_not() {
+        let reduced = Switches::from([("a".to_string(), true)]);
+        let slot = std::sync::Mutex::new(Some(Switches::from([("a".to_string(), true), ("b".to_string(), true)])));
+        assert!(!adopt_in(&slot, &reduced, &reduced), "same map: still safe mode");
+        assert!(slot.lock().unwrap().is_some());
+        let chosen = Switches::from([("a".to_string(), false)]);
+        assert!(adopt_in(&slot, &chosen, &reduced));
+        assert!(slot.lock().unwrap().is_none());
     }
 
     #[test]

@@ -72,6 +72,11 @@ mod tests {
     }
 
     #[test]
+    fn essential_comes_from_manifests() {
+        assert_eq!(super::ESSENTIAL, ["board"], "safe mode keeps exactly the essential manifests");
+    }
+
+    #[test]
     fn claude_is_registered() {
         assert_eq!(super::claude::Claude.id(), "claude");
         assert!(super::CATALOG.iter().any(|m| m.id == "claude"));
