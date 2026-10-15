@@ -182,7 +182,7 @@ pub fn adjust_placement(app: &AppHandle, shared: &crate::Shared, dx: Option<f64>
     let Some(m) = target_monitor(app, &pref) else { return };
     let size = *m.size();
     let key = monitor_key(m.name().map(String::as_str), size.width, size.height);
-    {
+    let fresh = {
         let mut s = shared.settings.lock().unwrap();
         match dx {
             Some(d) if d.is_finite() => {
@@ -196,7 +196,9 @@ pub fn adjust_placement(app: &AppHandle, shared: &crate::Shared, dx: Option<f64>
         if let Err(err) = crate::core::settings::save(&s) {
             eprintln!("[coucou] could not save settings: {err}");
         }
-    }
+        s.clone()
+    };
+    let _ = app.emit("settings-changed", fresh);
     apply_geometry(app, &pref, shared.gate.collapsed.load(Ordering::Relaxed));
     refresh_click_through(app, &shared.gate);
 }

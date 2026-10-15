@@ -654,7 +654,7 @@ export class Island implements IslandHost {
         void Bridge.setIslandOffset(dx).then(() => {
           this.offsetX.set(0);
           this.ensureRunning();
-        });
+        }).catch(() => this.scheduleNudgeReturn());
       } else if (moved) this.scheduleNudgeReturn();
       else this.clickCompact();
     }

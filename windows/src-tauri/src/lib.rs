@@ -79,6 +79,7 @@ fn save_settings(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>,
         settings.palette_hotkey = core::hotkeys::clean(&settings.palette_hotkey, settings::DEFAULT_PALETTE_HOTKEY);
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
+        let screen_changed = screen_changed || current.island_placement != settings.island_placement;
         *current = settings.clone();
         // Saved inside the lock so two saves reach the disk in the order they were merged.
         if let Err(err) = settings::save(&settings) {
