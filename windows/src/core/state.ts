@@ -44,6 +44,10 @@ export interface Settings {
   modulesEnabled: Record<string, boolean>;
   /** Version whose onboarding was finished; "" = first run. */
   onboardedVersion: string;
+  /** Body colour per Mochi: key = pill id | "<prefix>*" | "main", value #rrggbb (core/pills.ts colorFor). */
+  mochiColors: Record<string, string>;
+  /** Minutes of rest before the main Mochi dozes off; 0 = never. */
+  mochiSleepMinutes: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -56,6 +60,8 @@ export const DEFAULT_SETTINGS: Settings = {
   autostart: false,
   modulesEnabled: {},
   onboardedVersion: "",
+  mochiColors: {},
+  mochiSleepMinutes: 10,
 };
 
 type Listener = () => void;

@@ -55,3 +55,17 @@ function pillIndex(pills: Pill[], at?: PillAt): number {
   const i = pills.findIndex((x) => x.id === at.before);
   return i < 0 ? pills.length : i;
 }
+
+const HEX = /^#[0-9a-f]{6}$/i;
+
+/** Body colour for a pill: exact id > longest "prefix*" > `own`. Entries that are not #rrggbb are ignored. */
+export function colorFor(map: Readonly<Record<string, string>> | undefined, id: string, own: string): string {
+  if (!map) return own;
+  if (HEX.test(map[id] ?? "")) return map[id];
+  let best = "";
+  let hit = "";
+  for (const [k, v] of Object.entries(map)) {
+    if (k.length > 1 && k.endsWith("*") && id.startsWith(k.slice(0, -1)) && k.length > best.length && HEX.test(v)) { best = k; hit = v; }
+  }
+  return hit || own;
+}

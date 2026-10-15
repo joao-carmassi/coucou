@@ -4,7 +4,7 @@
 // (design/prototype/notch-buddy.html, the visual source of truth) — the Swift
 // arc angles produce a different shape.
 
-import { Ease, lerp, type EaseFn } from "../core/anim";
+import { Ease, lerp, oklabToRgb, rgbToOklab, type EaseFn } from "../core/anim";
 import { Sound } from "../core/sound";
 import type { BotEmoteName, BotStateName, BuiltinEmote } from "../core/layout";
 import { emoteDefOf, hasMood, moodOf, moodVersion, type BadgeKind, type EyeShape, type MoodDef } from "./moods";
@@ -65,6 +65,7 @@ const BASE_TOP: RGB = [0.929, 0.929, 0.937]; // #EDEDEF
 const BASE_BOTTOM: RGB = [0.769, 0.773, 0.792]; // #C4C5CA
 const INK = "rgb(26,20,18)"; // #1A1412
 const MINI_INK = "rgb(16,19,26)"; // #10131A
+const LIGHT_INK = "rgb(246,240,234)";
 
 const NO_MOTION = { bounces: false, scans: false, breathes: false, zz: false, sweat: false };
 const cfgs = new WeakMap<MoodDef, BotStateCfg>();
@@ -101,6 +102,31 @@ export function hexToRGB(hex: string): RGB {
   const v = parseInt(h, 16);
   return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];
 }
+
+/** Shaded body of a main Mochi with a custom colour: gradient ends in OKLab (+12 % / -10 % L) and the eye ink. */
+export function bodyShade(c: RGB): { top: RGB; bottom: RGB; ink: string } {
+  const [L, a, b] = rgbToOklab(c as [number, number, number]);
+  const lin = (v: number) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  const lum = 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
+  const clip = (t: number[]) => t.map((v) => Math.min(1, Math.max(0, v))) as unknown as RGB;
+  return {
+    top: clip(oklabToRgb([Math.min(1, L * 1.12), a, b])),
+    bottom: clip(oklabToRgb([L * 0.9, a, b])),
+    ink: lum < 0.32 ? LIGHT_INK : INK,
+  };
+}
+
+/** Loudness input (api.avatar.level): calls closer than LEVEL_GAP_MS are dropped; it decays to 0 in LEVEL_DECAY_MS. */
+export const LEVEL_GAP_MS = 33;
+export const LEVEL_DECAY_MS = 300;
+export const LEVEL_SQUASH = 0.06;
+export const levelAt = (v: number, at: number, nowMs: number) => Math.max(0, v * (1 - (nowMs - at) / LEVEL_DECAY_MS));
+
+/** Sideways look offset of an idle glance: only while idle and inside its window. */
+export const glanceOffset = (state: string, nowS: number, until: number, to: number) => (state === "idle" && nowS < until ? to : 0);
+
+/** Idle rest: true once `minutes` (0 = never) have passed since the last sign of life. */
+export const sleepDue = (sinceMs: number, nowMs: number, minutes: number) => minutes > 0 && nowMs - sinceMs >= minutes * 60_000;
 
 const rgba = (c: RGB, a = 1) =>
   `rgba(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)},${a})`;
@@ -183,6 +209,24 @@ export class BotEngine {
 
   lookX = 0;
   lookY = 0;
+
+  private lvV = 0;
+  private lvAt = -1e9;
+  private glanceTo = 0;
+  private glanceUntil = 0;
+  private nextGlance = now() + 6 + Math.random() * 8;
+
+  /** Loudness 0..1. False when dropped (too soon after the last one); 0 is never dropped. */
+  setLevel(v: number, nowMs = performance.now()): boolean {
+    const x = Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0;
+    if (x > 0 && nowMs - this.lvAt < LEVEL_GAP_MS) return false;
+    this.lvV = x;
+    this.lvAt = nowMs;
+    return true;
+  }
+  get level(): number {
+    return levelAt(this.lvV, this.lvAt, performance.now());
+  }
 
   lastTime = now();
   private t0 = now() - Math.random() * 5;
@@ -484,6 +528,7 @@ export class BotEngine {
       this.particles.length > 0 ||
       this.cfg.bounces || this.cfg.scans || this.cfg.breathes || this.cfg.zz || this.cfg.sweat ||
       this.isMini ||
+      this.level > 0.001 ||
       Math.abs(this.tgYaw - this.yaw) > 0.002 ||
       Math.abs(this.tgPitch - this.pitch) > 0.002 ||
       Math.abs(this.tgTilt - this.tilt) > 0.002 ||
@@ -557,6 +602,7 @@ export class BotEngine {
       tp = this.miniLookTarget.y * 0.5;
     }
 
+    ty += glanceOffset(this.state, n, this.glanceUntil, this.glanceTo);
     this.tgYaw = ty;
     this.tgPitch = tp;
     this.tgTilt = this.cfg.tilt;
@@ -583,6 +629,15 @@ export class BotEngine {
     }
 
     if (this.isMini && n > this.miniNextBehavior) this.doMiniBehaviorLoop();
+
+    // Idle life of the main Mochi: an occasional glance to the side, only while truly at rest.
+    if (!this.isMini && n > this.nextGlance) {
+      this.nextGlance = n + 6 + Math.random() * 10;
+      if (this.state === "idle") {
+        this.glanceTo = (Math.random() < 0.5 ? -1 : 1) * (0.35 + Math.random() * 0.3);
+        this.glanceUntil = n + 0.7 + Math.random() * 0.6;
+      }
+    }
 
     const kLook = 1 - Math.pow(0.0025, dt);
     if (!this.locks.has("yaw")) this.yaw += (this.tgYaw - this.yaw) * kLook;
@@ -678,7 +733,8 @@ export class BotEngine {
     x.save();
     x.translate(cx, cy);
     if (this.tilt !== 0) x.rotate(this.tilt);
-    x.scale(this.sx, this.sy);
+    const lv = this.isMini ? 0 : this.level;
+    x.scale(this.sx * (1 - LEVEL_SQUASH * 0.5 * lv), this.sy * (1 + LEVEL_SQUASH * lv));
 
     const body = this.bodyPath(rx, ry, R);
     this.drawBody(x, body, R, rx, ry);
@@ -737,15 +793,17 @@ export class BotEngine {
   }
 
   private drawBody(x: CanvasRenderingContext2D, body: Path2D, R: number, rx: number, ry: number) {
-    if (this.bodyColor) {
+    if (this.bodyColor && this.isMini) {
       // Mini bots: flat solid fill — no gradient, no reflection, no highlight
       x.fillStyle = rgba(this.bodyColor, 1);
       x.fill(body);
       return;
     }
+    // Main Mochi: his own cream, or the custom colour shaded the same way.
+    const shade = this.bodyColor ? bodyShade(this.bodyColor) : null;
     const g = x.createLinearGradient(rx * 0.7, -ry * 0.85, -rx * 0.8, ry * 0.9);
-    g.addColorStop(0, rgba(BASE_TOP));
-    g.addColorStop(1, rgba(BASE_BOTTOM));
+    g.addColorStop(0, rgba(shade?.top ?? BASE_TOP));
+    g.addColorStop(1, rgba(shade?.bottom ?? BASE_BOTTOM));
     x.fillStyle = g;
     x.fill(body);
 
@@ -781,7 +839,7 @@ export class BotEngine {
 
     x.save();
     x.clip(body);
-    const ink = this.isMini ? MINI_INK : INK;
+    const ink = this.isMini ? MINI_INK : this.bodyColor ? bodyShade(this.bodyColor).ink : INK;
     x.fillStyle = ink;
     x.strokeStyle = ink;
 
