@@ -51,7 +51,13 @@ export const Bridge = {
   /** Turns the OS presence watch on or off (one subscriber); on, it answers with the current state. */
   presenceWatch: (on: boolean) => command<Presence>("presence_watch", { on }),
 
+  /** Pretty JSON of the settings without secret-looking keys. */
+  exportSettings: () => command<string>("settings_export"),
+
+  /** Leaves safe mode: true when the stored module switches are back in effect. */
+  safeModeExit: () => command<boolean>("safe_mode_exit"),
+
   /** Tray → Pause. */
   setPaused: (paused: boolean) => command<void>("set_paused", { paused }),
 };
-
+

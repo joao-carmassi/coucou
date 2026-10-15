@@ -22,6 +22,9 @@ pub struct Settings {
     pub hide_when_busy: bool,
     /// Module switches by id; a missing id means the module's default.
     pub modules_enabled: BTreeMap<String, bool>,
+    /// Version whose onboarding was finished; empty = first run (the Hub opens on the onboarding).
+    #[serde(default = "legacy_onboarded")]
+    pub onboarded_version: String,
     /// Body colour per Mochi (pill id, "<prefix>*" or "main" -> #rrggbb).
     pub mochi_colors: BTreeMap<String, String>,
     /// Minutes of rest before the main Mochi sleeps. 0 = never.
@@ -30,6 +33,11 @@ pub struct Settings {
     /// kept so saving never drops them from an installed settings.json.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// A file without the key predates the Hub: counted as onboarded (only a fresh install, `Default`, is "").
+fn legacy_onboarded() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
 }
 
 fn default_compact_hide() -> f64 {
@@ -48,6 +56,7 @@ impl Default for Settings {
             focus_hold_minutes: 1.0,
             hide_when_busy: true,
             modules_enabled: Default::default(),
+            onboarded_version: String::new(),
             mochi_colors: Default::default(),
             mochi_sleep_minutes: 10.0,
             extra: Default::default(),
@@ -100,6 +109,34 @@ pub fn fill_defaults(catalog: &[crate::core::host::ModuleInfo], s: &mut Settings
     added
 }
 
+/// Keys that may hold credentials: /token|secret|password|api_?key|cookie/i, same as the Hub's import filter.
+fn secret_key(k: &str) -> bool {
+    let k = k.to_ascii_lowercase();
+    ["token", "secret", "password", "api_key", "apikey", "cookie"].iter().any(|s| k.contains(s))
+}
+
+/// Removes secret-looking keys at every depth.
+pub fn strip_secrets(v: &mut serde_json::Value) {
+    match v {
+        serde_json::Value::Object(m) => {
+            m.retain(|k, _| !secret_key(k));
+            m.values_mut().for_each(strip_secrets);
+        }
+        serde_json::Value::Array(a) => a.iter_mut().for_each(strip_secrets),
+        _ => {}
+    }
+}
+
+/// Pretty JSON of the settings for backup: no secret-looking keys, plus the app `version`.
+pub fn export_json(settings: &Settings, version: &str) -> String {
+    let mut v = serde_json::to_value(for_disk(settings, crate::core::safe_mode::real_modules().as_ref())).unwrap_or_default();
+    strip_secrets(&mut v);
+    if let Some(o) = v.as_object_mut() {
+        o.insert("version".into(), version.into());
+    }
+    serde_json::to_string_pretty(&v).unwrap_or_default()
+}
+
 /// `current` with the patch's top-level keys replaced; the rest (known fields and `extra`) is untouched.
 /// Err when a value has the wrong type for a known field: nothing is applied then.
 pub fn merge_patch(current: &Settings, patch: serde_json::Map<String, serde_json::Value>) -> Result<Settings, String> {
@@ -109,7 +146,7 @@ pub fn merge_patch(current: &Settings, patch: serde_json::Map<String, serde_json
 }
 
 pub fn save(settings: &Settings) -> std::io::Result<()> {
-    save_to(&for_disk(settings, crate::core::safe_mode::real_modules()))
+    save_to(&for_disk(settings, crate::core::safe_mode::real_modules().as_ref()))
 }
 
 /// Safe mode runs with a reduced switch map in memory; the stored one is what reaches the disk.
@@ -174,6 +211,32 @@ mod tests {
         let real: BTreeMap<String, bool> = [("x".to_string(), true), ("y".to_string(), true)].into();
         assert_eq!(for_disk(&s, Some(&real)).modules_enabled, real);
         assert_eq!(for_disk(&s, None).modules_enabled, s.modules_enabled);
+    }
+
+    #[test]
+    fn onboarding_only_for_fresh_installs() {
+        assert_eq!(Settings::default().onboarded_version, "", "fresh install");
+        let old: Settings = serde_json::from_str(r#"{"soundVolume":0.3}"#).unwrap();
+        assert!(!old.onboarded_version.is_empty(), "upgrading user is not onboarded again");
+        let set: Settings = serde_json::from_str(r#"{"onboardedVersion":"0.1.0"}"#).unwrap();
+        assert_eq!(set.onboarded_version, "0.1.0");
+    }
+
+    #[test]
+    fn export_drops_secret_keys_at_any_depth() {
+        let mut s = Settings::default();
+        s.extra.insert("githubToken".into(), "ghp_LEAK".into());
+        s.extra.insert("nested".into(), serde_json::json!({"apiKey": "k_LEAK", "API_KEY2": "x", "keep": 1, "list": [{"Cookie": "c_LEAK", "ok": true}]}));
+        s.extra.insert("clientSecret".into(), "s_LEAK".into());
+        s.extra.insert("idleOpen".into(), "vscode".into());
+        let out = export_json(&s, "9.9.9");
+        assert!(!out.contains("LEAK"), "{out}");
+        assert!(!out.contains("API_KEY2"));
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["version"], "9.9.9");
+        assert_eq!(v["idleOpen"], "vscode");
+        assert_eq!(v["nested"]["keep"], 1);
+        assert_eq!(v["nested"]["list"][0]["ok"], true);
     }
 
     #[test]

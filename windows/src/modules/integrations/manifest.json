@@ -7,48 +7,79 @@
     "order": 6,
     "settingsDefaults": {
       "githubMuted": []
-    }
+    },
+    "presets": [
+      "dev",
+      "tudo",
+      "vitrine"
+    ]
   },
   {
     "id": "vercel",
     "label": "Vercel",
     "default": false,
     "group": "Integrações",
-    "order": 7
+    "order": 7,
+    "presets": [
+      "dev",
+      "tudo",
+      "vitrine"
+    ]
   },
   {
     "id": "stripe",
     "label": "Stripe",
     "default": false,
     "group": "Integrações",
-    "order": 8
+    "order": 8,
+    "presets": [
+      "tudo",
+      "vitrine"
+    ]
   },
   {
     "id": "n8n",
     "label": "n8n",
     "default": false,
     "group": "Integrações",
-    "order": 9
+    "order": 9,
+    "presets": [
+      "dev",
+      "tudo",
+      "vitrine"
+    ]
   },
   {
     "id": "resend",
     "label": "Resend",
     "default": false,
     "group": "Integrações",
-    "order": 10
+    "order": 10,
+    "presets": [
+      "tudo",
+      "vitrine"
+    ]
   },
   {
     "id": "calcom",
     "label": "Cal.com",
     "default": false,
     "group": "Integrações",
-    "order": 11
+    "order": 11,
+    "presets": [
+      "tudo",
+      "vitrine"
+    ]
   },
   {
     "id": "notion",
     "label": "Notion",
     "default": false,
     "group": "Integrações",
-    "order": 12
+    "order": 12,
+    "presets": [
+      "tudo",
+      "vitrine"
+    ]
   }
 ]

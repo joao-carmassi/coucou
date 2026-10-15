@@ -74,6 +74,8 @@ fn save_settings(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>,
             settings.modules_enabled = current.modules_enabled.clone();
         }
         host.on_save(&current, &mut settings);
+        // A changed switch map during safe mode is the user's choice: keep it (and leave safe mode) instead of losing it on exit.
+        core::safe_mode::adopt(&settings.modules_enabled, &current.modules_enabled);
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
         *current = settings.clone();
@@ -99,6 +101,27 @@ fn save_settings(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>,
     // Keep the other window in step (island ⇄ settings window).
     let _ = app.emit("settings-changed", settings);
     Ok(())
+}
+
+/// Hub backup: settings as pretty JSON, secret-looking keys removed, with the app version.
+#[tauri::command]
+fn settings_export(shared: State<Shared>) -> String {
+    settings::export_json(&shared.settings.lock().unwrap(), env!("CARGO_PKG_VERSION"))
+}
+
+/// Hub banner button: the stored module switches replace the reduced ones, the marker is cleared and the host syncs.
+#[tauri::command]
+fn safe_mode_exit(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>) -> bool {
+    let settings = {
+        let mut current = shared.settings.lock().unwrap();
+        if !core::safe_mode::exit(&mut current.modules_enabled) {
+            return false;
+        }
+        current.clone()
+    };
+    host.sync(&app, &settings);
+    let _ = app.emit("settings-changed", settings);
+    true
 }
 
 /// Hidden island → shrink the window to the invisible wake strip and park the
@@ -225,8 +248,8 @@ fn create_settings_window(app: &AppHandle) {
     match WebviewWindowBuilder::new(app, "settings", url)
         .additional_browser_args(BROWSER_ARGS)
         .title("Configurações — Coucou")
-        .inner_size(560.0, 680.0)
-        .min_inner_size(460.0, 480.0)
+        .inner_size(780.0, 680.0)
+        .min_inner_size(620.0, 480.0)
         .resizable(true)
         .visible(false)
         .center()
@@ -291,6 +314,8 @@ pub fn run() {
     let core = host::handler(tauri::generate_handler![
         boot,
         save_settings,
+        settings_export,
+        safe_mode_exit,
         set_collapsed,
         set_island_rect,
         focus_window,
@@ -333,7 +358,7 @@ pub fn run() {
             if core::safe_mode::begin(&loaded.modules_enabled) {
                 log::line("[safe-mode] repeated unclean starts: only the safe set is on this run".to_string());
                 let reduced: BTreeMap<String, bool> =
-                    modules::CATALOG.iter().map(|m| (m.id.to_string(), modules::SAFE_MODULES.contains(&m.id))).collect();
+                    modules::CATALOG.iter().map(|m| (m.id.to_string(), modules::ESSENTIAL.contains(&m.id))).collect();
                 loaded.modules_enabled = reduced.clone();
                 handle.state::<Shared>().settings.lock().unwrap().modules_enabled = reduced;
             }
@@ -355,6 +380,11 @@ pub fn run() {
             }
             gate.set_active(true);
             island::spawn_cursor_poll(handle.clone(), gate.clone());
+
+            // First run: the Hub opens on its onboarding (shown while onboardedVersion is empty).
+            if loaded.onboarded_version.is_empty() {
+                show_settings_window(&handle);
+            }
 
             log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
             handle.state::<ModuleHost>().sync(&handle, &loaded);

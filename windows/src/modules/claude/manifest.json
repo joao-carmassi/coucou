@@ -9,5 +9,11 @@
     "claudeConfigDir": "",
     "idleOpen": "",
     "alertHotkey": ""
-  }
+  },
+  "presets": [
+    "essencial",
+    "dev",
+    "tudo",
+    "vitrine"
+  ]
 }

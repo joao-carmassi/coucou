@@ -18,15 +18,51 @@ fn reset(dir: &Path) {
     let _ = std::fs::write(dir.join(FILE), "0");
 }
 
-static REAL: std::sync::OnceLock<std::collections::BTreeMap<String, bool>> = std::sync::OnceLock::new();
+type Switches = std::collections::BTreeMap<String, bool>;
+
+/// Some while this run is in safe mode; `exit` empties it so leaving needs no restart.
+static REAL: std::sync::Mutex<Option<Switches>> = std::sync::Mutex::new(None);
 
 /// The module switches as stored on disk while this run is in safe mode: `settings::save` writes these, never the reduced set.
-pub fn real_modules() -> Option<&'static std::collections::BTreeMap<String, bool>> {
-    REAL.get()
+pub fn real_modules() -> Option<Switches> {
+    REAL.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
 pub fn active() -> bool {
-    REAL.get().is_some()
+    REAL.lock().unwrap_or_else(|e| e.into_inner()).is_some()
+}
+
+/// Safe mode off: `modules` gets the stored switches back and the launch marker is cleared. False when not in safe mode.
+pub fn exit(modules: &mut Switches) -> bool {
+    let left = take_real(&REAL, modules);
+    if left {
+        clean_exit();
+    }
+    left
+}
+
+/// The user changed the module switches while safe mode is on: that choice is kept, so safe mode ends.
+/// A save that repeats the reduced map (any other settings save) changes nothing.
+pub fn adopt(new: &Switches, old: &Switches) -> bool {
+    let left = adopt_in(&REAL, new, old);
+    if left {
+        clean_exit();
+    }
+    left
+}
+
+fn adopt_in(slot: &std::sync::Mutex<Option<Switches>>, new: &Switches, old: &Switches) -> bool {
+    new != old && take_real(slot, &mut Switches::new())
+}
+
+fn take_real(slot: &std::sync::Mutex<Option<Switches>>, modules: &mut Switches) -> bool {
+    match slot.lock().unwrap_or_else(|e| e.into_inner()).take() {
+        Some(real) => {
+            *modules = real;
+            true
+        }
+        None => false,
+    }
 }
 
 /// A normal quit is not a crash.
@@ -40,7 +76,7 @@ pub fn begin(stored: &std::collections::BTreeMap<String, bool>) -> bool {
     let _ = crate::core::platform::ensure_private_dir(&dir);
     let safe = bump(&dir) >= THRESHOLD;
     if safe {
-        let _ = REAL.set(stored.clone());
+        *REAL.lock().unwrap_or_else(|e| e.into_inner()) = Some(stored.clone());
     }
     // Single short-lived core thread: sleeps once, resets the marker, exits.
     std::thread::spawn(move || {
@@ -68,5 +104,27 @@ mod tests {
         std::fs::write(dir.join(FILE), "junk").unwrap();
         assert_eq!(bump(&dir), 0, "garbage counts as clean");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn changed_switches_end_safe_mode_unchanged_do_not() {
+        let reduced = Switches::from([("a".to_string(), true)]);
+        let slot = std::sync::Mutex::new(Some(Switches::from([("a".to_string(), true), ("b".to_string(), true)])));
+        assert!(!adopt_in(&slot, &reduced, &reduced), "same map: still safe mode");
+        assert!(slot.lock().unwrap().is_some());
+        let chosen = Switches::from([("a".to_string(), false)]);
+        assert!(adopt_in(&slot, &chosen, &reduced));
+        assert!(slot.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn leaving_restores_stored_switches_once() {
+        let slot = std::sync::Mutex::new(Some(Switches::from([("a".to_string(), true), ("b".to_string(), false)])));
+        let mut live = Switches::from([("a".to_string(), false)]);
+        assert!(take_real(&slot, &mut live));
+        assert_eq!(live, Switches::from([("a".to_string(), true), ("b".to_string(), false)]));
+        let mut again = Switches::new();
+        assert!(!take_real(&slot, &mut again), "second exit is a no-op");
+        assert!(again.is_empty());
     }
 }

@@ -44,6 +44,8 @@ export interface Settings {
   autostart: boolean;
   /** Per-module switches; a missing key means the module default. */
   modulesEnabled: Record<string, boolean>;
+  /** Version whose onboarding was finished; "" = first run. */
+  onboardedVersion: string;
   /** Body colour per Mochi: key = pill id | "<prefix>*" | "main", value #rrggbb (core/pills.ts colorFor). */
   mochiColors: Record<string, string>;
   /** Minutes of rest before the main Mochi dozes off; 0 = never. */
@@ -60,6 +62,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hideWhenBusy: true,
   autostart: false,
   modulesEnabled: {},
+  onboardedVersion: "",
   mochiColors: {},
   mochiSleepMinutes: 10,
 };
