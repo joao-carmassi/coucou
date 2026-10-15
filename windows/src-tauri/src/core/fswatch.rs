@@ -7,7 +7,7 @@ use std::sync::{atomic::Ordering, Arc};
 use std::time::{Duration, Instant};
 
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0};
+use windows::Win32::Foundation::{CloseHandle, ERROR_NOTIFY_ENUM_DIR, HANDLE, WAIT_OBJECT_0};
 use windows::Win32::Storage::FileSystem::*;
 use windows::Win32::System::Threading::{CreateEventW, SetEvent, WaitForMultipleObjects};
 use windows::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
@@ -46,7 +46,9 @@ pub fn watch(
     debounce_ms: u64,
     on_change: impl Fn(Vec<PathBuf>) + Send + Sync + 'static,
 ) -> Guard {
-    let stop_ev = Arc::new(event().expect("CreateEventW"));
+    let Some(stop_ev) = event().map(Arc::new) else {
+        return Guard(Arc::new(Ev(HANDLE::default()))); // inert: CloseHandle on null just fails
+    };
     let guard = Guard(stop_ev.clone());
     let dir = dir.to_path_buf();
     spawner.spawn(move |host_stop| run(&dir, recursive, debounce_ms, &stop_ev, &host_stop, &on_change));
@@ -76,22 +78,26 @@ fn run(
     };
     let Ok(h) = h else { return };
     let Some(io_ev) = event() else { unsafe { let _ = CloseHandle(h); } return };
-    let mut buf = vec![0u32; 16 * 1024]; // 64 KiB, DWORD-aligned
+    // Owns the handle, buffer and OVERLAPPED: any exit (break, panic) cancels and waits before they are freed.
+    let mut rd = Reader { h, ov: Box::new(OVERLAPPED { hEvent: io_ev.0, ..Default::default() }), buf: vec![0u32; 16 * 1024], armed: false };
     let mut pending: Vec<PathBuf> = Vec::new();
     let mut deadline: Option<Instant> = None;
+    let mut first: Option<Instant> = None; // cap: continuous writes still fire after 4x debounce
+    let win = Duration::from_millis(debounce_ms);
     let filter = FILE_NOTIFY_CHANGE_FILE_NAME
         | FILE_NOTIFY_CHANGE_DIR_NAME
         | FILE_NOTIFY_CHANGE_SIZE
         | FILE_NOTIFY_CHANGE_LAST_WRITE;
 
     'outer: loop {
-        let mut ov = OVERLAPPED { hEvent: io_ev.0, ..Default::default() };
         unsafe {
             let _ = windows::Win32::System::Threading::ResetEvent(io_ev.0);
-            if ReadDirectoryChangesW(h, buf.as_mut_ptr().cast(), (buf.len() * 4) as u32, recursive, filter, None, Some(&mut ov), None).is_err() {
+            *rd.ov = OVERLAPPED { hEvent: io_ev.0, ..Default::default() };
+            if ReadDirectoryChangesW(rd.h, rd.buf.as_mut_ptr().cast(), (rd.buf.len() * 4) as u32, recursive, filter, None, Some(&mut *rd.ov), None).is_err() {
                 break;
             }
         }
+        rd.armed = true;
         loop {
             let timeout = match deadline {
                 // idle: block forever; pending: only until the quiet window ends
@@ -104,29 +110,48 @@ fn run(
             }
             if r.0 == WAIT_OBJECT_0.0 {
                 let mut n = 0u32;
-                if unsafe { GetOverlappedResult(h, &ov, &mut n, false) }.is_err() {
-                    break 'outer;
+                let res = unsafe { GetOverlappedResult(rd.h, &*rd.ov, &mut n, false) };
+                rd.armed = false;
+                match res {
+                    Ok(()) => collect(&rd.buf, n as usize, dir, &mut pending),
+                    Err(e) if e.code() == ERROR_NOTIFY_ENUM_DIR.to_hresult() => pending.push(dir.to_path_buf()),
+                    Err(_) => break 'outer,
                 }
-                collect(&buf, n as usize, dir, &mut pending);
-                deadline = Some(Instant::now() + Duration::from_millis(debounce_ms));
+                let now = Instant::now();
+                let f = *first.get_or_insert(now);
+                deadline = Some((now + win).min(f + win * 4));
                 continue 'outer; // re-arm the read; the window restarts on each burst
             }
-            // timeout: quiet window elapsed
+            // timeout: quiet window (or cap) elapsed
             if !pending.is_empty() {
                 pending.sort();
                 pending.dedup();
-                on_change(std::mem::take(&mut pending));
+                let batch = std::mem::take(&mut pending);
+                // a panicking callback must not leave the watch half torn down
+                let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| on_change(batch)));
             }
             deadline = None;
+            first = None;
         }
     }
-    unsafe {
-        let _ = CancelIoEx(h, None);
-        let mut n = 0u32;
-        let _ = GetOverlappedResult(h, &OVERLAPPED { hEvent: io_ev.0, ..Default::default() }, &mut n, false);
-        // the kernel may still write into `buf`/`ov` until the cancel completes: wait it out
-        let _ = WaitForMultipleObjects(&[io_ev.0], false, 100);
-        let _ = CloseHandle(h);
+}
+
+struct Reader {
+    h: HANDLE,
+    ov: Box<OVERLAPPED>,
+    buf: Vec<u32>, // 64 KiB, DWORD-aligned
+    armed: bool,
+}
+impl Drop for Reader {
+    fn drop(&mut self) {
+        unsafe {
+            if self.armed {
+                let _ = CancelIoEx(self.h, Some(&*self.ov));
+                let mut n = 0u32;
+                let _ = GetOverlappedResult(self.h, &*self.ov, &mut n, true); // kernel is done with buf/ov after this
+            }
+            let _ = CloseHandle(self.h);
+        }
     }
 }
 
@@ -181,6 +206,26 @@ mod tests {
         assert_eq!(v.len(), 1, "{v:?}");
         assert_eq!(v[0], vec![d.join("a.txt")]);
         drop(v);
+        drop(guard);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn callback_panic_does_not_kill_the_watch() {
+        let d = tmp("panic");
+        let tasks = Arc::new(TaskSet::default());
+        let n = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let n2 = n.clone();
+        let guard = watch(&d, false, Spawner::for_test(&tasks), 100, move |_| {
+            if n2.fetch_add(1, Ordering::SeqCst) == 0 { panic!("boom") }
+        });
+        std::thread::sleep(Duration::from_millis(100));
+        std::fs::write(d.join("a"), "1").unwrap();
+        std::thread::sleep(Duration::from_millis(500));
+        std::fs::write(d.join("b"), "1").unwrap();
+        std::thread::sleep(Duration::from_millis(500));
+        assert_eq!(n.load(Ordering::SeqCst), 2);
+        assert_eq!(tasks.live(), 1);
         drop(guard);
         let _ = std::fs::remove_dir_all(&d);
     }
