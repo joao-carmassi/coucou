@@ -22,8 +22,8 @@ const root = document.getElementById("settings-root")!;
 
 /** Only the core's own fields: module keys are saved by their sections as patches, and a stale copy here must not undo them. */
 async function save() {
-  const { soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, autostart, modulesEnabled } = settings;
-  await Bridge.saveSettings({ soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, autostart, modulesEnabled });
+  const { soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, hideWhenBusy, autostart, modulesEnabled } = settings;
+  await Bridge.saveSettings({ soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, hideWhenBusy, autostart, modulesEnabled });
 }
 
 // ── Reusable bits ─────────────────────────────────────────────────────────────
@@ -130,6 +130,10 @@ function generalSection(): HTMLElement {
     h("div", { class: "row" },
       h("label", { text: "A ilha fica em" }),
       screen,
+    ),
+    h("div", { class: "row" },
+      h("label", { text: "Ocultar durante tela cheia e chamadas" }),
+      toggle(settings.hideWhenBusy, (v) => { settings.hideWhenBusy = v; void save(); }),
     ),
     h("div", { class: "row" },
       h("label", { text: "Iniciar com o Windows" }),

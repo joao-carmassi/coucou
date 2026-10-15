@@ -39,6 +39,8 @@ export interface Settings {
   /** Minutes a held task view stays the place the island reopens on; 0 = off. */
   focusHoldMinutes: number;
   screen: "primary" | "cursor";
+  /** Hide the island (and hold non-urgent notices) while a full-screen app or a call is in front. */
+  hideWhenBusy: boolean;
   autostart: boolean;
   /** Per-module switches; a missing key means the module default. */
   modulesEnabled: Record<string, boolean>;
@@ -51,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
   compactHideInterval: 60,
   focusHoldMinutes: 1,
   screen: "primary",
+  hideWhenBusy: true,
   autostart: false,
   modulesEnabled: {},
 };

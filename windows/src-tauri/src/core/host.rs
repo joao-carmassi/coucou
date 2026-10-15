@@ -196,7 +196,6 @@ fn run_stoppers(list: &Mutex<Vec<Stopper>>) {
 impl ModuleCtx {
     /// Runs `f` once when the module stops (after `Module::stop`, newest registration first, before unlisten).
     /// Registered after the stop began: runs immediately, so a late subscriber never leaks.
-    #[allow(dead_code)] // first consumers (presence, relay) land in later tasks
     pub fn on_stop<F: FnOnce() + Send + 'static>(&self, f: F) {
         if self.stop.load(Ordering::SeqCst) {
             f();

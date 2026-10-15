@@ -10,6 +10,7 @@ pub mod hotkeys;
 pub mod island;
 pub mod log;
 pub mod platform;
+pub mod presence;
 pub mod safe_mode;
 pub mod secrets;
 pub mod settings;
