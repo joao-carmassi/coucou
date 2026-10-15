@@ -68,3 +68,50 @@ test("timer module is off by default, on when enabled", async () => {
   assert.equal(resolveEnabled(MODULE_INFO, {}).timer, false);
   assert.equal(resolveEnabled(MODULE_INFO, { timer: true }).timer, true);
 });
+
+import { pomoNext, pomoStart, pomoCfg, pomoMinutes, POMO_DEFAULTS, type PomoState } from "../src/modules/timer/pomodoro.ts";
+import { nextAlarm, type Alarm } from "../src/modules/timer/alarms.ts";
+
+test("pomodoro: 4 cycles, long break on the 4th, then back to cycle 1", () => {
+  const seq: string[] = [];
+  let s: PomoState = pomoStart();
+  for (let i = 0; i < 9; i++) { seq.push(`${s.phase}${s.cycle}`); s = pomoNext(s, POMO_DEFAULTS); }
+  assert.deepEqual(seq, ["work1", "short1", "work2", "short2", "work3", "short3", "work4", "long4", "work1"]);
+  assert.equal(pomoMinutes({ phase: "long", cycle: 4 }, POMO_DEFAULTS), 15);
+  assert.equal(pomoNext({ phase: "work", cycle: 2 }, { ...POMO_DEFAULTS, every: 2 }).phase, "long");
+});
+
+test("pomodoro: bad settings fall back to defaults", () => {
+  assert.deepEqual(pomoCfg({ work: 0, short: "x", long: 30, every: 99 }), { ...POMO_DEFAULTS, long: 30 });
+  assert.deepEqual(pomoCfg(null), POMO_DEFAULTS);
+});
+
+const al = (time: string, days: number[] = [], on = true): Alarm => ({ id: time, time, label: "", days, on });
+
+test("alarms: today, tomorrow across midnight, disabled, equal time", () => {
+  const now = new Date(2026, 0, 14, 23, 30, 0); // Wednesday
+  assert.equal(nextAlarm([al("23:45")], now)!.at, new Date(2026, 0, 14, 23, 45).getTime());
+  assert.equal(nextAlarm([al("07:00")], now)!.at, new Date(2026, 0, 15, 7, 0).getTime());
+  assert.equal(nextAlarm([al("23:30")], now)!.at, new Date(2026, 0, 15, 23, 30).getTime()); // not "now"
+  assert.equal(nextAlarm([al("07:00", [], false)], now), null);
+  assert.equal(nextAlarm([al("07:00"), al("07:00")], now)!.alarms.length, 2);
+});
+
+test("alarms: day filter (0 = Sunday) and month/year rollover", () => {
+  const now = new Date(2026, 11, 31, 12, 0, 0); // Thursday
+  assert.equal(nextAlarm([al("09:00", [0])], now)!.at, new Date(2027, 0, 3, 9, 0).getTime()); // Sunday
+  assert.equal(nextAlarm([al("13:00", [4])], now)!.at, new Date(2026, 11, 31, 13, 0).getTime());
+  assert.equal(nextAlarm([al("11:00", [4])], now)!.at, new Date(2027, 0, 7, 11, 0).getTime()); // a week later
+});
+
+test("alarms: DST in America/New_York (spring gap, fall overlap)", () => {
+  // TZ is read by V8 when the zone is first needed; set it before any Date work in this test.
+  process.env.TZ = "America/New_York";
+  const iso = (ms: number) => new Date(ms).toISOString();
+  // 2026-03-08 02:30 does not exist: the Date constructor rolls it to 03:30 EDT (07:30Z), once, never skipping the day.
+  assert.equal(iso(nextAlarm([al("02:30")], new Date(2026, 2, 8, 0, 10))!.at), "2026-03-08T07:30:00.000Z");
+  assert.equal(iso(nextAlarm([al("08:15")], new Date(2026, 2, 7, 20, 0))!.at), "2026-03-08T12:15:00.000Z"); // 08:15 EDT
+  // Fall back 2026-11-01: 01:30 happens twice; the next one after 01:00 EDT (05:00Z) is the first (EDT, 05:30Z).
+  assert.equal(iso(nextAlarm([al("01:30")], new Date(Date.UTC(2026, 10, 1, 5, 0)))!.at), "2026-11-01T05:30:00.000Z");
+  assert.equal(iso(nextAlarm([al("08:15")], new Date(2026, 9, 31, 20, 0))!.at), "2026-11-01T13:15:00.000Z"); // 08:15 EST
+});

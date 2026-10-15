@@ -16,7 +16,7 @@ const loadCatalog = async () => {
   return {
     MODULE_INFO: buildCatalog([
       { id: "dummy", label: "Dummy", default: true, order: 200 },
-      { id: "timer", label: "Timer", default: true, order: 210 },
+      { id: "timer", label: "Timer", default: true, order: 210, settingsDefaults: { timerPomodoro: { work: 25, short: 5, long: 15, every: 4 }, timerPomodoroAuto: true, timerFocusPomodoro: false, timerAlarms: [] } },
       { id: "media", label: "Mídia", default: true, order: 220 },
     ], true),
   };
@@ -26,6 +26,7 @@ import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
 import { State } from "../../src/core/state";
 import { Holds, Last } from "../../src/core/holds";
+import { Sound } from "../../src/core/sound";
 
 let island: Island;
 const tick = (ms: number) => vi.advanceTimersByTime(ms);
@@ -163,5 +164,54 @@ describe("media: implicit focus only", () => {
     expect(State.view).toBe("media");
     folded();
     goHome();
+  });
+});
+
+describe("timer pomodoro and alarms", () => {
+  const saved = () => ({ p: (State.settings as any).timerPomodoro, a: (State.settings as any).timerAlarms });
+  const put = (o: Record<string, unknown>) => { State.settings = { ...State.settings, ...o } as typeof State.settings; };
+  let orig: ReturnType<typeof saved>;
+  beforeAll(() => { orig = saved(); });
+  afterAll(() => put({ timerPomodoro: orig.p, timerAlarms: orig.a }));
+
+  it("pomodoro crosses a phase keeping the hold; Parar releases it", () => {
+    put({ timerPomodoro: { work: 5, short: 5, long: 15, every: 4 } });
+    api().island.open("timer"); tick(10);
+    click("button", "Pomodoro"); tick(1100);
+    expect(document.querySelector(".timer-label")!.textContent).toContain("Foco · ciclo 1/4");
+    api().island.open("dummy-a"); tick(10); folded();
+    tick(5 * 60_000 + 10); // work -> short break, auto-started
+    Last.clear();
+    reopen();
+    expect(State.view).toBe("timer");
+    folded();
+    api().island.open("timer"); tick(1100);
+    expect(document.querySelector(".timer-label")!.textContent).toContain("Pausa curta");
+    click("button", "Parar");
+    folded(); goHome(); reopen();
+    expect(State.view).toBe(State.defaultView());
+    folded();
+  });
+
+  it("an alarm rings once at its time (one timeout), nothing after module stop", () => {
+    const play = vi.spyOn(Sound, "play").mockImplementation(() => {});
+    const at = new Date(Date.now() + 3 * 60_000);
+    const hhmm = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+    put({ timerAlarms: [{ id: "a", time: hhmm, label: "x", days: [], on: true }] });
+    Registry.apply({ dummy: true, timer: false, media: true });
+    Registry.apply({ dummy: true, timer: true, media: true }); // start() arms from settings
+    tick(4 * 60_000);
+    expect(play.mock.calls.filter((c) => c[0] === "alert")).toHaveLength(1);
+    tick(10 * 60_000);
+    expect(play.mock.calls.filter((c) => c[0] === "alert")).toHaveLength(1);
+    // Armed again for tomorrow, then stopped: the module leaves no pending timer behind.
+    const withTimer = vi.getTimerCount();
+    Registry.apply({ dummy: true, timer: false, media: true });
+    expect(vi.getTimerCount()).toBeLessThan(withTimer);
+    play.mockClear();
+    tick(25 * 3600_000);
+    expect(play.mock.calls.filter((c) => c[0] === "alert")).toHaveLength(0);
+    Registry.apply({ dummy: true, timer: true, media: true });
+    play.mockRestore();
   });
 });
