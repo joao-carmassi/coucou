@@ -22,8 +22,8 @@ const root = document.getElementById("settings-root")!;
 
 /** Only the core's own fields: module keys are saved by their sections as patches, and a stale copy here must not undo them. */
 async function save() {
-  const { soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, autostart, modulesEnabled } = settings;
-  await Bridge.saveSettings({ soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, autostart, modulesEnabled });
+  const { soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, autostart, modulesEnabled, mochiColors, mochiSleepMinutes } = settings;
+  await Bridge.saveSettings({ soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, autostart, modulesEnabled, mochiColors, mochiSleepMinutes });
 }
 
 // ── Reusable bits ─────────────────────────────────────────────────────────────
@@ -36,6 +36,47 @@ function toggle(on: boolean, onChange: (v: boolean) => void): HTMLElement {
     onChange(next);
   });
   return el;
+}
+
+/** Per-Mochi body colours: "main" plus free-text keys (pill id or "prefix*"), each a #rrggbb picker. */
+function colorsRows(): HTMLElement {
+  const box = h("div", {});
+  const pending = new Set<string>();
+  const render = () => {
+    const map = settings.mochiColors ?? {};
+    const rows = ["main", ...new Set([...Object.keys(map), ...pending])].filter((k, i, a) => k !== "main" || i === 0 || a.indexOf(k) === i).map((k) => {
+      const pick = h("input", { type: "color", value: map[k] ?? "#ededef" }) as HTMLInputElement;
+      pick.addEventListener("change", () => {
+        if (!/^#[0-9a-f]{6}$/i.test(pick.value)) return;
+        settings.mochiColors = { ...settings.mochiColors, [k]: pick.value };
+        pending.delete(k);
+        void save();
+      });
+      const row = h("div", { class: "row" }, h("label", { text: k === "main" ? "Mochi principal" : k }), pick);
+      const clear = h("button", { text: "Padrão" });
+      clear.addEventListener("click", () => {
+        const rest = { ...settings.mochiColors };
+        delete rest[k];
+        pending.delete(k);
+        settings.mochiColors = rest;
+        void save();
+        render();
+      });
+      row.append(clear);
+      return row;
+    });
+    const key = h("input", { type: "text", placeholder: "id da pílula ou prefixo*", style: "width:180px" }) as HTMLInputElement;
+    const add = h("button", { text: "Adicionar cor" });
+    add.addEventListener("click", () => {
+      const k = key.value.trim();
+      if (!k || k.length > 64) return;
+      pending.add(k); // saved once its picker changes
+      render();
+    });
+    box.replaceChildren(...rows, h("div", { class: "row" }, key, add));
+  };
+  render();
+  return box;
 }
 
 // ── General section ───────────────────────────────────────────────────────────
@@ -91,6 +132,17 @@ function generalSection(): HTMLElement {
     void save();
   });
 
+  const sleepMin = h("input", {
+    type: "number", min: "0", max: "240", step: "1",
+    value: String(Math.round(settings.mochiSleepMinutes ?? 10)),
+    style: "width:72px",
+  }) as HTMLInputElement;
+  sleepMin.addEventListener("change", () => {
+    settings.mochiSleepMinutes = Math.max(0, Math.min(240, Math.round(Number(sleepMin.value)) || 0));
+    sleepMin.value = String(settings.mochiSleepMinutes);
+    void save();
+  });
+
   const screen = h("select", {}) as HTMLSelectElement;
   screen.append(
     h("option", { value: "primary", text: "Tela principal" }),
@@ -131,6 +183,12 @@ function generalSection(): HTMLElement {
       h("label", { text: "A ilha fica em" }),
       screen,
     ),
+    h("div", { class: "row" },
+      h("label", { text: "Dormir após" }),
+      sleepMin,
+      h("span", { class: "hint", text: "minutos parado (0 = nunca)" }),
+    ),
+    colorsRows(),
     h("div", { class: "row" },
       h("label", { text: "Iniciar com o Windows" }),
       toggle(settings.autostart, (v) => { settings.autostart = v; void save(); }),

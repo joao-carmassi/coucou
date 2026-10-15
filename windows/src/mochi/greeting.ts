@@ -3,6 +3,7 @@
 
 import { wipe } from "../kit/canvas";
 import { Sound } from "../core/sound";
+import { State } from "../core/state";
 import { COMPACT_BOT_CX, NOTCH_H, NOTCH_W, compactWidth } from "../core/layout";
 
 // ── Timing (mirrors greeting-v2.html `T`) ─────────────────────────────────────
@@ -478,6 +479,12 @@ function drawMinis(x: CanvasRenderingContext2D, alpha: number) {
   });
 }
 
+/** Greeting v2 line: time of day plus how many pills want a look (mood other than idle). Pure. */
+export function greetingLine(hour: number, busy: number): string {
+  const hi = hour < 5 ? "Boa madrugada" : hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+  return busy > 0 ? `${hi} · ${busy} ${busy === 1 ? "aviso" : "avisos"}` : hi;
+}
+
 // ── Controller ────────────────────────────────────────────────────────────────
 
 /**
@@ -555,6 +562,14 @@ export class Greeting {
       rr(x, CARD.x, CARD.y, CARD.w, CARD.h, CARD_R);
       x.clip();
       drawParticles(x, t, p);
+      x.restore();
+
+      x.save();
+      x.globalAlpha = p.card;
+      x.fillStyle = "rgba(255,255,255,0.78)";
+      x.font = "600 13px system-ui, sans-serif";
+      x.textBaseline = "middle";
+      x.fillText(greetingLine(new Date().getHours(), State.pills.filter((q) => q.mood !== "idle").length), CARD.x + 22, 92, 200);
       x.restore();
     } else if (Number.isFinite(this.tc) && t >= this.tc) {
       drawParticles(x, t, p);
