@@ -17,6 +17,8 @@ export interface BootInfo {
   cursorPoll: boolean;
   /** Which modules are on (resolved by Rust). */
   modules: Record<string, boolean>;
+  /** True when repeated unclean starts put this run in safe mode (only the safe module set is on, in memory). */
+  safeMode: boolean;
 }
 
 export const Bridge = {

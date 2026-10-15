@@ -100,11 +100,36 @@ pub fn merge_patch(current: &Settings, patch: serde_json::Map<String, serde_json
 }
 
 pub fn save(settings: &Settings) -> std::io::Result<()> {
+    save_to(&for_disk(settings, crate::core::safe_mode::real_modules()))
+}
+
+/// Safe mode runs with a reduced switch map in memory; the stored one is what reaches the disk.
+fn for_disk(settings: &Settings, real: Option<&BTreeMap<String, bool>>) -> Settings {
+    let mut s = settings.clone();
+    if let Some(r) = real {
+        s.modules_enabled = r.clone();
+    }
+    s
+}
+
+fn save_to(settings: &Settings) -> std::io::Result<()> {
     let dir = config_dir();
     crate::core::platform::ensure_private_dir(&dir)?;
     let json = serde_json::to_vec_pretty(settings)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-    std::fs::write(settings_path(), json)
+    write_atomic(&settings_path(), &json)
+}
+
+static SAVE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Temp file in the same dir, then rename over the target (replaces on Windows): a crash never leaves a half file.
+fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    let _g = SAVE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(&tmp, path).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })
 }
 
 #[cfg(test)]
@@ -119,6 +144,27 @@ mod tests {
         for (k, v) in want.as_object().unwrap() {
             assert_eq!(back.get(k), Some(v), "key {k}");
         }
+    }
+
+    #[test]
+    fn atomic_write_keeps_last_and_no_tmp() {
+        let dir = std::env::temp_dir().join(format!("coucou-atomic-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("settings.json");
+        write_atomic(&f, b"one").unwrap();
+        write_atomic(&f, b"two").unwrap();
+        assert_eq!(std::fs::read_to_string(&f).unwrap(), "two");
+        assert!(!dir.join("settings.json.tmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn safe_mode_never_reaches_the_disk() {
+        let mut s = Settings::default();
+        s.modules_enabled.insert("x".into(), false);
+        let real: BTreeMap<String, bool> = [("x".to_string(), true), ("y".to_string(), true)].into();
+        assert_eq!(for_disk(&s, Some(&real)).modules_enabled, real);
+        assert_eq!(for_disk(&s, None).modules_enabled, s.modules_enabled);
     }
 
     #[test]

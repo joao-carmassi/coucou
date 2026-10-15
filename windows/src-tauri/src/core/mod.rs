@@ -9,5 +9,7 @@ pub mod hotkeys;
 pub mod island;
 pub mod log;
 pub mod platform;
+pub mod safe_mode;
+pub mod secrets;
 pub mod settings;
 pub mod tray;

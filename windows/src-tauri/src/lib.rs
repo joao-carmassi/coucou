@@ -35,6 +35,7 @@ pub struct BootInfo {
     /// the cursor from its own mouse events.
     cursor_poll: bool,
     modules: BTreeMap<String, bool>,
+    safe_mode: bool,
 }
 
 #[tauri::command]
@@ -51,6 +52,7 @@ fn boot(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>) -> BootI
         version: env!("CARGO_PKG_VERSION").to_string(),
         cursor_poll: platform::CURSOR_POLL,
         modules: host.state(),
+        safe_mode: core::safe_mode::active(),
     }
 }
 
@@ -75,11 +77,12 @@ fn save_settings(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>,
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
         *current = settings.clone();
+        // Saved inside the lock so two saves reach the disk in the order they were merged.
+        if let Err(err) = settings::save(&settings) {
+            eprintln!("[coucou] could not save settings: {err}");
+        }
         (settings, screen_changed, autostart_changed)
     };
-    if let Err(err) = settings::save(&settings) {
-        eprintln!("[coucou] could not save settings: {err}");
-    }
     if autostart_changed {
         let manager = app.autolaunch();
         let result = if settings.autostart { manager.enable() } else { manager.disable() };
@@ -148,6 +151,7 @@ fn open_url(url: String) {
 
 #[tauri::command]
 fn quit_app(app: AppHandle) {
+    core::safe_mode::clean_exit();
     app.exit(0);
 }
 
@@ -321,7 +325,16 @@ pub fn run() {
             }
         })
         .setup(move |app| {
+            let mut loaded = loaded;
             let handle = app.handle().clone();
+            // Here, not earlier: a second launch has already exited in the single-instance plugin.
+            if core::safe_mode::begin(&loaded.modules_enabled) {
+                log::line("[safe-mode] repeated unclean starts: only the safe set is on this run".to_string());
+                let reduced: BTreeMap<String, bool> =
+                    modules::CATALOG.iter().map(|m| (m.id.to_string(), modules::SAFE_MODULES.contains(&m.id))).collect();
+                loaded.modules_enabled = reduced.clone();
+                handle.state::<Shared>().settings.lock().unwrap().modules_enabled = reduced;
+            }
             handle.state::<ModuleHost>().setup(&handle);
             tray::build(&handle)?;
             // Before the island: see create_settings_window.
@@ -345,6 +358,11 @@ pub fn run() {
             handle.state::<ModuleHost>().sync(&handle, &loaded);
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Coucou");
+        .build(tauri::generate_context!())
+        .expect("error while building Coucou")
+        .run(|_, event| {
+            if let tauri::RunEvent::Exit = event {
+                core::safe_mode::clean_exit();
+            }
+        });
 }
