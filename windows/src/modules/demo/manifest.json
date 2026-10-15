@@ -1,0 +1,8 @@
+{
+  "id": "demo",
+  "label": "Exemplo",
+  "default": false,
+  "order": 90,
+  "presets": ["vitrine"],
+  "settingsDefaults": {}
+}
