@@ -265,6 +265,8 @@ export interface ModuleInfo {
   settingsDefaults?: Record<string, unknown>;
   /** Preset ids that switch the module on (manifest.json). */
   presets?: string[];
+  /** Settings keys that belong to this machine (paths, install state): Hub import never applies them. */
+  machineKeys?: string[];
 }
 /** Behaviour only: label, default, requirements and group live in the module's manifest.json. */
 export interface ModuleDef {

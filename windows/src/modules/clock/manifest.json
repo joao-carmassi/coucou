@@ -8,6 +8,7 @@
     "clockFormat": "24h"
   },
   "presets": [
+    "tudo",
     "vitrine"
   ]
 }

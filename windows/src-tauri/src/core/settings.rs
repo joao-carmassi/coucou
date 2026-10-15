@@ -87,7 +87,7 @@ fn settings_path() -> PathBuf {
 /// The bool is false when the file exists but could not be read or parsed: the caller must not save over it.
 pub fn load() -> (Settings, bool) {
     match std::fs::read(settings_path()) {
-        Ok(bytes) => match serde_json::from_slice(&bytes) {
+        Ok(bytes) => match serde_json::from_slice(bytes.strip_prefix(&[0xEF, 0xBB, 0xBF][..]).unwrap_or(&bytes)) {
             Ok(s) => (s, true),
             Err(_) => {
                 // Keep the unreadable file for the user; the original is not touched here.
@@ -259,6 +259,11 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&file).unwrap(), "{ not json");
         std::fs::remove_file(&file).unwrap();
         assert!(load().1, "missing file is a normal first run");
+        // Notepad and PowerShell 5 write a BOM: that file is fine.
+        std::fs::write(&file, [&[0xEF, 0xBB, 0xBF][..], br#"{"soundVolume":0.5}"#].concat()).unwrap();
+        let (s, ok) = load();
+        assert!(ok && s.sound_volume == 0.5, "BOM is stripped");
+        std::fs::remove_file(&file).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
     }
 

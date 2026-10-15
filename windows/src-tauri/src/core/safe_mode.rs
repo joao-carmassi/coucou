@@ -42,8 +42,9 @@ pub fn exit(modules: &mut Switches) -> bool {
 }
 
 /// The user changed the module switches while safe mode is on: that choice is kept, so safe mode ends.
-/// A save that repeats the reduced map (any other settings save) changes nothing.
-pub fn adopt(new: &Switches, old: &Switches) -> bool {
+/// Only the switches that changed are applied, on top of the STORED map: `new` becomes that merged map, so
+/// modules safe mode had switched off do not lose their stored state. A save that repeats the reduced map changes nothing.
+pub fn adopt(new: &mut Switches, old: &Switches) -> bool {
     let left = adopt_in(&REAL, new, old);
     if left {
         clean_exit();
@@ -51,8 +52,21 @@ pub fn adopt(new: &Switches, old: &Switches) -> bool {
     left
 }
 
-fn adopt_in(slot: &std::sync::Mutex<Option<Switches>>, new: &Switches, old: &Switches) -> bool {
-    new != old && take_real(slot, &mut Switches::new())
+fn adopt_in(slot: &std::sync::Mutex<Option<Switches>>, new: &mut Switches, old: &Switches) -> bool {
+    if *new == *old {
+        return false;
+    }
+    let mut stored = Switches::new();
+    if !take_real(slot, &mut stored) {
+        return false;
+    }
+    for (k, v) in new.iter() {
+        if old.get(k) != Some(v) {
+            stored.insert(k.clone(), *v);
+        }
+    }
+    *new = stored;
+    true
 }
 
 fn take_real(slot: &std::sync::Mutex<Option<Switches>>, modules: &mut Switches) -> bool {
@@ -110,11 +124,13 @@ mod tests {
     fn changed_switches_end_safe_mode_unchanged_do_not() {
         let reduced = Switches::from([("a".to_string(), true)]);
         let slot = std::sync::Mutex::new(Some(Switches::from([("a".to_string(), true), ("b".to_string(), true)])));
-        assert!(!adopt_in(&slot, &reduced, &reduced), "same map: still safe mode");
+        let mut same = reduced.clone();
+        assert!(!adopt_in(&slot, &mut same, &reduced), "same map: still safe mode");
         assert!(slot.lock().unwrap().is_some());
-        let chosen = Switches::from([("a".to_string(), false)]);
-        assert!(adopt_in(&slot, &chosen, &reduced));
+        let mut chosen = Switches::from([("a".to_string(), false)]);
+        assert!(adopt_in(&slot, &mut chosen, &reduced));
         assert!(slot.lock().unwrap().is_none());
+        assert_eq!(chosen, Switches::from([("a".to_string(), false), ("b".to_string(), true)]), "toggle merged onto the stored set");
     }
 
     #[test]

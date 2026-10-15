@@ -8,7 +8,7 @@ import { moduleSettings } from "../core/moduleSettings";
 import { DEFAULT_SETTINGS, State, type Settings } from "../core/state";
 import { h, clear } from "../kit/dom";
 import { makeSettingsUi } from "./ui";
-import { PRESETS, diffImport, matchSections, presetModules } from "./hub";
+import { presetsOf, diffImport, matchSections, presetModules } from "./hub";
 
 let settings: Settings = { ...DEFAULT_SETTINGS };
 // ModuleSettings reads State.settings (this same object) and saves patches of its own keys.
@@ -289,7 +289,7 @@ function renderModules(effective: Record<string, boolean> = resolveEnabled(MODUL
 // ── Presets, backup, search ───────────────────────────────────────────────────
 
 function presetButtons(after?: () => void): HTMLElement[] {
-  return PRESETS.map((p) => {
+  return presetsOf(MODULE_INFO).map((p) => {
     const b = h("button", { text: p.label });
     b.addEventListener("click", () => {
       settings.modulesEnabled = { ...settings.modulesEnabled, ...presetModules(MODULE_INFO, p.id) };
@@ -331,7 +331,7 @@ function backupSection(): HTMLElement {
     file.value = "";
     if (!f) return;
     if (f.size > 1_000_000) { out.textContent = "Arquivo grande demais."; return; }
-    const diff = diffImport(settings as unknown as Record<string, unknown>, await f.text());
+    const diff = diffImport(settings as unknown as Record<string, unknown>, await f.text(), MODULE_INFO);
     clear(diffBox);
     if (typeof diff === "string") { out.textContent = diff; return; }
     out.textContent = "";

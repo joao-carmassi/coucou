@@ -75,7 +75,7 @@ fn save_settings(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>,
         }
         host.on_save(&current, &mut settings);
         // A changed switch map during safe mode is the user's choice: keep it (and leave safe mode) instead of losing it on exit.
-        core::safe_mode::adopt(&settings.modules_enabled, &current.modules_enabled);
+        core::safe_mode::adopt(&mut settings.modules_enabled, &current.modules_enabled);
         settings.palette_hotkey = core::hotkeys::clean(&settings.palette_hotkey, settings::DEFAULT_PALETTE_HOTKEY);
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
@@ -156,8 +156,14 @@ fn focus_window(app: AppHandle, focused: bool) {
     if focused {
         let _ = win.set_focus();
     } else {
-        platform::restore_foreground();
+        platform::restore_foreground(&win);
     }
+}
+
+/// The palette hotkey remembered the focused window but the palette did not take the focus: forget it.
+#[tauri::command]
+fn forget_foreground() {
+    platform::forget_foreground();
 }
 
 /// The palette's global hotkey ("" = off). Remembers the window that had the focus so closing the palette gives it back.
@@ -346,6 +352,7 @@ pub fn run() {
         set_collapsed,
         set_island_rect,
         focus_window,
+        forget_foreground,
         reposition,
         set_island_offset,
         center_island,

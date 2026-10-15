@@ -53,6 +53,9 @@ export async function startIsland(modules: ModuleDef[], catalog: ModuleInfo[]) {
 
   await onEvent<Presence>("presence", (p) => island.applyPresence(p));
   await onEvent<null>("palette", () => island.openPalette());
+  await onEvent<{ name: string; error: string }>("hotkey-error", (p) => {
+    if (p.name === "palette" && p.error) island.error(`Atalho da paleta indisponível: ${p.error}`);
+  });
 
   await onEvent<null>("screen-changed", () => void Bridge.reposition());
 

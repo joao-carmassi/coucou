@@ -83,7 +83,7 @@ function start(api: IslandApi): Disposer {
     const late = Date.now() - p.at, text = alarmText(p.alarms);
     if (late < ALARM_GRACE_MS) {
       api.sound.play("alert");
-      api.island.notice({ text: `Alarme ${text}`, priority: BAND.NOTICE + 10, key: "alarm", ms: 8000, peek: true });
+      api.island.notice({ text: `Alarme ${text}`, priority: BAND.URGENT, key: "alarm", ms: 8000, peek: true });
     } else api.island.notice({ text: `Alarme perdido ${text}`, priority: BAND.NOTICE, key: "alarm", ms: 8000 });
   };
   const armAlarm = (force = false) => {

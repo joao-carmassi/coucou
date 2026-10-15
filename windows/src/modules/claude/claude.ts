@@ -359,17 +359,35 @@ export class Claude {
   }
 }
 
-/** The N and Y on the approval card's buttons: their keys, while the card is on screen. */
+/** Y/N never answer within this long of the card appearing or changing: a keystroke meant elsewhere must not approve. */
+export const KEY_GUARD_MS = 500;
+/** ...nor within this long of the palette (it hands the keyboard to the island). */
+const PALETTE_GUARD_MS = 1500;
+
+/** The N and Y on the approval card's buttons: their keys, while the card is on screen and the user has had time to read it. */
 function onKeys(c: Claude): Disposer {
+  let shown = "";
+  let shownAt = 0;
+  let paletteAt = -Infinity;
+  const track = () => {
+    const now = performance.now();
+    if (c.api.island.view() === "palette") paletteAt = now;
+    const id = c.api.island.mode() === "expanded" && c.api.island.view() === "approval" ? c.store.pendingApproval?.requestId ?? "" : "";
+    if (id !== shown) { shown = id; shownAt = now; }
+    return now;
+  };
+  const offChange = c.api.island.onChange(track);
   const onKey = (e: KeyboardEvent) => {
+    const now = track();
     const approval = c.store.pendingApproval;
     if (c.api.island.mode() !== "expanded" || c.api.island.view() !== "approval" || !approval) return;
-    if (e.repeat || e.ctrlKey || e.altKey || e.metaKey || (e.target as Element | null)?.closest("input, textarea")) return;
+    if (e.repeat || e.ctrlKey || e.altKey || e.metaKey || (e.target as Element | null)?.closest?.("input, textarea, select, [contenteditable]")) return;
+    if (now - shownAt < KEY_GUARD_MS || now - paletteAt < PALETTE_GUARD_MS) return;
     const key = e.key.toLowerCase();
     const plan = approval.plan != null;
     if (key === "n") c.decide(plan ? "plan-keep" : "deny");
     else if (key === "y") c.decide(plan ? "plan-auto" : "allow");
   };
   window.addEventListener("keydown", onKey);
-  return () => window.removeEventListener("keydown", onKey);
+  return () => { offChange(); window.removeEventListener("keydown", onKey); };
 }

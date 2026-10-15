@@ -245,15 +245,22 @@ pub fn remember_foreground(win: &WebviewWindow) {
     }
 }
 
-/// Gives the focus back to the remembered window, once, if it still exists.
-pub fn restore_foreground() {
+/// Drops the remembered window (the palette did not take the focus after all).
+pub fn forget_foreground() {
+    PRIOR_FOREGROUND.store(0, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Gives the focus back to the remembered window, once, if it still exists and the island itself
+/// still has the focus (the user may have moved on since: then nothing is stolen).
+pub fn restore_foreground(win: &WebviewWindow) {
     let v = PRIOR_FOREGROUND.swap(0, std::sync::atomic::Ordering::SeqCst);
     if v == 0 {
         return;
     }
     let hwnd = HWND(v as *mut std::ffi::c_void);
     unsafe {
-        if IsWindow(Some(hwnd)).as_bool() {
+        let fg = GetForegroundWindow();
+        if hwnd_of(win) == Some(fg) && IsWindow(Some(hwnd)).as_bool() {
             let _ = SetForegroundWindow(hwnd);
         }
     }
