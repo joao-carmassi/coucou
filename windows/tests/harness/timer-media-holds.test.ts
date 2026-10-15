@@ -165,3 +165,39 @@ describe("media: implicit focus only", () => {
     goHome();
   });
 });
+
+describe("timer pomodoro and alarms", () => {
+  it("pomodoro keeps the hold across phases and Parar releases it", () => {
+    State.settings = { ...State.settings, timerPomodoro: { work: 5, short: 5, long: 15, every: 4 } } as typeof State.settings;
+    api().island.open("timer"); tick(10);
+    click("button", "Pomodoro");
+    api().island.open("dummy-a"); tick(10); folded();
+    tick(5 * 60_000 + 10); // work -> short break, auto-started: still held
+    Last.clear();
+    reopen();
+    expect(State.view).toBe("timer");
+    folded();
+    api().island.open("timer"); tick(10);
+    click("button", "Parar");
+    folded(); goHome(); reopen();
+    expect(State.view).toBe(State.defaultView());
+    folded();
+  });
+
+  it("an alarm timeout is armed only for the next fire time and cancelled on module stop", () => {
+    const base = vi.getTimerCount();
+    const at = new Date(Date.now() + 3 * 60_000);
+    const hhmm = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+    State.settings = { ...State.settings, timerAlarms: [{ id: "a", time: hhmm, label: "x", days: [], on: true }] } as typeof State.settings;
+    api().island.open("timer"); tick(10); // visibility change re-arms
+    folded(); reopen(); folded();
+    expect(vi.getTimerCount()).toBeGreaterThan(base - 1);
+    Registry.apply({ dummy: true, timer: false, media: true });
+    const stopped = vi.getTimerCount();
+    Registry.apply({ dummy: true, timer: true, media: true });
+    Registry.apply({ dummy: true, timer: false, media: true });
+    expect(vi.getTimerCount()).toBe(stopped);
+    Registry.apply({ dummy: true, timer: true, media: true });
+    State.settings = { ...State.settings, timerAlarms: [] } as typeof State.settings;
+  });
+});

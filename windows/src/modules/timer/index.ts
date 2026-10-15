@@ -3,22 +3,54 @@ import "./timer.css";
 import { ICONS } from "../../kit/icons";
 import { BAND, type Disposer, type IslandApi, type ModuleDef } from "../../core/moduleApi";
 import { TimerClock } from "./timer";
-import { buildTimerView } from "./view";
+import { buildTimerView, type PomoUi } from "./view";
+import { pomoCfg, pomoLabel, pomoMinutes, pomoNext, pomoStart, type PomoState } from "./pomodoro";
+import { nextAlarm, parseAlarms } from "./alarms";
+
+interface Cfg { timerPomodoro: unknown; timerPomodoroAuto: boolean; timerFocusPomodoro: boolean; timerAlarms: unknown }
 
 // State lives here (not in State); the object is inert until start() gives it an onChange.
 const Timer = new TimerClock();
+// Pomodoro phase on top of the countdown; null = a plain timer / stopwatch.
+let pomo: PomoState | null = null;
+let readCfg: () => Cfg = () => ({ timerPomodoro: null, timerPomodoroAuto: true, timerFocusPomodoro: false, timerAlarms: [] });
+const pomoUi: PomoUi = {
+  label: () => (pomo ? pomoLabel(pomo, pomoCfg(readCfg().timerPomodoro)) : null),
+  start: () => startPomo(),
+  skip: () => skipPomo(),
+  stop: () => { pomo = null; Timer.cancel(); },
+};
+let startPomo = () => {};
+let skipPomo = () => {};
 
 function start(api: IslandApi): Disposer {
   let tick: Disposer | null = null;
   let done: Disposer | null = null;
   let hold: Disposer | null = null;
+  let alarmT: Disposer | null = null;
   const refresh = () => {
     api.status.set(Timer.active ? { priority: 50, text: Timer.text(), overGrid: true } : null);
     api.island.redraw();
   };
   const disarm = () => { tick?.(); done?.(); tick = done = null; };
+  // Next phase: running at once, or ready (a click starts it) when timerPomodoroAuto is false.
+  const advance = (text: string | null) => {
+    const c = readCfg(), cfg = pomoCfg(c.timerPomodoro);
+    pomo = pomoNext(pomo!, cfg);
+    api.sound.play("finish");
+    if (text !== null && !api.island.busy()) api.island.notice({ text: `${text} · ${pomoLabel(pomo, cfg)}`, priority: BAND.NOTICE, view: "timer", key: "pomodoro" });
+    Timer.prepare("countdown", pomoMinutes(pomo, cfg)); // onChange -> arm: the hold stays
+    if (c.timerPomodoroAuto !== false) Timer.start();
+  };
+  startPomo = () => {
+    pomo = pomoStart();
+    Timer.prepare("countdown", pomoMinutes(pomo, pomoCfg(readCfg().timerPomodoro)));
+    Timer.start();
+  };
+  skipPomo = () => { if (pomo) advance(null); };
   const finish = () => {
     done = null;
+    if (pomo) return advance("Fase concluída");
     Timer.cancel(); // onChange -> arm -> idle
     api.sound.play("finish");
     // A request waiting keeps the island: the sound is enough then.
@@ -26,6 +58,7 @@ function start(api: IslandApi): Disposer {
   };
   const arm = () => {
     disarm();
+    if (Timer.status === "idle" || Timer.kind !== "countdown") pomo = null;
     // A configured-but-unstarted timer is still a task in progress.
     if (Timer.status !== "idle") {
       // Sticky until finished or cancelled. Re-added on each arm (idempotent: same owner+view replaces), so a hold the home tab cleared is retaken.
@@ -39,23 +72,50 @@ function start(api: IslandApi): Disposer {
     refresh();
   };
   Timer.reset();
+  pomo = null;
+  readCfg = () => api.settings<Cfg>();
   Timer.onChange = arm;
+  // Alarms: ONE timeout, for the next fire time only (recomputed from Date: midnight and DST safe).
+  // Re-armed after firing, a settings save and a visibility change (a wake from sleep shows up as one).
+  const armAlarm = () => {
+    alarmT?.(); alarmT = null;
+    const next = nextAlarm(parseAlarms(readCfg().timerAlarms), new Date());
+    if (!next) return;
+    // 2^31-1 is setTimeout's ceiling; waking early only re-arms.
+    alarmT = api.timeout(() => {
+      alarmT = null;
+      if (Date.now() >= next.at) {
+        const a = next.alarms[0];
+        api.sound.play("alert");
+        api.island.notice({ text: `Alarme ${a.time}${a.label ? ` · ${a.label}` : ""}`, priority: BAND.NOTICE + 10, key: "alarm", ms: 8000, peek: true });
+      }
+      armAlarm();
+    }, Math.min(Math.max(0, next.at - Date.now()), 2 ** 31 - 1));
+  };
+  armAlarm();
+  const offSettings = api.listen("settings-changed", armAlarm);
   const offKeep = api.island.keepAwake(() => Timer.active);
-  // The interval is off while hidden: catch the readout up when the island comes back.
-  // Alt+F / palette: a 25 min countdown, only while nothing is running.
+  // Alt+F / palette: a focus phase (pomodoro when "Iniciar foco usa Pomodoro" is on, else a 25 min countdown), only while nothing is running.
   const offAction = api.actions.add({
     id: "focus", title: "Iniciar foco", keywords: ["timer", "pomodoro", "temporizador"], key: "f",
     when: () => !Timer.active,
-    run() { Timer.prepare("countdown", 25); Timer.start(); },
+    run() {
+      if (readCfg().timerFocusPomodoro) startPomo();
+      else { Timer.prepare("countdown", 25); Timer.start(); }
+    },
   });
-  const offVis = api.onVisibility((mode) => { if (mode !== "hidden" && Timer.status === "running") refresh(); });
+  // The interval is off while hidden: catch the readout up when the island comes back.
+  const offVis = api.onVisibility((mode) => { armAlarm(); if (mode !== "hidden" && Timer.status === "running") refresh(); });
   return () => {
     disarm();
+    alarmT?.();
+    offSettings();
     hold?.();
     offKeep();
     offAction();
     offVis();
     Timer.reset();
+    pomo = null;
     api.status.set(null);
   };
 }
@@ -65,7 +125,7 @@ export const timerModule: ModuleDef = {
   views: [{
     name: "timer",
     layout: { height: 160, botX: 54, botY: null, botDiameter: 46 },
-    build: (ctx) => buildTimerView(Timer, ctx),
+    build: (ctx) => buildTimerView(Timer, ctx, pomoUi),
   }],
   tabs: [{ view: "timer", title: "Timer", icon: () => svg(ICONS.dial, 13), order: 30 }],
   start,
