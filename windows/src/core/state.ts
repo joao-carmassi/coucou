@@ -52,6 +52,8 @@ export interface Settings {
   mochiSleepMinutes: number;
   /** Global hotkey that opens the command palette; "" = none. */
   paletteHotkey: string;
+  /** Island offset from the display centre, logical px, by display key (Rust island::monitor_key). */
+  islandPlacement: Record<string, number>;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -68,6 +70,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mochiColors: {},
   mochiSleepMinutes: 10,
   paletteHotkey: "Ctrl+Alt+K",
+  islandPlacement: {},
 };
 
 type Listener = () => void;

@@ -179,6 +179,17 @@ fn reposition(app: AppHandle, shared: State<Shared>) {
     island::refresh_click_through(&app, &shared.gate);
 }
 
+/// Alt-drag on the compact island: adds `dx` (logical px) to this display's stored offset.
+#[tauri::command]
+fn set_island_offset(app: AppHandle, shared: State<Shared>, dx: f64) {
+    island::adjust_placement(&app, &shared, Some(dx));
+}
+
+#[tauri::command]
+fn center_island(app: AppHandle, shared: State<Shared>) {
+    island::adjust_placement(&app, &shared, None);
+}
+
 #[tauri::command]
 fn open_url(url: String) {
     if !(url.starts_with("http://") || url.starts_with("https://")) {
@@ -335,6 +346,8 @@ pub fn run() {
         set_island_rect,
         focus_window,
         reposition,
+        set_island_offset,
+        center_island,
         open_url,
         quit_app,
         log_line,
