@@ -2,5 +2,11 @@
   "id": "media",
   "label": "Mídia",
   "default": true,
-  "order": 2
+  "order": 2,
+  "presets": [
+    "essencial",
+    "dev",
+    "tudo",
+    "vitrine"
+  ]
 }

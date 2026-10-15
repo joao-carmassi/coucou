@@ -9,5 +9,9 @@
   "order": 5,
   "settingsDefaults": {
     "voiceHotkey": "Ctrl+Alt+V"
-  }
+  },
+  "presets": [
+    "tudo",
+    "vitrine"
+  ]
 }

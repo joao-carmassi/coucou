@@ -219,6 +219,8 @@ export interface ModuleInfo {
   group?: string;
   /** The module's keys in the flat settings.json, with their defaults (manifest.json). New keys start with the module id. */
   settingsDefaults?: Record<string, unknown>;
+  /** Preset ids that switch the module on (manifest.json). */
+  presets?: string[];
 }
 /** Behaviour only: label, default, requirements and group live in the module's manifest.json. */
 export interface ModuleDef {

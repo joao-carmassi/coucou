@@ -1,5 +1,5 @@
-// Settings window — core preferences only: sound, volume, close/hide intervals,
-// screen, autostart. Module sections plug in later.
+// Hub — core preferences (sound, intervals, screen, autostart), module switches and presets, backup,
+// and the section of each module that is on. Sidebar + search; first run shows the onboarding.
 
 import "./settings.css";
 import { Bridge, onEvent } from "../core/bridge";
@@ -8,6 +8,7 @@ import { moduleSettings } from "../core/moduleSettings";
 import { DEFAULT_SETTINGS, State, type Settings } from "../core/state";
 import { h, clear } from "../kit/dom";
 import { makeSettingsUi } from "./ui";
+import { PRESETS, diffImport, matchSections, presetModules } from "./hub";
 
 let settings: Settings = { ...DEFAULT_SETTINGS };
 // ModuleSettings reads State.settings (this same object) and saves patches of its own keys.
@@ -104,7 +105,7 @@ function generalSection(): HTMLElement {
 
   return h(
     "section",
-    {},
+    { "data-hub": "geral", "data-title": "Geral" },
     h("h2", {}, h("span", { text: "Geral" })),
     h("div", { class: "row" },
       h("label", { text: "Som" }),
@@ -140,7 +141,7 @@ function generalSection(): HTMLElement {
 
 // ── Modules section ───────────────────────────────────────────────────────────
 
-const modulesBox = h("div", {});
+const modulesBox = h("div", { "data-hub": "modulos", "data-title": "Módulos" });
 /** The sections of the modules that are on, in catalog order: they sit between the switches and the footer. */
 const sectionsBox = h("div", { style: "display:contents" });
 const sections = new Map<string, { el: HTMLElement; dispose?(): void; timers: Set<number>; stop(): void }>();
@@ -163,7 +164,10 @@ function renderSections(effective: Record<string, boolean>) {
       sections.delete(id);
     } else if (on && !has) {
       const { ui, timers, stop } = makeSettingsUi();
-      sections.set(id, { ...make(moduleSettings(id, MODULE_INFO.find((m) => m.id === id)?.settingsDefaults), ui), timers, stop });
+      const made = make(moduleSettings(id, MODULE_INFO.find((m) => m.id === id)?.settingsDefaults), ui);
+      made.el.dataset.hub = `mod-${id}`;
+      made.el.dataset.title = MODULE_INFO.find((m) => m.id === id)?.label ?? id;
+      sections.set(id, { ...made, timers, stop });
     }
   }
   const order = MODULE_INFO.map((m) => m.id);
@@ -196,6 +200,150 @@ function renderModules(effective: Record<string, boolean> = resolveEnabled(MODUL
   }
   modulesBox.replaceChildren(h("section", { id: "modules" }, h("h2", {}, h("span", { text: "Módulos" })), ...rows));
   renderSections(effective);
+  refreshNav();
+}
+
+// ── Presets, backup, search ───────────────────────────────────────────────────
+
+function presetButtons(after?: () => void): HTMLElement[] {
+  return PRESETS.map((p) => {
+    const b = h("button", { text: p.label });
+    b.addEventListener("click", () => {
+      settings.modulesEnabled = { ...settings.modulesEnabled, ...presetModules(MODULE_INFO, p.id) };
+      void save();
+      if (after) after();
+      else renderModules();
+    });
+    return b;
+  });
+}
+
+function presetsSection(): HTMLElement {
+  return h("section", { "data-hub": "presets", "data-title": "Presets" },
+    h("h2", {}, h("span", { text: "Presets" })),
+    h("div", { class: "hint", text: "Liga e desliga os módulos de uma vez. Você ainda pode ajustar cada um depois." }),
+    h("div", { class: "row" }, ...presetButtons()),
+  );
+}
+
+function backupSection(): HTMLElement {
+  const out = h("div", { class: "hint" });
+  const diffBox = h("div", {});
+  const file = h("input", { type: "file", accept: ".json,application/json", hidden: "" }) as HTMLInputElement;
+
+  const exportBtn = h("button", { text: "Exportar configurações" });
+  exportBtn.addEventListener("click", async () => {
+    const json = await Bridge.exportSettings();
+    if (!json) return;
+    const a = h("a", { href: URL.createObjectURL(new Blob([json], { type: "application/json" })), download: "coucou-config.json" }) as HTMLAnchorElement;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    out.textContent = "Exportado. Chaves e senhas ficam de fora.";
+  });
+
+  const importBtn = h("button", { text: "Importar configurações" });
+  importBtn.addEventListener("click", () => file.click());
+  file.addEventListener("change", async () => {
+    const f = file.files?.[0];
+    file.value = "";
+    if (!f) return;
+    const diff = diffImport(settings as unknown as Record<string, unknown>, await f.text());
+    clear(diffBox);
+    if (typeof diff === "string") { out.textContent = diff; return; }
+    out.textContent = "";
+    if (!diff.changes.length) { out.textContent = "Nada muda: o arquivo é igual às configurações atuais."; return; }
+    const apply = h("button", { class: "primary", text: `Aplicar ${diff.changes.length} ${diff.changes.length === 1 ? "alteração" : "alterações"}` });
+    apply.addEventListener("click", async () => {
+      await Bridge.saveSettings(diff.patch);
+      put({ ...settings, ...diff.patch } as Settings);
+      clear(diffBox);
+      out.textContent = "Importado.";
+      renderModules();
+    });
+    diffBox.append(
+      h("div", { class: "hint", text: "Chaves que mudam (nada é aplicado antes do clique):" }),
+      h("ul", {}, ...diff.changes.map((c) => h("li", { text: `${c.key} (${c.kind})` }))),
+      apply,
+    );
+  });
+
+  return h("section", { "data-hub": "backup", "data-title": "Backup" },
+    h("h2", {}, h("span", { text: "Backup" })),
+    h("div", { class: "row" }, exportBtn, importBtn, file),
+    out,
+    diffBox,
+  );
+}
+
+const search = h("input", { type: "text", placeholder: "Buscar nas configurações…", class: "hub-search" }) as HTMLInputElement;
+const nav = h("nav", { class: "hub-nav" });
+search.addEventListener("input", refreshNav);
+
+/** Sidebar entries and search filtering come from the sections in the DOM. */
+function refreshNav() {
+  const els = [...root.querySelectorAll<HTMLElement>("[data-hub]")];
+  const all = els.map((el) => ({ id: el.dataset.hub!, title: el.dataset.title ?? "", text: el.textContent ?? "" }));
+  const hit = new Set(matchSections(search.value, all));
+  els.forEach((el) => { el.hidden = !hit.has(el.dataset.hub!); });
+  nav.replaceChildren(
+    ...els.filter((el) => !el.hidden).map((el) => {
+      const b = h("button", { class: "hub-link", text: el.dataset.title ?? "" });
+      b.addEventListener("click", () => el.scrollIntoView({ behavior: "smooth", block: "start" }));
+      return b;
+    }),
+  );
+}
+
+// ── Onboarding ────────────────────────────────────────────────────────────────
+
+/** Three steps on first run: preset, sound and autostart, done. Writes the current version at the end. */
+function onboarding(finish: () => void): HTMLElement {
+  const box = h("div", { class: "onboarding" });
+  const next = (to: number, text: string) => {
+    const b = h("button", { text });
+    b.addEventListener("click", () => step(to));
+    return b;
+  };
+  const step = (n: number) => {
+    clear(box);
+    box.append(h("div", { class: "hint", text: `Passo ${n} de 3` }));
+    if (n === 1) {
+      box.append(
+        h("h2", { text: "Escolha um ponto de partida" }),
+        h("div", { class: "row" }, ...presetButtons(() => step(2))),
+        next(2, "Pular"),
+      );
+    } else if (n === 2) {
+      box.append(
+        h("h2", { text: "Som e inicialização" }),
+        h("div", { class: "row" }, h("label", { text: "Som" }), toggle(settings.soundEnabled, (v) => { settings.soundEnabled = v; void save(); })),
+        h("div", { class: "row" }, h("label", { text: "Iniciar com o Windows" }), toggle(settings.autostart, (v) => { settings.autostart = v; void save(); })),
+        next(3, "Continuar"),
+      );
+    } else {
+      const done = h("button", { class: "primary", text: "Concluir" });
+      done.addEventListener("click", async () => {
+        await Bridge.saveSettings({ onboardedVersion: version || "0" });
+        put({ ...settings, onboardedVersion: version || "0" });
+        finish();
+      });
+      box.append(h("h2", { text: "Tudo pronto" }), h("div", { class: "hint", text: "Você pode mudar tudo isso depois, nas configurações." }), done);
+    }
+  };
+  step(1);
+  return h("section", {}, box);
+}
+
+function safeBanner(): HTMLElement {
+  const b = h("button", { class: "primary", text: "Sair do modo seguro" });
+  const bar = h("div", { class: "banner" },
+    h("span", { text: "Modo seguro: o Coucou não fechou bem nas últimas inicializações e só o essencial está ligado." }),
+    b,
+  );
+  b.addEventListener("click", async () => {
+    if (await Bridge.safeModeExit()) bar.remove();
+  });
+  return bar;
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -213,20 +361,33 @@ async function main() {
     version = boot.version;
   }
 
+  const hub = () => {
+    clear(root);
+    root.append(
+      h("h1", {}, h("span", { text: "Coucou" }), h("span", { class: "version", text: version })),
+      ...(boot?.safeMode ? [safeBanner()] : []),
+      h("div", { class: "hub" },
+        h("aside", { class: "hub-side" }, search, nav),
+        h("main", { class: "hub-main" },
+          generalSection(),
+          presetsSection(),
+          modulesBox,
+          sectionsBox,
+          backupSection(),
+          h("div", {
+            class: "hint",
+            text: "Sem telemetria. As requisições de rede só vão para os serviços que você mesmo configurar.",
+          }),
+        ),
+      ),
+    );
+    renderModules(boot?.modules);
+  };
   clear(root);
-  root.append(
-    h("h1", {}, h("span", { text: "Coucou" }), h("span", { class: "version", text: version })),
-    generalSection(),
-    modulesBox,
-    sectionsBox,
-    h("div", {
-      class: "hint",
-      text: "Sem telemetria. As requisições de rede só vão para os serviços que você mesmo configurar.",
-    }),
-  );
+  if (settings.onboardedVersion === "") root.append(h("h1", {}, h("span", { text: "Bem-vindo ao Coucou" })), onboarding(hub));
+  else hub();
 
-  renderModules(boot?.modules);
-  void onEvent<Record<string, boolean>>("modules-changed", (m) => renderModules(m));
+  void onEvent<Record<string, boolean>>("modules-changed", (m) => { if (root.querySelector(".hub")) renderModules(m); });
 
   void onEvent<Settings>("settings-changed", (s) => put({ ...settings, ...s }));
 

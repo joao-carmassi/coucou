@@ -42,6 +42,8 @@ export interface Settings {
   autostart: boolean;
   /** Per-module switches; a missing key means the module default. */
   modulesEnabled: Record<string, boolean>;
+  /** Version whose onboarding was finished; "" = first run. */
+  onboardedVersion: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -53,6 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
   screen: "primary",
   autostart: false,
   modulesEnabled: {},
+  onboardedVersion: "",
 };
 
 type Listener = () => void;

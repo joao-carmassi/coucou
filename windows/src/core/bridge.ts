@@ -45,7 +45,13 @@ export const Bridge = {
   /** The section the settings window was opened for, once ("" for none). */
   takeSettingsSection: () => command<string>("take_settings_section"),
 
+  /** Pretty JSON of the settings without secret-looking keys. */
+  exportSettings: () => command<string>("settings_export"),
+
+  /** Leaves safe mode: true when the stored module switches are back in effect. */
+  safeModeExit: () => command<boolean>("safe_mode_exit"),
+
   /** Tray → Pause. */
   setPaused: (paused: boolean) => command<void>("set_paused", { paused }),
 };
-
+
