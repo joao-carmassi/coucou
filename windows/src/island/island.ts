@@ -20,8 +20,9 @@ import { Requests, type Req, type RequestSpec } from "../core/requests";
 import { Compact } from "../core/compact";
 import { NoticeQueue, type NoticeEntry } from "../core/notices";
 import { Sound } from "../core/sound";
+import { colorFor } from "../core/pills";
 import { State } from "../core/state";
-import { BotEngine, hexToRGB, type RGB } from "../mochi/engine";
+import { BotEngine, hexToRGB, sleepDue, type RGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
 import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
 import { buildHeader, buildViews, type Header, type ViewActions, type ViewHost } from "../views/views";
@@ -454,7 +455,7 @@ export class Island implements IslandHost {
       this.noticeLine = front ? { priority: front.priority, text: front.text, overGrid: true } : null;
       Compact.set("#notice", this.noticeLine);
       this.redraw();
-    } else if (front && front.shownAt == null) this.redraw(); // re-added on screen: the clock restarts at the next sync
+    } else if (front && front.shownAt == null) this.redraw(); // re-added on screen: its on-screen time restarts at the next sync
     if (this.noticeTimer != null) window.clearTimeout(this.noticeTimer);
     this.noticeTimer = null;
     const due = this.notices.nextDeadline(now);
@@ -933,6 +934,7 @@ export class Island implements IslandHost {
       this.syncDom();
     }
 
+    this.tickRest(nowMs);
     this.updateBotTargets();
     this.botCx.step(dt);
     this.botCy.step(dt);
@@ -1053,14 +1055,36 @@ export class Island implements IslandHost {
 
   /** What the avatar wears: override > strongest module signal > focused task > idle. */
   private effState() {
+    const s = this.rawState();
+    return s === "idle" && this.asleep ? "sleeping" : s;
+  }
+
+  private rawState() {
     return Avatar.state(State.focusPill?.mood ?? State.avatarState ?? "idle", State.stateOverride);
+  }
+
+  private asleep = false;
+  private restSince = performance.now();
+
+  /** Compact rest: dozes off after mochiSleepMinutes with no mood and no cursor; any activity wakes him. Runs in the frame. */
+  private tickRest(nowMs: number) {
+    const active = State.mode !== "compact" || this.wasInIsland || this.rawState() !== "idle";
+    if (active) {
+      this.restSince = nowMs;
+      if (this.asleep) { this.asleep = false; this.engine.setState(this.effState()); }
+    } else if (!this.asleep && sleepDue(this.restSince, nowMs, State.settings.mochiSleepMinutes ?? 10)) {
+      this.asleep = true;
+      this.engine.setState(this.effState());
+    }
   }
 
   /** The colour Mochi should be: his focused pill colour, else his own cream. */
   private targetBodyColor(): RGB | null {
     if (this.tintRequest) return this.tintRequest;
     const focus = State.focusPill;
-    return focus ? hexToRGB(focus.color) : null;
+    const map = State.settings.mochiColors;
+    if (focus) return hexToRGB(colorFor(map, focus.id, focus.color));
+    return map?.main && /^#[0-9a-f]{6}$/i.test(map.main) ? hexToRGB(map.main) : null;
   }
 
   /**
@@ -1276,6 +1300,11 @@ export class Island implements IslandHost {
     this.ensureRunning();
   }
 
+  avatarLevel(v: number) {
+    // Hidden: nothing is drawn, so no frame is requested; the value just decays.
+    if (this.engine.setLevel(v) && v > 0.02 && State.mode !== "hidden") this.ensureRunning();
+  }
+
   /** Body color the island Mochi is currently drawn with (#rrggbb), or null for the default. */
   avatarBodyColor(): string | null {
     const c = this.engine.bodyColor;
@@ -1295,6 +1324,7 @@ export class Island implements IslandHost {
     this.fsm.petitToHiddenDelay = State.settings.compactHideInterval;
     // Re-arm with the new delay (or cancel it, for "never") if already minimized.
     if (this.fsm.state === "petit" && !this.wasInIsland) this.fsm.mouseLeft();
+    syncMiniBotStates(State.pills); // a changed colour map reaches the minis now
     this.syncNotices();
     State.notify();
   }

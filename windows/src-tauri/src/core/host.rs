@@ -53,6 +53,7 @@ pub trait Module: Send + Sync {
 
 enum Task {
     Thread(std::thread::JoinHandle<()>),
+    #[allow(dead_code)]
     Async(tauri::async_runtime::JoinHandle<()>),
 }
 
@@ -146,6 +147,7 @@ impl Spawner {
     }
 
     /// An async task the host aborts on stop.
+    #[allow(dead_code)] // the relay owns its loop; no module spawns async now
     pub fn spawn_async<F: Future<Output = ()> + Send + 'static>(&self, f: F) {
         self.tasks.push(Task::Async(tauri::async_runtime::spawn(f)));
     }
@@ -218,6 +220,7 @@ impl ModuleCtx {
         self.spawner().spawn(f);
     }
 
+    #[allow(dead_code)]
     pub fn spawn_async<F: Future<Output = ()> + Send + 'static>(&self, f: F) {
         self.spawner().spawn_async(f);
     }

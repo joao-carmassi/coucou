@@ -44,6 +44,10 @@ export interface Settings {
   autostart: boolean;
   /** Per-module switches; a missing key means the module default. */
   modulesEnabled: Record<string, boolean>;
+  /** Body colour per Mochi: key = pill id | "<prefix>*" | "main", value #rrggbb (core/pills.ts colorFor). */
+  mochiColors: Record<string, string>;
+  /** Minutes of rest before the main Mochi dozes off; 0 = never. */
+  mochiSleepMinutes: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -56,6 +60,8 @@ export const DEFAULT_SETTINGS: Settings = {
   hideWhenBusy: true,
   autostart: false,
   modulesEnabled: {},
+  mochiColors: {},
+  mochiSleepMinutes: 10,
 };
 
 type Listener = () => void;

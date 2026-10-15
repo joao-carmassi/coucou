@@ -15,7 +15,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::core::host::{Module, ModuleCtx};
 use crate::core::settings::{self, Settings};
-use crate::core::{hotkeys, log};
+use crate::core::{hotkeys, log, relay};
 
 pub struct Claude;
 
@@ -26,7 +26,7 @@ impl Module for Claude {
 
     fn start(&self, ctx: &ModuleCtx, s: &Settings) {
         hooks::ensure_hook_exe(&ctx.app);
-        pipe::start(ctx);
+        relay::subscribe(ctx, pipe::CHANNEL);
         set_alert(ctx, s);
         let app = ctx.app.clone();
         ctx.spawn(move |stop| offer_wsl_setup(&app, &stop));
@@ -34,10 +34,6 @@ impl Module for Claude {
 
     fn apply(&self, ctx: &ModuleCtx, s: &Settings) {
         set_alert(ctx, s);
-    }
-
-    fn setup(&self, app: &AppHandle) {
-        app.manage(pipe::Pending::default());
     }
 
     fn on_save(&self, current: &Settings, incoming: &mut Settings) {
@@ -50,8 +46,6 @@ impl Module for Claude {
 
     fn stop(&self, ctx: &ModuleCtx) {
         hotkeys::clear(&ctx.app, "alert");
-        // Release the pipe: handlers waiting for a reply end when their sender is dropped.
-        ctx.app.state::<pipe::Pending>().0.lock().unwrap().clear();
     }
 }
 

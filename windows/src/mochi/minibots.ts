@@ -6,7 +6,8 @@ import { hasMood } from "./moods";
 import type { BotEmoteName, BotStateName } from "../core/layout";
 import type { FreeMochi, MochiSprite } from "../core/moduleApi";
 import { wipe } from "../kit/canvas";
-import type { Pill } from "../core/state";
+import { colorFor } from "../core/pills";
+import { State, type Pill } from "../core/state";
 
 interface MiniBot {
   canvas: HTMLCanvasElement;
@@ -28,7 +29,7 @@ const live = new Map<HTMLCanvasElement, MiniBot>();
  */
 export function createMiniBot(task: Pill, bodySize: number): HTMLElement {
   const { slot, engine } = mount(bodySize, task.id);
-  engine.bodyColor = hexToRGB(task.color);
+  engine.bodyColor = hexToRGB(colorFor(State.settings.mochiColors, task.id, task.color));
   engine.setState(task.mood, true);
   if (task.emote) engine.setPermanentEmote(task.emote);
   if (task.eye) {
@@ -133,7 +134,7 @@ export function syncMiniBotStates(tasks: Pill[]) {
     const task = tasks.find((t) => t.id === mb.taskId);
     if (!task) continue;
     mb.engine.setState(task.mood);
-    mb.engine.bodyColor = hexToRGB(task.color);
+    mb.engine.bodyColor = hexToRGB(colorFor(State.settings.mochiColors, task.id, task.color));
   }
 }
 
