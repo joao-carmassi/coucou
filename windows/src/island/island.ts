@@ -18,8 +18,9 @@ import type { Disposer, IslandHost, Overlay, TabDef, ViewContext, ViewDef } from
 import { Holds, Last } from "../core/holds";
 import { Requests, type Req, type RequestSpec } from "../core/requests";
 import { Sound } from "../core/sound";
+import { colorFor } from "../core/pills";
 import { State } from "../core/state";
-import { BotEngine, hexToRGB, type RGB } from "../mochi/engine";
+import { BotEngine, hexToRGB, sleepDue, type RGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
 import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
 import { buildHeader, buildViews, type Header, type ViewActions, type ViewHost } from "../views/views";
@@ -801,6 +802,7 @@ export class Island implements IslandHost {
       this.syncDom();
     }
 
+    this.tickRest(nowMs);
     this.updateBotTargets();
     this.botCx.step(dt);
     this.botCy.step(dt);
@@ -921,14 +923,36 @@ export class Island implements IslandHost {
 
   /** What the avatar wears: override > strongest module signal > focused task > idle. */
   private effState() {
+    const s = this.rawState();
+    return s === "idle" && this.asleep ? "sleeping" : s;
+  }
+
+  private rawState() {
     return Avatar.state(State.focusPill?.mood ?? State.avatarState ?? "idle", State.stateOverride);
+  }
+
+  private asleep = false;
+  private restSince = performance.now();
+
+  /** Compact rest: dozes off after mochiSleepMinutes with no mood and no cursor; any activity wakes him. Runs in the frame. */
+  private tickRest(nowMs: number) {
+    const active = State.mode !== "compact" || this.wasInIsland || this.rawState() !== "idle";
+    if (active) {
+      this.restSince = nowMs;
+      if (this.asleep) { this.asleep = false; this.engine.setState(this.effState()); }
+    } else if (!this.asleep && sleepDue(this.restSince, nowMs, State.settings.mochiSleepMinutes ?? 10)) {
+      this.asleep = true;
+      this.engine.setState(this.effState());
+    }
   }
 
   /** The colour Mochi should be: his focused pill colour, else his own cream. */
   private targetBodyColor(): RGB | null {
     if (this.tintRequest) return this.tintRequest;
     const focus = State.focusPill;
-    return focus ? hexToRGB(focus.color) : null;
+    const map = State.settings.mochiColors;
+    if (focus) return hexToRGB(colorFor(map, focus.id, focus.color));
+    return map?.main && /^#[0-9a-f]{6}$/i.test(map.main) ? hexToRGB(map.main) : null;
   }
 
   /**
@@ -1141,6 +1165,11 @@ export class Island implements IslandHost {
   avatarTint(color: string | null) {
     this.tintRequest = color ? hexToRGB(color) : null;
     this.ensureRunning();
+  }
+
+  avatarLevel(v: number) {
+    // Hidden: nothing is drawn, so no frame is requested; the value just decays.
+    if (this.engine.setLevel(v) && v > 0.02 && State.mode !== "hidden") this.ensureRunning();
   }
 
   /** Body color the island Mochi is currently drawn with (#rrggbb), or null for the default. */

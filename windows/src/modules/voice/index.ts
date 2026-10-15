@@ -48,6 +48,7 @@ function start(api: IslandApi): Disposer {
     offKeys = () => window.removeEventListener("keydown", onKey);
   };
   Voice.leave = () => {
+    api.avatar.level(0);
     keys(false);
     release();
     line();
@@ -86,7 +87,9 @@ function start(api: IslandApi): Disposer {
       show();
     }),
     api.listen<number>("voice-level", (v) => {
-      if (Voice.level && Voice.phase === "listening") Voice.level.style.width = `${Math.round(v * 100)}%`;
+      if (Voice.phase !== "listening") return;
+      api.avatar.level(v);
+      if (Voice.level) Voice.level.style.width = `${Math.round(v * 100)}%`;
     }),
     api.listen<{ text: string }>("voice-text", ({ text }) => {
       Voice.text = text;
