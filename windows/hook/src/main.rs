@@ -75,10 +75,9 @@ fn main() {
     if std::env::var_os("COUCOU_INTERNAL").is_some_and(|v| !v.is_empty()) {
         std::process::exit(0);
     }
-    let Some(Event { line: payload, name: event, tool_input }) = read_event() else { std::process::exit(0) };
+    let Some(Event { line: payload, waits: waits_for_answer, tool_input }) = read_event() else { std::process::exit(0) };
 
     // Only a permission request waits for a human, so only it gets the long budget.
-    let waits_for_answer = event == "PermissionRequest";
     let budget = if waits_for_answer { DECISION_BUDGET } else { FIRE_AND_FORGET_BUDGET };
 
     // The worker owns every blocking call. If it overruns the budget we simply
@@ -444,7 +443,7 @@ fn title_in(line: &str) -> Option<String> {
 /// Claude's question tool only — its input exactly as it came.
 struct Event {
     line: String,
-    name: String,
+    waits: bool,
     tool_input: Option<serde_json::Value>,
 }
 
@@ -462,26 +461,17 @@ fn read_event() -> Option<Event> {
     let mut payload = serde_json::from_slice::<serde_json::Value>(&raw).ok()?;
     let map = payload.as_object_mut()?;
 
-    // Parse argv: "coucou-hook.exe [--agent <name>] [<EventName>]"
-    // --agent tags the payload with coucou_agent so the app routes to the right pill.
-    // Absent or invalid names are validated and discarded by the app, not here.
-    let mut agent = String::new();
-    let mut arg_event = String::new();
-    {
-        let mut it = std::env::args().skip(1);
-        while let Some(arg) = it.next() {
-            if arg == "--agent" {
-                agent = it.next().unwrap_or_default();
-            } else if arg_event.is_empty() {
-                arg_event = arg;
-            }
-        }
+    // argv: "coucou-hook.exe [--channel <c>] [--agent <n>] [--format <f>] [--entry <e>] [<EventName>]"
+    // --agent tags the payload with coucou_agent so the app routes to the right pill;
+    // --channel picks the app-side subscriber (absent = the legacy one).
+    let args = parse_args(std::env::args().skip(1));
+    if !args.agent.is_empty() {
+        map.insert("coucou_agent".into(), serde_json::Value::String(args.agent));
     }
-    // Which agent this hook was installed for. Absent means Claude Code,
-    // so existing hook commands keep working unchanged.
-    if !agent.is_empty() {
-        map.insert("coucou_agent".into(), serde_json::Value::String(agent));
+    if !args.channel.is_empty() {
+        map.insert("coucou_channel".into(), serde_json::Value::String(args.channel));
     }
+    let arg_event = args.event;
     let event = map
         .get("hook_event_name")
         .and_then(|v| v.as_str())
@@ -489,6 +479,11 @@ fn read_event() -> Option<Event> {
         .filter(|s| !s.is_empty())
         .unwrap_or(arg_event);
     map.insert("hook_event_name".into(), serde_json::Value::String(event.clone()));
+    // Only a permission request waits for a human; tell the app so it keeps the connection.
+    let waits = waits_for_reply(&event);
+    if waits {
+        map.insert("coucou_wait".into(), serde_json::Value::Bool(true));
+    }
 
     let tool = map.get("tool_name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
     // Before anything is cut or dropped: what an edit did, and a question whole.
@@ -603,7 +598,7 @@ fn read_event() -> Option<Event> {
 
     let mut line = payload.to_string();
     line.push('\n');
-    Some(Event { line, name: event, tool_input })
+    Some(Event { line, waits, tool_input })
 }
 
 /// Caps every string in the payload. A single Write can carry a whole file.
@@ -624,6 +619,46 @@ fn truncate_strings(value: &mut serde_json::Value) {
         serde_json::Value::Object(map) => map.values_mut().for_each(truncate_strings),
         _ => {}
     }
+}
+
+/// What argv said. `format` is only a tag for now: every format normalises as claude.
+#[derive(Debug, Default, PartialEq)]
+struct Args {
+    event: String,
+    channel: String,
+    agent: String,
+    format: String,
+    entry: String,
+}
+
+/// Unknown `--x` skips its value and is never the event; the first bare word is.
+fn parse_args(mut it: impl Iterator<Item = String>) -> Args {
+    let mut a = Args::default();
+    while let Some(arg) = it.next() {
+        let slot = match arg.as_str() {
+            "--channel" => &mut a.channel,
+            "--agent" => &mut a.agent,
+            "--format" => &mut a.format,
+            "--entry" => &mut a.entry,
+            x if x.starts_with("--") => {
+                it.next();
+                continue;
+            }
+            _ => {
+                if a.event.is_empty() {
+                    a.event = arg;
+                }
+                continue;
+            }
+        };
+        *slot = it.next().unwrap_or_default();
+    }
+    a
+}
+
+/// Does this event block on the island's answer?
+fn waits_for_reply(event: &str) -> bool {
+    event == "PermissionRequest"
 }
 
 /// Connect, send, and — for a permission request — wait for the island's word.
@@ -660,6 +695,36 @@ fn talk(payload: &str, waits_for_answer: bool) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn args(v: &[&str]) -> Args {
+        parse_args(v.iter().map(|s| s.to_string()))
+    }
+
+    #[test]
+    fn parse_args_old_and_new_forms() {
+        assert_eq!(args(&["Stop"]).event, "Stop");
+        let a = args(&["--agent", "x", "Stop"]);
+        assert_eq!((a.agent.as_str(), a.event.as_str()), ("x", "Stop"));
+        let a = args(&["--channel", "agents", "--agent", "x", "--format", "codex", "--entry", "cli", "Stop"]);
+        assert_eq!(
+            a,
+            Args { event: "Stop".into(), channel: "agents".into(), agent: "x".into(), format: "codex".into(), entry: "cli".into() }
+        );
+        // unknown flag skips its value and is never the event
+        assert_eq!(args(&["--future", "v", "Stop"]).event, "Stop");
+        assert_eq!(args(&["--future", "v"]).event, "");
+        // missing value
+        assert_eq!(args(&["Stop", "--agent"]).agent, "");
+        assert_eq!(args(&[]), Args::default());
+    }
+
+    #[test]
+    fn only_permission_request_waits() {
+        assert!(waits_for_reply("PermissionRequest"));
+        for e in ["Stop", "PreToolUse", "PostToolUse", "SessionStart", ""] {
+            assert!(!waits_for_reply(e));
+        }
+    }
 
     #[test]
     fn decision_json_matches_the_documented_shape() {
