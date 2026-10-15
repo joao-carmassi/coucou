@@ -45,7 +45,7 @@ const fail = !process.argv.includes("--warn");
 const failLints = !process.argv.includes("--warn-lints") && !process.argv.includes("--warn");
 
 const ALLOWLIST = []; // must stay empty (tests/audits.test.ts); a stale entry would fail below
-const CORE_EVENTS = ["cursor", "tray", "screen-changed", "settings-changed", "settings-shown", "modules-changed", "file-drag", "hotkey-error", "inbox-added", "presence"];
+const CORE_EVENTS = ["cursor", "tray", "screen-changed", "settings-changed", "settings-shown", "modules-changed", "file-drag", "hotkey-error", "inbox-added", "presence", "palette"];
 const CONCEPTS = ["approval", "session", "overview", "github", "wsl", "transcript", "claude", "voice", "media"];
 
 const files = (dir, ext) => {

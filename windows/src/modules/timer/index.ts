@@ -42,11 +42,18 @@ function start(api: IslandApi): Disposer {
   Timer.onChange = arm;
   const offKeep = api.island.keepAwake(() => Timer.active);
   // The interval is off while hidden: catch the readout up when the island comes back.
+  // Alt+F / palette: a 25 min countdown, only while nothing is running.
+  const offAction = api.actions.add({
+    id: "focus", title: "Iniciar foco", keywords: ["timer", "pomodoro", "temporizador"], key: "f",
+    when: () => !Timer.active,
+    run() { Timer.prepare("countdown", 25); Timer.start(); },
+  });
   const offVis = api.onVisibility((mode) => { if (mode !== "hidden" && Timer.status === "running") refresh(); });
   return () => {
     disarm();
     hold?.();
     offKeep();
+    offAction();
     offVis();
     Timer.reset();
     api.status.set(null);

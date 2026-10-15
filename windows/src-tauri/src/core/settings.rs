@@ -29,6 +29,8 @@ pub struct Settings {
     pub mochi_colors: BTreeMap<String, String>,
     /// Minutes of rest before the main Mochi sleeps. 0 = never.
     pub mochi_sleep_minutes: f64,
+    /// Global hotkey that opens the command palette; "" = none.
+    pub palette_hotkey: String,
     /// Keys this build no longer knows (the removed chat's `model`, `chatBackend`…):
     /// kept so saving never drops them from an installed settings.json.
     #[serde(flatten)]
@@ -39,6 +41,8 @@ pub struct Settings {
 fn legacy_onboarded() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
+
+pub const DEFAULT_PALETTE_HOTKEY: &str = "Ctrl+Alt+K";
 
 fn default_compact_hide() -> f64 {
     60.0
@@ -59,6 +63,7 @@ impl Default for Settings {
             onboarded_version: String::new(),
             mochi_colors: Default::default(),
             mochi_sleep_minutes: 10.0,
+            palette_hotkey: DEFAULT_PALETTE_HOTKEY.into(),
             extra: Default::default(),
         }
     }

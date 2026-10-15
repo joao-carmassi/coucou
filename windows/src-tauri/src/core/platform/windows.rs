@@ -15,8 +15,8 @@ use ::windows::Win32::System::SystemInformation::GetLocalTime;
 use ::windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 use ::windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
 use ::windows::Win32::UI::WindowsAndMessaging::{
-    EnumChildWindows, GetClassNameW, GetCursorPos, GetWindowLongPtrW,
-    SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    EnumChildWindows, GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindowLongPtrW, IsWindow,
+    SetForegroundWindow, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
 };
 
 use super::LocalTime;
@@ -230,6 +230,32 @@ pub fn make_non_activating(win: &WebviewWindow) {
         let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
         let want = ex | WS_EX_NOACTIVATE.0 as isize | WS_EX_TOOLWINDOW.0 as isize;
         SetWindowLongPtrW(hwnd, GWL_EXSTYLE, want);
+    }
+}
+
+/// The window that had the focus when the palette hotkey fired (0 = none).
+static PRIOR_FOREGROUND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+/// Remembers the foreground window (unless it is `win` itself) for `restore_foreground`.
+pub fn remember_foreground(win: &WebviewWindow) {
+    let own = hwnd_of(win);
+    let fg = unsafe { GetForegroundWindow() };
+    if !fg.0.is_null() && own != Some(fg) {
+        PRIOR_FOREGROUND.store(fg.0 as isize, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Gives the focus back to the remembered window, once, if it still exists.
+pub fn restore_foreground() {
+    let v = PRIOR_FOREGROUND.swap(0, std::sync::atomic::Ordering::SeqCst);
+    if v == 0 {
+        return;
+    }
+    let hwnd = HWND(v as *mut std::ffi::c_void);
+    unsafe {
+        if IsWindow(Some(hwnd)).as_bool() {
+            let _ = SetForegroundWindow(hwnd);
+        }
     }
 }
 

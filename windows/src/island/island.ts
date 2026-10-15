@@ -20,12 +20,13 @@ import { Requests, type Req, type RequestSpec } from "../core/requests";
 import { Compact } from "../core/compact";
 import { NoticeQueue, type NoticeEntry } from "../core/notices";
 import { Sound } from "../core/sound";
+import { Actions, type Entry } from "../core/actions";
 import { colorFor } from "../core/pills";
 import { State } from "../core/state";
 import { BotEngine, hexToRGB, sleepDue, type RGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
 import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
-import { buildHeader, buildViews, type Header, type ViewActions, type ViewHost } from "../views/views";
+import { buildHeader, buildViews, type Header, type PaletteView, type ViewActions, type ViewHost } from "../views/views";
 import { h } from "../kit/dom";
 import { IslandStateMachine, type FsmState } from "./fsm";
 
@@ -66,6 +67,8 @@ export class Island implements IslandHost {
   private viewDefs = new Map<string, ViewDef>();
   private overlays = new Set<Overlay>();
   private kbFocus = false;
+  /** Where the palette came from: Esc and a pick return there (never read while another view is up). */
+  private palettePrev: { mode: IslandMode; view: string } | null = null;
 
   private width = new Tracked(compactWidth(0, 0));
   private widthTarget = -1;
@@ -206,7 +209,7 @@ export class Island implements IslandHost {
       const d = this.viewDefs.get(v);
       return d?.tabOf ?? (d?.lightsHome ? State.tabs.find((t) => t.home)?.view : undefined);
     });
-    this.views = buildViews(this.actions);
+    this.views = buildViews(this.actions, (e) => this.pickPalette(e));
     this.viewsEl = h("div", { id: "views" });
     for (const v of this.views.values()) this.viewsEl.append(v.el);
     this.contentEl = h("div", { id: "content" }, this.header.el, this.viewsEl);
@@ -382,6 +385,83 @@ export class Island implements IslandHost {
     this.expand(view);
     // Already home (no transition ran): the mouse is elsewhere, so the auto-close countdown starts here.
     if (this.fsm.state === "home" && !this.wasInIsland) this.fsm.mouseLeft();
+  }
+
+  // ── Palette + keys ──────────────────────────────────────────────────────────
+
+  /** Opens the palette; over a waiting pinned request it only brings that request back. */
+  openPalette() {
+    if (Requests.front()?.pin) return this.reopen();
+    if (State.mode === "expanded" && State.view === "palette") return;
+    this.palettePrev = { mode: State.mode, view: State.view };
+    (this.views.get("palette") as PaletteView).reset();
+    this.open("palette");
+  }
+
+  /** Back to where the palette came from, or folded. */
+  private closePalette() {
+    const p = this.palettePrev;
+    this.palettePrev = null;
+    if (p?.mode === "expanded" && p.view !== "palette") this.setView(p.view);
+    else this.collapse();
+  }
+
+  private pickPalette(e: Entry) {
+    this.closePalette();
+    Actions.exec(e.run, (err) => this.error(err));
+  }
+
+  /** The central key handler, before the Esc line: palette keys, Ctrl+K, Ctrl+Tab, Alt+<key>. True when it took the key. */
+  private onPaletteKey(e: KeyboardEvent): boolean {
+    const expanded = State.mode === "expanded";
+    if (expanded && State.view === "palette") {
+      const p = this.views.get("palette") as PaletteView;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        p.move(e.key === "ArrowDown" ? 1 : -1);
+        return true;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const cur = p.current();
+        if (cur) this.pickPalette(cur);
+        return true;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        this.closePalette();
+        return true;
+      }
+    }
+    const k = e.key.toLowerCase();
+    if (e.ctrlKey && !e.altKey && !e.metaKey && k === "k") {
+      const t = e.target as Element | null;
+      const other = t?.closest?.("input, textarea, [contenteditable]") && !t.closest("[data-palette]");
+      if (document.hasFocus() && !other) {
+        e.preventDefault();
+        this.openPalette();
+        return true;
+      }
+    }
+    if (e.ctrlKey && !e.altKey && !e.metaKey && e.key === "Tab" && expanded && !State.isPinned && State.tabs.length) {
+      const own = this.viewDefs.get(State.view)?.tabOf ?? State.view;
+      const at = State.tabs.findIndex((t) => t.view === own || (t.home && State.view === State.defaultView()));
+      const n = State.tabs.length;
+      const next = State.tabs[at < 0 ? (e.shiftKey ? n - 1 : 0) : (at + (e.shiftKey ? -1 : 1) + n) % n];
+      e.preventDefault();
+      this.actions.setView(next.home ? State.defaultView() : next.view);
+      return true;
+    }
+    // !ctrlKey: AltGr is Ctrl+Alt on ABNT2 and types characters.
+    if (e.altKey && !e.ctrlKey && !e.metaKey && !e.repeat && /^[a-z0-9]$/.test(e.key)) {
+      const a = Actions.byKey(e.key);
+      if (a) {
+        e.preventDefault();
+        Actions.run(a.key, (err) => this.error(err));
+        return true;
+      }
+    }
+    return false;
   }
 
   /** The only write of fsm.pinned: the front request's pin. */
@@ -749,6 +829,7 @@ export class Island implements IslandHost {
     });
 
     window.addEventListener("keydown", (e) => {
+      if (this.onPaletteKey(e)) return;
       if (e.key === "Escape" && State.mode === "expanded" && !State.isPinned) this.collapse();
     });
 
@@ -1152,7 +1233,7 @@ export class Island implements IslandHost {
       view.el.classList.toggle("on", on);
       if (on) view.sync();
     }
-    const kb = expanded && !!this.viewDefs.get(State.view)?.keyboard;
+    const kb = expanded && (State.view === "palette" || !!this.viewDefs.get(State.view)?.keyboard);
     if (kb !== this.kbFocus) {
       this.kbFocus = kb;
       void Bridge.focusWindow(kb);

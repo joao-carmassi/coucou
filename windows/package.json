@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node --test tests/catalog.test.ts tests/resolvers.test.ts tests/timer.test.ts tests/holds.test.ts tests/upload.test.ts tests/providers.test.ts tests/requests.test.ts tests/notices.test.ts tests/moods.test.ts tests/sound.test.ts tests/audits.test.ts tests/new-module.test.ts tests/settingsUi.test.ts tests/hub.test.ts",
+    "test": "node --test tests/catalog.test.ts tests/resolvers.test.ts tests/timer.test.ts tests/holds.test.ts tests/upload.test.ts tests/providers.test.ts tests/requests.test.ts tests/notices.test.ts tests/actions.test.ts tests/moods.test.ts tests/sound.test.ts tests/audits.test.ts tests/new-module.test.ts tests/settingsUi.test.ts tests/hub.test.ts",
     "test:harness": "vitest run --config vitest.config.ts",
     "icons": "node scripts/gen-icons.mjs",
     "idle-audit": "node scripts/idle-audit.mjs",
