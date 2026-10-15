@@ -1,5 +1,5 @@
 // Scaffolds a module: src/modules/<id>/ (+ src-tauri/src/modules/<id>/mod.rs with --rust) and tests/harness/<id>.test.ts.
-// Usage: npm run new-module -- <id> [--rust] [--view] [--label "Nome"]
+// Usage: npm run new-module -- <id> [--rust] [--view] [--label "Nome"] [--order <n>]
 // COUCOU_ROOT replaces the windows/ root (the tests point it at a temp copy; the real tree is not touched).
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -7,7 +7,8 @@ import { fileURLToPath } from "node:url";
 
 const root = process.env.COUCOU_ROOT || join(dirname(fileURLToPath(import.meta.url)), "..");
 const TS_DIR = join(root, "src/modules");
-const RS_DIR = join(root, "src-tauri/src/modules");
+const RS_SRC = join(root, "src-tauri/src");
+const RS_DIR = join(RS_SRC, "modules");
 const HARNESS = join(root, "tests/harness");
 
 // Rust keywords and names the generated `pub mod <id>;` would shadow.
@@ -19,7 +20,7 @@ function die(msg) {
 }
 
 const argv = process.argv.slice(2);
-const flags = { rust: false, view: false, label: null };
+const flags = { rust: false, view: false, label: null, order: null };
 const positional = [];
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -28,10 +29,13 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === "--label") {
     if (argv[i + 1] === undefined) die("--label needs a value");
     flags.label = argv[++i];
+  } else if (a === "--order") {
+    if (!/^\d+$/.test(argv[i + 1] ?? "")) die("--order needs a whole number");
+    flags.order = Number(argv[++i]);
   } else if (a.startsWith("--")) die(`unknown option ${a}`);
   else positional.push(a);
 }
-if (positional.length !== 1) die('usage: npm run new-module -- <id> [--rust] [--view] [--label "Nome"]');
+if (positional.length !== 1) die('usage: npm run new-module -- <id> [--rust] [--view] [--label "Nome"] [--order <n>]');
 
 const [id] = positional;
 const label = flags.label ?? id;
@@ -44,6 +48,19 @@ const manifests = () => (isDir(TS_DIR) ? readdirSync(TS_DIR) : [])
   .map((n) => join(TS_DIR, n, "manifest.json"))
   .filter((p) => existsSync(p))
   .flatMap((p) => [JSON.parse(readFileSync(p, "utf8"))].flat());
+
+// Names of every #[tauri::command] fn outside src-tauri/src/modules (core and lib.rs): a module prefix must not reach them.
+const coreCommands = (dir = RS_SRC) => (isDir(dir) ? readdirSync(dir) : []).flatMap((n) => {
+  const p = join(dir, n);
+  if (isDir(p)) return p === RS_DIR ? [] : coreCommands(p);
+  if (!n.endsWith(".rs")) return [];
+  const lines = readFileSync(p, "utf8").split("\n");
+  return lines.flatMap((line, i) => {
+    if (!line.trim().startsWith("#[tauri::command")) return [];
+    const next = lines.slice(i + 1).join("\n").match(/\bfn\s+([a-z_][a-z0-9_]*)/);
+    return next ? [next[1]] : [];
+  });
+});
 
 // Rust prefixes declared by every folder (the same parse build.rs and the neutrality audit use).
 const rustPrefixes = () => (isDir(RS_DIR) ? readdirSync(RS_DIR) : [])
@@ -63,7 +80,12 @@ const mine = `${id}_`;
 const clash = rustPrefixes().find((p) => mine.startsWith(p) || p.startsWith(mine));
 if (clash) die(`Rust prefix "${mine}" collides with "${clash}" of another module`);
 
-const order = Math.max(0, ...existing.map((m) => m.order)) + 1;
+if (existsSync(join(HARNESS, `${id}.test.ts`))) die(`tests/harness/${id}.test.ts already exists`);
+const hit = coreCommands().find((c) => c.startsWith(mine));
+if (hit) die(`core command "${hit}" starts with "${mine}": pick another id`);
+
+// Devonly modules (debug builds only) do not count: a release order must not skip past them.
+const order = flags.order ?? Math.max(0, ...existing.filter((m) => !m.devOnly).map((m) => m.order)) + 1;
 const Pascal = id[0].toUpperCase() + id.slice(1);
 const dir = join(TS_DIR, id);
 const write = (path, text) => {

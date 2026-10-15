@@ -49,6 +49,7 @@ test("resolveEnabled: defaults and requirements", () => {
   // Only the shipped-on defaults are listed: a new module (scripts/new-module.mjs) must not edit this test.
   const defaults = resolveEnabled(MODULE_INFO, {});
   assert.deepEqual(Object.keys(defaults).filter((id) => defaults[id]), ["board", "claude", "media", "upload"]);
+  assert.deepEqual(Object.keys(defaults), MODULE_INFO.map((m) => m.id));
   const r = resolveEnabled(MODULE_INFO, { claude: false, voice: true });
   assert.equal(r.voice, false);
   assert.equal(r.upload, false);

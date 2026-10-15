@@ -1,5 +1,5 @@
 // Sends one fake Claude Code hook event to Coucou's pipe, the way coucou-hook does, so island pills can be tested without Claude.
-// Usage: node scripts/fake-agent.mjs <Event> [--session <id>] [--cwd <dir>] [--tool <name>] [--agent <name>] [--message <text>] [--wait]
+// Usage: node scripts/fake-agent.mjs <Event> [--session <id>] [--cwd <dir>] [--tool <name>] [--agent <name>] [--channel <c>] [--message <text>] [--wait]
 //   Events: SessionStart, PreToolUse, Notification, Stop. PermissionRequest only with --wait (it waits for the island's reply line).
 // Exits 0 quietly when the pipe is absent (Coucou is closed), like the hook.
 import { execFileSync } from "node:child_process";
@@ -10,17 +10,17 @@ const EVENTS = ["SessionStart", "PreToolUse", "Notification", "Stop", "Permissio
 const WAIT_TIMEOUT_MS = 120_000; // the hook gives up on a permission answer after 110 s
 
 function usage(msg) {
-  console.error(`fake-agent: ${msg}\nusage: node scripts/fake-agent.mjs <${EVENTS.join("|")}> [--session <id>] [--cwd <dir>] [--tool <name>] [--agent <name>] [--message <text>] [--wait]`);
+  console.error(`fake-agent: ${msg}\nusage: node scripts/fake-agent.mjs <${EVENTS.join("|")}> [--session <id>] [--cwd <dir>] [--tool <name>] [--agent <name>] [--channel <c>] [--message <text>] [--wait]`);
   process.exit(2);
 }
 
 const argv = process.argv.slice(2);
-const opts = { session: "fake-session", cwd: process.cwd(), tool: null, agent: null, message: null, wait: false };
+const opts = { session: "fake-session", cwd: process.cwd(), tool: null, agent: null, channel: null, message: null, wait: false };
 let event = null;
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === "--wait") opts.wait = true;
-  else if (["--session", "--cwd", "--tool", "--agent", "--message"].includes(a)) {
+  else if (["--session", "--cwd", "--tool", "--agent", "--channel", "--message"].includes(a)) {
     if (argv[i + 1] === undefined) usage(`${a} needs a value`);
     opts[a.slice(2)] = argv[++i];
   } else if (a.startsWith("--")) usage(`unknown option ${a}`);
@@ -50,6 +50,8 @@ const payload = { hook_event_name: event, session_id: opts.session, cwd: opts.cw
 if (opts.tool) payload.tool_name = opts.tool;
 if (opts.tool && event !== "SessionStart") payload.tool_input = {};
 if (opts.agent) payload.coucou_agent = opts.agent;
+if (opts.channel) payload.coucou_channel = opts.channel;
+if (opts.wait) payload.coucou_wait = true; // what the hook sends for a PermissionRequest
 if (opts.message) {
   if (event === "Stop") payload.last_message = opts.message;
   else payload.message = opts.message;

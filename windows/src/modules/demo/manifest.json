@@ -1,7 +1,8 @@
 {
   "id": "demo",
-  "label": "Vitrine",
+  "label": "Exemplo",
   "default": false,
-  "order": 13,
+  "order": 90,
+  "presets": ["vitrine"],
   "settingsDefaults": {}
 }
