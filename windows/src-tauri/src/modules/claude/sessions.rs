@@ -393,10 +393,10 @@ mod tests {
 
     #[test]
     fn profile_keys_ignore_case_and_slashes() {
-        let home = crate::core::platform::home_dir();
+        // Fixed path: home_dir() reads an env var another test rewrites (default case is in hooks tests).
+        let home = std::path::PathBuf::from("C:/Users/Me");
         let plain = home.join(".claude-qf").to_string_lossy().into_owned();
         let odd = plain.to_uppercase().replace('\\', "/");
         assert_eq!(crate::modules::claude::hooks::profile_key(&odd), crate::modules::claude::hooks::profile_key(&plain));
-        assert_eq!(crate::modules::claude::hooks::profile_key(&home.join(".claude").to_string_lossy()), "");
     }
 }

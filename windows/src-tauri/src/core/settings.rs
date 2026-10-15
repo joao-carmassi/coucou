@@ -100,6 +100,19 @@ pub fn merge_patch(current: &Settings, patch: serde_json::Map<String, serde_json
 }
 
 pub fn save(settings: &Settings) -> std::io::Result<()> {
+    save_to(&for_disk(settings, crate::core::safe_mode::real_modules()))
+}
+
+/// Safe mode runs with a reduced switch map in memory; the stored one is what reaches the disk.
+fn for_disk(settings: &Settings, real: Option<&BTreeMap<String, bool>>) -> Settings {
+    let mut s = settings.clone();
+    if let Some(r) = real {
+        s.modules_enabled = r.clone();
+    }
+    s
+}
+
+fn save_to(settings: &Settings) -> std::io::Result<()> {
     let dir = config_dir();
     crate::core::platform::ensure_private_dir(&dir)?;
     let json = serde_json::to_vec_pretty(settings)
@@ -143,6 +156,15 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&f).unwrap(), "two");
         assert!(!dir.join("settings.json.tmp").exists());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn safe_mode_never_reaches_the_disk() {
+        let mut s = Settings::default();
+        s.modules_enabled.insert("x".into(), false);
+        let real: BTreeMap<String, bool> = [("x".to_string(), true), ("y".to_string(), true)].into();
+        assert_eq!(for_disk(&s, Some(&real)).modules_enabled, real);
+        assert_eq!(for_disk(&s, None).modules_enabled, s.modules_enabled);
     }
 
     #[test]

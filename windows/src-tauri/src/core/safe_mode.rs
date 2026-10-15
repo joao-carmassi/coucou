@@ -18,11 +18,30 @@ fn reset(dir: &Path) {
     let _ = std::fs::write(dir.join(FILE), "0");
 }
 
-/// Call once at startup. True when this run must use safe mode.
-pub fn begin() -> bool {
+static REAL: std::sync::OnceLock<std::collections::BTreeMap<String, bool>> = std::sync::OnceLock::new();
+
+/// The module switches as stored on disk while this run is in safe mode: `settings::save` writes these, never the reduced set.
+pub fn real_modules() -> Option<&'static std::collections::BTreeMap<String, bool>> {
+    REAL.get()
+}
+
+pub fn active() -> bool {
+    REAL.get().is_some()
+}
+
+/// A normal quit is not a crash.
+pub fn clean_exit() {
+    reset(&crate::core::platform::config_dir());
+}
+
+/// Call once, after single-instance. `stored` is the on-disk switch map. True when this run must use safe mode.
+pub fn begin(stored: &std::collections::BTreeMap<String, bool>) -> bool {
     let dir = crate::core::platform::config_dir();
     let _ = crate::core::platform::ensure_private_dir(&dir);
     let safe = bump(&dir) >= THRESHOLD;
+    if safe {
+        let _ = REAL.set(stored.clone());
+    }
     // Single short-lived core thread: sleeps once, resets the marker, exits.
     std::thread::spawn(move || {
         std::thread::sleep(HEALTHY_AFTER);

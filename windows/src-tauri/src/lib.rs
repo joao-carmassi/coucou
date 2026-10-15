@@ -23,9 +23,6 @@ pub struct Shared {
     /// Section the settings window should scroll to. Kept until the window
     /// takes it, because the first-launch offer can fire before its page loads.
     pub settings_section: Mutex<String>,
-    /// Safe mode only: the module switches as stored on disk. The in-memory ones are reduced and never written.
-    pub real_modules: Option<BTreeMap<String, bool>>,
-    pub safe_mode: bool,
 }
 
 #[derive(Serialize)]
@@ -55,7 +52,7 @@ fn boot(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>) -> BootI
         version: env!("CARGO_PKG_VERSION").to_string(),
         cursor_poll: platform::CURSOR_POLL,
         modules: host.state(),
-        safe_mode: shared.safe_mode,
+        safe_mode: core::safe_mode::active(),
     }
 }
 
@@ -81,12 +78,7 @@ fn save_settings(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>,
         let autostart_changed = current.autostart != settings.autostart;
         *current = settings.clone();
         // Saved inside the lock so two saves reach the disk in the order they were merged.
-        // shortcut: in safe mode module toggles are not persisted; restart normally to change them.
-        let mut disk = settings.clone();
-        if let Some(real) = &shared.real_modules {
-            disk.modules_enabled = real.clone();
-        }
-        if let Err(err) = settings::save(&disk) {
+        if let Err(err) = settings::save(&settings) {
             eprintln!("[coucou] could not save settings: {err}");
         }
         (settings, screen_changed, autostart_changed)
@@ -159,6 +151,7 @@ fn open_url(url: String) {
 
 #[tauri::command]
 fn quit_app(app: AppHandle) {
+    core::safe_mode::clean_exit();
     app.exit(0);
 }
 
@@ -294,12 +287,6 @@ pub fn run() {
     if migrated && ok {
         let _ = settings::save(&loaded);
     }
-    let safe_mode = core::safe_mode::begin();
-    let real_modules = safe_mode.then(|| loaded.modules_enabled.clone());
-    if safe_mode {
-        log::line("[safe-mode] repeated unclean starts: only the safe set is on this run".to_string());
-        loaded.modules_enabled = modules::CATALOG.iter().map(|m| (m.id.to_string(), modules::SAFE_MODULES.contains(&m.id))).collect();
-    }
     let gate = Arc::new(PollGate::new());
     let core = host::handler(tauri::generate_handler![
         boot,
@@ -328,8 +315,6 @@ pub fn run() {
             settings: Mutex::new(loaded.clone()),
             gate: gate.clone(),
             settings_section: Mutex::new(String::new()),
-            real_modules,
-            safe_mode,
         })
         .invoke_handler(move |inv| {
             // Route by command-name prefix: a handler consumes the invoke, so they cannot be chained.
@@ -340,7 +325,16 @@ pub fn run() {
             }
         })
         .setup(move |app| {
+            let mut loaded = loaded;
             let handle = app.handle().clone();
+            // Here, not earlier: a second launch has already exited in the single-instance plugin.
+            if core::safe_mode::begin(&loaded.modules_enabled) {
+                log::line("[safe-mode] repeated unclean starts: only the safe set is on this run".to_string());
+                let reduced: BTreeMap<String, bool> =
+                    modules::CATALOG.iter().map(|m| (m.id.to_string(), modules::SAFE_MODULES.contains(&m.id))).collect();
+                loaded.modules_enabled = reduced.clone();
+                handle.state::<Shared>().settings.lock().unwrap().modules_enabled = reduced;
+            }
             handle.state::<ModuleHost>().setup(&handle);
             tray::build(&handle)?;
             // Before the island: see create_settings_window.
@@ -364,6 +358,11 @@ pub fn run() {
             handle.state::<ModuleHost>().sync(&handle, &loaded);
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Coucou");
+        .build(tauri::generate_context!())
+        .expect("error while building Coucou")
+        .run(|_, event| {
+            if let tauri::RunEvent::Exit = event {
+                core::safe_mode::clean_exit();
+            }
+        });
 }
