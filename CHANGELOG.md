@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.0
+
+Core foundation for the next modules (everything new is generic API, no module names in the core).
+
+- Hardening: atomic settings save under lock, secrets only through a core secrets store, safe mode (3 unclean starts in a row run only the safe module set, in memory; leave it from the Hub), BOM-tolerant settings load.
+- Relay: the hook pipe is now a channel relay that starts with its first subscriber; hook exe takes `--channel/--agent/--format/--entry`.
+- Notices: `api.island.notice` queue on the status line, OS presence watch (full-screen, presentation, quiet hours, mic in use) and "hide when busy" option (on by default).
+- Actions: `api.actions.add` and a command palette (Ctrl+K, Alt+letter, Ctrl+Tab, global hotkey Ctrl+Alt+K by default). Keyboard Y/N on an approval card is ignored for 500 ms and right after the palette.
+- Island: Alt+drag to move it per monitor, "Centralizar ilha" in the tray and in settings.
+- Mochi: colour per Mochi, idle glances, sleep and greeting v2.
+- Hub: search, presets (essencial, dev, tudo), export/import without secrets, onboarding for fresh installs, safe-mode exit.
+- Timer: pomodoro (work, short and long breaks) and daily alarms.
+- Dev: `npm run new-module` scaffolder, `npm run fake-agent`, example module "Exemplo" (off by default).
+
 ## 0.8.5
 
 - Board primary: fix a picked pill (Vercel) staying in front on the mini island after the focus time, until the island was opened and closed again. The pick is now judged lazily on every visibility change (hover wake, open) as well as by the fold timer, and is dropped only once judged (a skipped attempt no longer loses it). An explicit default (Claude done/alert/error) now takes the front too.
