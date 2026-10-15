@@ -31,7 +31,7 @@ type Triple = readonly [number, number, number];
 const toLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
 const toGamma = (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
 
-function rgbToOklab([r, g, b]: Triple): Triple {
+export function rgbToOklab([r, g, b]: Triple): Triple {
   const [lr, lg, lb] = [toLinear(r), toLinear(g), toLinear(b)];
   const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb);
   const m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb);
@@ -43,7 +43,7 @@ function rgbToOklab([r, g, b]: Triple): Triple {
   ];
 }
 
-function oklabToRgb([L, a, b]: Triple): [number, number, number] {
+export function oklabToRgb([L, a, b]: Triple): [number, number, number] {
   const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
   const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
   const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;

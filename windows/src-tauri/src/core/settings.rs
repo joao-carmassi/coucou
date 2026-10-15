@@ -20,6 +20,10 @@ pub struct Settings {
     pub focus_hold_minutes: f64,
     /// Module switches by id; a missing id means the module's default.
     pub modules_enabled: BTreeMap<String, bool>,
+    /// Body colour per Mochi (pill id, "<prefix>*" or "main" -> #rrggbb).
+    pub mochi_colors: BTreeMap<String, String>,
+    /// Minutes of rest before the main Mochi sleeps. 0 = never.
+    pub mochi_sleep_minutes: f64,
     /// Keys this build no longer knows (the removed chat's `model`, `chatBackend`…):
     /// kept so saving never drops them from an installed settings.json.
     #[serde(flatten)]
@@ -41,6 +45,8 @@ impl Default for Settings {
             compact_hide_interval: default_compact_hide(),
             focus_hold_minutes: 1.0,
             modules_enabled: Default::default(),
+            mochi_colors: Default::default(),
+            mochi_sleep_minutes: 10.0,
             extra: Default::default(),
         }
     }
