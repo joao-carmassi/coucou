@@ -45,6 +45,7 @@ export class NoticeQueue {
 Flow: `notice()` → if `State.paused` return no-op disposer → `add`; if queue was empty call `presence_watch(true)` → island puts the front into `Compact` under reserved owner `"#notice"` (`overGrid:true`); ordinary resolution applies (higher status wins; tie → notice). Clock starts on first `syncDom` where mode is compact and the status line is the notice. Expanded/hidden without `peek`: waits, clock paused (staleness still runs). One `setTimeout` armed at `nextDeadline` only while non-empty. Queue empty → `Compact.set("#notice", null)`, `presence_watch(false)`, nothing armed.
 Click precedence on compact click: pinned front request > shown notice `view` > hold > last view > homeView > home tab > first tab > empty (notice consumed).
 Peek: hidden island + front notice with `peek` (not quiet, or urgent) → `host.reveal()` compact only.
+**Deviation (C4, accepted):** presence is watched only while `hideWhenBusy` is on AND (the island is visible OR the queue is non-empty): one blocked hook thread whenever the island is visible, none when hidden or the setting is off. A change into quiet folds the island (edge only; never over a pinned request or priority >= URGENT). Only a click (not reopen/hover wake) consumes a shown notice; a notice wins a priority tie against a plain status line; the queue going empty to non-empty re-asks the OS state.
 Pinned approval (status 100) beats any notice burst. Burst cap 12. Pause drops all. Same key on screen: text changes, clock restarts.
 
 Rust `core/presence.rs`:

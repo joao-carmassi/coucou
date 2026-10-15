@@ -134,6 +134,8 @@ export class Island implements IslandHost {
   private watching = false;
   /** The watch was just turned on and has not answered yet: hold the non-urgent ones meanwhile. */
   private presencePending = false;
+  /** Inside clickCompact: only a click consumes the notice on show. */
+  private clicked = false;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -254,7 +256,7 @@ export class Island implements IslandHost {
           const target = this.homeTarget;
           this.homeTarget = null;
           // A click on the compact island consumes the notice it shows; its view comes after a waiting request.
-          const noticed = target === null ? this.consumeNotice() : null;
+          const noticed = target === null && this.clicked ? this.consumeNotice() : null;
           // Reopened on the waiting request (hover, or opened on its own view): it holds the island again.
           // Opened on some other view, the parked request stays parked.
           if (r && (target === null || target === r.view)) Requests.parked = false;
@@ -421,7 +423,10 @@ export class Island implements IslandHost {
   // ── Notices + presence ──────────────────────────────────────────────────────
 
   addNotice(owner: string, n: Notice): Disposer {
+    const wasEmpty = this.notices.size === 0;
     const off = this.notices.add(owner, n, performance.now());
+    // A fullscreen exit may have fired no foreground event: ask again when something starts waiting.
+    if (wasEmpty && this.watching) this.askPresence();
     this.syncNotices();
     return () => {
       off();
@@ -449,7 +454,7 @@ export class Island implements IslandHost {
       this.noticeLine = front ? { priority: front.priority, text: front.text, overGrid: true } : null;
       Compact.set("#notice", this.noticeLine);
       this.redraw();
-    }
+    } else if (front && front.shownAt == null) this.redraw(); // re-added on screen: the clock restarts at the next sync
     if (this.noticeTimer != null) window.clearTimeout(this.noticeTimer);
     this.noticeTimer = null;
     const due = this.notices.nextDeadline(now);
@@ -492,7 +497,11 @@ export class Island implements IslandHost {
       void Bridge.presenceWatch(false);
       return;
     }
-    // The answer is the current state: taken silently (whoever woke the island meant to see it).
+    this.askPresence();
+  }
+
+  /** The answer is the current state: taken silently (whoever woke the island meant to see it). */
+  private askPresence() {
     this.presencePending = true;
     void Bridge.presenceWatch(true).then((p) => {
       if (!this.watching) return;
@@ -501,14 +510,21 @@ export class Island implements IslandHost {
     });
   }
 
+  /** The only way a press on the compact island reaches the FSM: a click may consume the notice it shows. */
+  private clickCompact() {
+    this.clicked = true;
+    try { this.fsm.click(); } finally { this.clicked = false; }
+  }
+
   /** From the `presence` event (and the first answer of the watch). A change into quiet folds a visible island. */
   applyPresence(p: Presence, silent = false) {
     const was = this.quiet;
     this.quiet = p.quiet;
     if (!silent && !was && p.quiet && State.settings.hideWhenBusy) {
+      // Requests ignore presence: a pinned one, or any at urgent priority, keeps the island up.
       const front = Requests.front();
-      const urgent = front != null && front.priority >= BAND.URGENT;
-      if (State.mode !== "hidden" && !urgent && !(State.mode === "expanded" && this.mouseInside())) this.fsm.forceHidden();
+      const keep = Requests.pinned() || (front?.priority ?? 0) >= BAND.URGENT;
+      if (State.mode !== "hidden" && !keep && !(State.mode === "expanded" && this.mouseInside())) this.fsm.forceHidden();
     }
     this.syncNotices();
   }
@@ -550,7 +566,7 @@ export class Island implements IslandHost {
       const moved = this.nudge.moved;
       this.nudge = null;
       if (moved) this.scheduleNudgeReturn();
-      else this.fsm.click();
+      else this.clickCompact();
     }
   }
 
@@ -718,7 +734,7 @@ export class Island implements IslandHost {
       if (State.mode !== "expanded") {
         // Compact opens on the release: a press that travels is a sideways nudge.
         if (State.mode === "compact") this.nudge = { x: e.clientX, off: this.offset(this.width.value), moved: false };
-        else this.fsm.click();
+        else this.clickCompact();
         return;
       }
       // The slap (or news) waits for the release: past 7 px this is a drag-out.

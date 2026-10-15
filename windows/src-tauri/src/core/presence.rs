@@ -7,6 +7,10 @@
 // subscribers > 0 and is stopped like `hotkeys::quit_thread`. Idle cost: one thread blocked in GetMessageW
 // (no CPU, no timeout, no polling); the OS wakes it once per foreground change, which re-reads the two answers
 // (well under a millisecond) and emits `presence` only when the value changed.
+// The island watches while it is visible (and while a notice waits) with "hide when busy" on: one blocked hook
+// thread whenever the island is visible, none when it is hidden or the setting is off.
+// A crashed app can leave LastUsedTimeStop == 0 in the registry: such a use older than 12 h is ignored
+// (STALE_USE), so quiet is not stuck forever.
 // Not covered: Focus Assist, and a change that does not move the foreground (a call that starts in the app
 // already in front is seen at the next foreground change or the next `presence_watch(true)`).
 
@@ -71,6 +75,19 @@ fn own_exe() -> String {
         .unwrap_or_default()
 }
 
+/// A mic use that "started" this long ago and never stopped is taken as left over by a crash.
+const STALE_USE_FT: u64 = 12 * 3600 * 10_000_000;
+
+/// `start` and `now`: FILETIME ticks (100 ns since 1601).
+fn stale_use(start: u64, now: u64) -> bool {
+    now.saturating_sub(start) > STALE_USE_FT
+}
+
+fn filetime_now() -> u64 {
+    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    (secs + 11_644_473_600) * 10_000_000
+}
+
 pub fn now() -> Presence {
     let state = unsafe { SHQueryUserNotificationState().map(|s| s.0).unwrap_or(5) };
     let mic = mic_in_use(&mic_entries(), &own_exe());
@@ -87,6 +104,7 @@ fn wide(s: &str) -> Vec<u16> {
 /// under the key, classic ones under `NonPackaged`.
 fn mic_entries() -> Vec<(String, u64)> {
     let mut out = Vec::new();
+    let ft = filetime_now();
     for parent in [MIC_KEY.to_string(), format!(r"{MIC_KEY}\NonPackaged")] {
         for name in subkeys(&parent) {
             if name == "NonPackaged" {
@@ -95,7 +113,7 @@ fn mic_entries() -> Vec<(String, u64)> {
             let path = format!(r"{parent}\{name}");
             let (start, stop) = (qword(&path, "LastUsedTimeStart"), qword(&path, "LastUsedTimeStop"));
             if let (Some(start), Some(stop)) = (start, stop) {
-                if start != 0 {
+                if start != 0 && !(stop == 0 && stale_use(start, ft)) {
                     out.push((name, stop));
                 }
             }
@@ -193,7 +211,8 @@ fn unsubscribe(id: u64) {
     }
 }
 
-/// Calls `cb` on the hook thread at every foreground change, until the module stops. Must return fast.
+/// Calls `cb` on the hook thread at every foreground change, until the module stops. Must return fast and
+/// must not stop modules or unsubscribe (the thread would wait on itself in `quit_thread`: deadlock).
 /// All callers share one thread; it ends with the last of them.
 #[allow(dead_code)] // first module consumer lands in a later task; the core's own watch below uses `subscribe`
 pub fn on_foreground(ctx: &ModuleCtx, cb: fn(&AppHandle, &Foreground)) {
@@ -320,6 +339,14 @@ mod tests {
         for (s, q) in [(1, false), (2, true), (3, true), (4, true), (5, false), (6, true), (7, false), (0, false)] {
             assert_eq!(quiet_of(s), q, "state {s}");
         }
+    }
+
+    #[test]
+    fn stale_uses_are_dropped() {
+        let h = 3600 * 10_000_000u64;
+        assert!(!stale_use(100 * h, 105 * h));
+        assert!(stale_use(100 * h, 113 * h));
+        assert!(!stale_use(100 * h, 90 * h)); // clock went back: not stale
     }
 
     #[test]

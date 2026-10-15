@@ -48,6 +48,11 @@ const quiet = (q: boolean) => {
   os.quiet = q;
   island.applyPresence({ quiet: q, mic: false });
 };
+/** A press and release on the compact island: the one path that may consume a notice. */
+const clickIsland = () => {
+  document.getElementById("island")!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  window.dispatchEvent(new MouseEvent("mouseup"));
+};
 /** Back to a compact, not quiet island with an empty queue. */
 const reset = async () => {
   State.settings.hideWhenBusy = true;
@@ -168,13 +173,53 @@ describe("notices", () => {
     b().island.notice({ text: "abre", view: "dummy-b", ms: 15_000 });
     await tick(100);
     expect(text()).toBe("abre");
-    island.fsm.click();
+    clickIsland();
     await tick(100);
     expect(State.mode).toBe("expanded");
     expect(State.view).toBe("dummy-b");
     island.collapse();
     await tick(500);
     expect(text()).not.toBe("abre");
+  });
+
+  it("reopen (not a click) leaves the notice on show", async () => {
+    b().island.notice({ text: "fica", view: "dummy-b", ms: 15_000 });
+    await tick(100);
+    island.reopen();
+    await tick(100);
+    island.collapse();
+    await tick(100);
+    expect(text()).toBe("fica");
+  });
+
+  it("a notice wins a priority tie against a status line set later", async () => {
+    b().island.notice({ text: "empate", priority: 60, ms: 15_000 });
+    await tick(100);
+    a().status.set({ priority: 60, text: "plain line" });
+    await tick(100);
+    expect(text()).toBe("empate");
+    a().status.set({ priority: 30, text: "dummy status" });
+  });
+
+  it("re-adding the same key on screen restarts its time", async () => {
+    b().island.notice({ text: "k", key: "k", ms: 2000 });
+    await tick(1500);
+    b().island.notice({ text: "k", key: "k", ms: 2000 });
+    await tick(1500);
+    expect(text()).toBe("k");
+    await tick(700);
+    expect(text()).not.toBe("k");
+  });
+
+  it("a pinned request is not folded by quiet", async () => {
+    const off = a().island.request({ view: "dummy-a", priority: 20, pin: true });
+    await tick(100);
+    expect(State.mode).toBe("expanded");
+    quiet(true);
+    await tick(500);
+    expect(State.mode).toBe("expanded");
+    off();
+    quiet(false);
   });
 
   it("no timeout is left once the queue is empty", async () => {

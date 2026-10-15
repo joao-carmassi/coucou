@@ -22,11 +22,14 @@ export const Compact = {
 
   resolve(otherPills: number, now = performance.now()): StatusLine | null {
     let best: Entry | null = null;
-    for (const e of lines.values()) {
+    let bestOwner = "";
+    for (const [owner, e] of lines) {
       if (e.line.ttlMs != null && now - e.at > e.line.ttlMs) continue;
       if (otherPills > 0 && !e.line.overGrid) continue;
+      // A tie goes to the newest, except that the core's own notice beats a plain status line.
+      const tie = best && e.line.priority === best.line.priority;
       if (!best || e.line.priority > best.line.priority ||
-          (e.line.priority === best.line.priority && e.seq > best.seq)) best = e;
+          (tie && (owner === "#notice" || (bestOwner !== "#notice" && e.seq > best.seq)))) { best = e; bestOwner = owner; }
     }
     return best?.line ?? null;
   },

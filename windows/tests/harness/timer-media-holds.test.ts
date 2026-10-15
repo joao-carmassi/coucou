@@ -82,7 +82,6 @@ describe("timer sticky hold", () => {
     api().island.open("dummy-a"); tick(10);
     tick(5 * 60_000 + 10);
     folded();
-    tick(4_100); // the finished notice (its click would open the timer) has gone by itself
     Last.clear();
     reopen();
     expect(State.view).toBe(State.defaultView());
