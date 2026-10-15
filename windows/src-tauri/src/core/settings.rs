@@ -26,11 +26,15 @@ pub struct Settings {
     pub mochi_colors: BTreeMap<String, String>,
     /// Minutes of rest before the main Mochi sleeps. 0 = never.
     pub mochi_sleep_minutes: f64,
+    /// Global hotkey that opens the command palette; "" = none.
+    pub palette_hotkey: String,
     /// Keys this build no longer knows (the removed chat's `model`, `chatBackend`…):
     /// kept so saving never drops them from an installed settings.json.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
+
+pub const DEFAULT_PALETTE_HOTKEY: &str = "Ctrl+Alt+K";
 
 fn default_compact_hide() -> f64 {
     60.0
@@ -50,6 +54,7 @@ impl Default for Settings {
             modules_enabled: Default::default(),
             mochi_colors: Default::default(),
             mochi_sleep_minutes: 10.0,
+            palette_hotkey: DEFAULT_PALETTE_HOTKEY.into(),
             extra: Default::default(),
         }
     }

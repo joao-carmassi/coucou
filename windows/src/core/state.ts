@@ -48,6 +48,8 @@ export interface Settings {
   mochiColors: Record<string, string>;
   /** Minutes of rest before the main Mochi dozes off; 0 = never. */
   mochiSleepMinutes: number;
+  /** Global hotkey that opens the command palette; "" = none. */
+  paletteHotkey: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -62,6 +64,7 @@ export const DEFAULT_SETTINGS: Settings = {
   modulesEnabled: {},
   mochiColors: {},
   mochiSleepMinutes: 10,
+  paletteHotkey: "Ctrl+Alt+K",
 };
 
 type Listener = () => void;

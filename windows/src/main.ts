@@ -52,6 +52,7 @@ export async function startIsland(modules: ModuleDef[], catalog: ModuleInfo[]) {
   });
 
   await onEvent<Presence>("presence", (p) => island.applyPresence(p));
+  await onEvent<null>("palette", () => island.openPalette());
 
   await onEvent<null>("screen-changed", () => void Bridge.reposition());
 

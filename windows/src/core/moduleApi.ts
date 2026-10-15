@@ -81,6 +81,19 @@ export interface Notice {
   /** May reveal a hidden island to compact (never while presence is quiet, unless urgent). */
   peek?: boolean;
 }
+/** A command for the palette (api.actions.add) and, with `key`, for Alt+<key>. */
+export interface ActionDef {
+  /** Local id; the core stamps "<moduleId>.<id>". */
+  id: string;
+  title: string;
+  keywords?: readonly string[];
+  /** One [a-z0-9]: Alt+<key> while the island has the keyboard. The first to claim it keeps it; duplicates warn. */
+  key?: string;
+  /** Not offered (palette, shortcut) while this says false. */
+  when?(): boolean;
+  /** A throw or rejection goes to api.island.error. */
+  run(): void | Promise<void>;
+}
 /** Where home is (hover / click on the compact island); to hold the island open on a card use api.island.request. */
 export interface HomeRequest { view: string; priority: number }
 export interface IslandHooks {
@@ -228,6 +241,10 @@ export interface IslandApi {
     mouseLocal(): { x: number; y: number };
     /** Asks for a redraw on the next frame. */
     redraw(): void;
+  };
+  actions: {
+    /** Adds a command to the palette (and Alt+<key>); removed by the disposer or when this module stops. */
+    add(def: ActionDef): Disposer;
   };
   provide<K extends keyof IslandHooks>(hook: K, fn: IslandHooks[K]): Disposer;
   /** Offers a service under a namespaced key ("<module>.<name>"; the types live in that module's api.ts). Removed when this module stops. */

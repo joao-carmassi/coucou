@@ -74,6 +74,7 @@ fn save_settings(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>,
             settings.modules_enabled = current.modules_enabled.clone();
         }
         host.on_save(&current, &mut settings);
+        settings.palette_hotkey = core::hotkeys::clean(&settings.palette_hotkey, settings::DEFAULT_PALETTE_HOTKEY);
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
         *current = settings.clone();
@@ -96,6 +97,7 @@ fn save_settings(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>,
     }
     // After the Shared lock is released: a module's start may need it.
     host.sync(&app, &settings);
+    set_palette_hotkey(&app, &settings);
     // Keep the other window in step (island ⇄ settings window).
     let _ = app.emit("settings-changed", settings);
     Ok(())
@@ -129,7 +131,20 @@ fn focus_window(app: AppHandle, focused: bool) {
     platform::set_activating(&win, focused);
     if focused {
         let _ = win.set_focus();
+    } else {
+        platform::restore_foreground();
     }
+}
+
+/// The palette's global hotkey ("" = off). Remembers the window that had the focus so closing the palette gives it back.
+fn set_palette_hotkey(app: &AppHandle, s: &Settings) {
+    let combo = core::hotkeys::clean(&s.palette_hotkey, settings::DEFAULT_PALETTE_HOTKEY);
+    core::hotkeys::set(app, "palette", "Paleta", &combo, |a| {
+        if let Some(win) = island::window(a) {
+            platform::remember_foreground(&win);
+        }
+        let _ = a.emit_to(island::WINDOW_LABEL, "palette", ());
+    });
 }
 
 #[tauri::command]
@@ -358,6 +373,7 @@ pub fn run() {
 
             log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
             handle.state::<ModuleHost>().sync(&handle, &loaded);
+            set_palette_hotkey(&handle, &loaded);
             Ok(())
         })
         .build(tauri::generate_context!())

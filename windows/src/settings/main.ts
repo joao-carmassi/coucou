@@ -22,8 +22,8 @@ const root = document.getElementById("settings-root")!;
 
 /** Only the core's own fields: module keys are saved by their sections as patches, and a stale copy here must not undo them. */
 async function save() {
-  const { soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, hideWhenBusy, autostart, modulesEnabled, mochiColors, mochiSleepMinutes } = settings;
-  await Bridge.saveSettings({ soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, hideWhenBusy, autostart, modulesEnabled, mochiColors, mochiSleepMinutes });
+  const { soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, hideWhenBusy, autostart, modulesEnabled, mochiColors, mochiSleepMinutes, paletteHotkey } = settings;
+  await Bridge.saveSettings({ soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, hideWhenBusy, autostart, modulesEnabled, mochiColors, mochiSleepMinutes, paletteHotkey });
 }
 
 // ── Reusable bits ─────────────────────────────────────────────────────────────
@@ -143,6 +143,12 @@ function generalSection(): HTMLElement {
     void save();
   });
 
+  const paletteKey = h("input", { type: "text", value: settings.paletteHotkey ?? "Ctrl+Alt+K", placeholder: "Ctrl+Alt+K", style: "width:140px" }) as HTMLInputElement;
+  paletteKey.addEventListener("change", () => {
+    settings.paletteHotkey = paletteKey.value.trim();
+    void save();
+  });
+
   const screen = h("select", {}) as HTMLSelectElement;
   screen.append(
     h("option", { value: "primary", text: "Tela principal" }),
@@ -189,6 +195,11 @@ function generalSection(): HTMLElement {
       h("span", { class: "hint", text: "minutos parado (0 = nunca)" }),
     ),
     colorsRows(),
+    h("div", { class: "row" },
+      h("label", { text: "Atalho da paleta" }),
+      paletteKey,
+      h("span", { class: "hint", text: "ex.: Ctrl+Alt+K · vazio = sem atalho global" }),
+    ),
     h("div", { class: "row" },
       h("label", { text: "Ocultar durante tela cheia e chamadas" }),
       toggle(settings.hideWhenBusy, (v) => { settings.hideWhenBusy = v; void save(); }),

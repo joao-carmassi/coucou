@@ -326,6 +326,7 @@ export class Claude {
       api.listen<HookPayload>("hook", (payload) => handleHook(this, payload)),
       // Hotkey (Rust): straight to the card waiting for an answer.
       api.listen<null>("go-to-alert", () => this.goToAlert()),
+      api.actions.add({ id: "alert", title: "Ir ao alerta", key: "a", when: () => this.store.hasPending(), run: () => this.goToAlert() }),
       // The idle card's button and the pill's name follow Settings.
       // (after the core has taken the new settings in: its own listener may run second)
       api.listen("settings-changed", () => void api.timeout(() => store.present(), 0)),

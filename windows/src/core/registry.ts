@@ -1,6 +1,7 @@
 // Starts and stops modules. Gets the module list and catalog injected (src/boot/*): imports no module.
 // Nothing here runs at import time: no timers, no listeners.
 
+import { Actions } from "./actions";
 import { Avatar } from "./avatar";
 import { Bridge, onEvent } from "./bridge";
 import { Compact } from "./compact";
@@ -172,6 +173,13 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
       mouseLocal: () => State.mouseInIsland,
       redraw: () => host.redraw(),
       overlay: (o) => scope.add(host.addOverlay(o)),
+    },
+    actions: {
+      add(def) {
+        const r = Actions.add(id, def);
+        const off: Disposer = () => { scope.remove(off); r(); };
+        return scope.add(off);
+      },
     },
     provide: ((key: string, impl: unknown) =>
       scope.add(key.includes(".") ? Services.provide(key, impl) : Hooks.provide(key as keyof IslandHooks, impl as never))) as IslandApi["provide"],
