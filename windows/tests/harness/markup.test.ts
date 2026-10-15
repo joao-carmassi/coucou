@@ -44,8 +44,9 @@ import { Voice } from "../../src/modules/voice/view";
 import { enterSessionPanel } from "../../src/modules/claude/views/session";
 import { newSession, newStep, type SessionStep } from "../../src/modules/claude/types";
 
-// Every real module, its views and apis captured on the way (no production seam needed).
-const MODULES = REAL.map((m) => ({
+// Every real module, its views and apis captured on the way (no production seam needed). The showcase module
+// (demo) is left out: its two pills would sit in every board snapshot.
+const MODULES = REAL.filter((m) => m.id !== "demo").map((m) => ({
   ...m,
   views: m.views?.map((v) => ({ ...v, build: (ctx: any) => ((T.hosts[v.name] = v.build(ctx)), T.hosts[v.name]) })),
   start: (api: any) => ((T.apis[m.id] = api), m.start(api)),

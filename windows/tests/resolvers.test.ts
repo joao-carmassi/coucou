@@ -46,9 +46,9 @@ test("avatar: override > signal > fallback", () => {
 });
 
 test("resolveEnabled: defaults and requirements", () => {
-  assert.deepEqual(resolveEnabled(MODULE_INFO, {}), {
-    board: true, claude: true, media: true, upload: true, timer: false, voice: false, github: false, vercel: false, stripe: false, n8n: false, resend: false, calcom: false, notion: false,
-  });
+  // Only the shipped-on defaults are listed: a new module (scripts/new-module.mjs) must not edit this test.
+  const defaults = resolveEnabled(MODULE_INFO, {});
+  assert.deepEqual(Object.keys(defaults).filter((id) => defaults[id]), ["board", "claude", "media", "upload"]);
   const r = resolveEnabled(MODULE_INFO, { claude: false, voice: true });
   assert.equal(r.voice, false);
   assert.equal(r.upload, false);
