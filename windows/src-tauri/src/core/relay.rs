@@ -178,6 +178,12 @@ async fn serve(
     let id = format!("{}-{}", std::process::id(), COUNTER.fetch_add(1, Ordering::Relaxed));
     let (tx, mut rx) = mpsc::channel::<Reply>(4);
     pending().as_mut().unwrap().insert(id.clone(), (name.clone(), tx));
+    // An unsubscribe between find() and the insert would leave this entry orphaned.
+    if find(&name).is_none() {
+        pending().as_mut().unwrap().remove(&id);
+        conn.finish();
+        return;
+    }
     payload["request_id"] = json!(id);
     deliver(ch, payload);
 
@@ -301,7 +307,11 @@ pub fn decline(_app: &AppHandle, request_id: &str) {
 
 /// One line, no '\n', at most 64 KiB.
 pub fn reply(_app: &AppHandle, request_id: &str, line: &str) -> Result<(), String> {
-    check_reply(line)?;
+    if let Err(e) = check_reply(line) {
+        // End the wait at once: the sender falls back to its terminal.
+        send(request_id, Reply::Decline, false);
+        return Err(e);
+    }
     send(request_id, Reply::Decision(line.to_string()), false);
     Ok(())
 }
@@ -319,7 +329,7 @@ mod tests {
     #[test]
     fn channel_of_cases() {
         assert_eq!(channel_of(&json!({})), Some(""));
-        assert_eq!(channel_of(&json!({"coucou_channel": "agents"})), Some("agents"));
+        assert_eq!(channel_of(&json!({"coucou_channel": "abc"})), Some("abc"));
         assert_eq!(channel_of(&json!({"coucou_channel": "a-1"})), Some("a-1"));
         assert_eq!(channel_of(&json!({"coucou_channel": "Bad"})), None);
         assert_eq!(channel_of(&json!({"coucou_channel": "a_b"})), None);

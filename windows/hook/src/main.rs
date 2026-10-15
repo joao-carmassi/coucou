@@ -621,7 +621,8 @@ fn truncate_strings(value: &mut serde_json::Value) {
     }
 }
 
-/// What argv said. `format` is only a tag for now: every format normalises as claude.
+/// What argv said. `format` and `entry` are parsed but intentionally not forwarded yet
+/// (deferred per spec); every format normalises as claude.
 #[derive(Debug, Default, PartialEq)]
 struct Args {
     event: String,
