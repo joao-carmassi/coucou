@@ -14,8 +14,10 @@ export interface Manifest {
   settingsDefaults?: Record<string, unknown>;
   /** Only in debug builds (dev); release catalogs leave it out. */
   devOnly?: boolean;
-  /** Preset ids (essencial, dev, tudo, vitrine) that switch this module on. */
+  /** Preset ids that switch this module on (essencial, dev, tudo are labelled by the Hub; any other id becomes a preset of its own). */
   presets?: string[];
+  /** Settings keys that belong to this machine (paths, install state): a Hub import from another PC never applies them. */
+  machineKeys?: string[];
   /** Stays on in safe mode (read by Rust build.rs). */
   essential?: boolean;
 }
@@ -25,7 +27,7 @@ export function buildCatalog(files: readonly (Manifest | readonly Manifest[])[],
     .flat()
     .filter((m) => dev || !m.devOnly)
     .sort((a, b) => a.order - b.order || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-    .map((m) => ({ id: m.id, label: m.label, defaultEnabled: m.default, requires: m.requires, group: m.group, settingsDefaults: m.settingsDefaults, presets: m.presets }));
+    .map((m) => ({ id: m.id, label: m.label, defaultEnabled: m.default, requires: m.requires, group: m.group, settingsDefaults: m.settingsDefaults, presets: m.presets, machineKeys: m.machineKeys }));
 }
 
 /** Every exported value that looks like a ModuleDef, from the modules' index.ts namespaces. */

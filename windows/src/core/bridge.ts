@@ -48,6 +48,8 @@ export const Bridge = {
   centerIsland: () => command<void>("center_island"),
 
   reposition: () => command<void>("reposition"),
+  /** The palette hotkey remembered the focused window but the palette did not open: drop it. */
+  forgetForeground: () => command<void>("forget_foreground"),
 
 
   /** The section the settings window was opened for, once ("" for none). */

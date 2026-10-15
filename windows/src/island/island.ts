@@ -392,7 +392,7 @@ export class Island implements IslandHost {
 
   /** Opens the palette; over a waiting pinned request it only brings that request back. */
   openPalette() {
-    if (Requests.front()?.pin) return this.reopen();
+    if (Requests.front()?.pin) { void Bridge.forgetForeground(); return this.reopen(); }
     if (State.mode === "expanded" && State.view === "palette") return;
     this.palettePrev = { mode: State.mode, view: State.view };
     (this.views.get("palette") as PaletteView).reset();
