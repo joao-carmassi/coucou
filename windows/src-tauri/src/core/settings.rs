@@ -18,6 +18,8 @@ pub struct Settings {
     pub compact_hide_interval: f64,
     /// Minutes a held task view stays the reopen target. 0 = off.
     pub focus_hold_minutes: f64,
+    /// Hide the island while a full-screen app or a call is in front.
+    pub hide_when_busy: bool,
     /// Module switches by id; a missing id means the module's default.
     pub modules_enabled: BTreeMap<String, bool>,
     /// Body colour per Mochi (pill id, "<prefix>*" or "main" -> #rrggbb).
@@ -44,6 +46,7 @@ impl Default for Settings {
             autostart: false,
             compact_hide_interval: default_compact_hide(),
             focus_hold_minutes: 1.0,
+            hide_when_busy: true,
             modules_enabled: Default::default(),
             mochi_colors: Default::default(),
             mochi_sleep_minutes: 10.0,

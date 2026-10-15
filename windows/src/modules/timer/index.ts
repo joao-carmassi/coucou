@@ -1,7 +1,7 @@
 import { svg } from "../../kit/dom";
 import "./timer.css";
 import { ICONS } from "../../kit/icons";
-import type { Disposer, IslandApi, ModuleDef } from "../../core/moduleApi";
+import { BAND, type Disposer, type IslandApi, type ModuleDef } from "../../core/moduleApi";
 import { TimerClock } from "./timer";
 import { buildTimerView } from "./view";
 
@@ -22,7 +22,7 @@ function start(api: IslandApi): Disposer {
     Timer.cancel(); // onChange -> arm -> idle
     api.sound.play("finish");
     // A request waiting keeps the island: the sound is enough then.
-    if (!api.island.busy()) api.island.note("Temporizador concluído");
+    if (!api.island.busy()) api.island.notice({ text: "Temporizador concluído", priority: BAND.NOTICE, view: "timer" });
   };
   const arm = () => {
     disarm();

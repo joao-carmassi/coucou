@@ -22,8 +22,8 @@ const root = document.getElementById("settings-root")!;
 
 /** Only the core's own fields: module keys are saved by their sections as patches, and a stale copy here must not undo them. */
 async function save() {
-  const { soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, autostart, modulesEnabled, mochiColors, mochiSleepMinutes } = settings;
-  await Bridge.saveSettings({ soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, autostart, modulesEnabled, mochiColors, mochiSleepMinutes });
+  const { soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, hideWhenBusy, autostart, modulesEnabled, mochiColors, mochiSleepMinutes } = settings;
+  await Bridge.saveSettings({ soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, hideWhenBusy, autostart, modulesEnabled, mochiColors, mochiSleepMinutes });
 }
 
 // ── Reusable bits ─────────────────────────────────────────────────────────────
@@ -189,6 +189,10 @@ function generalSection(): HTMLElement {
       h("span", { class: "hint", text: "minutos parado (0 = nunca)" }),
     ),
     colorsRows(),
+    h("div", { class: "row" },
+      h("label", { text: "Ocultar durante tela cheia e chamadas" }),
+      toggle(settings.hideWhenBusy, (v) => { settings.hideWhenBusy = v; void save(); }),
+    ),
     h("div", { class: "row" },
       h("label", { text: "Iniciar com o Windows" }),
       toggle(settings.autostart, (v) => { settings.autostart = v; void save(); }),

@@ -1,7 +1,7 @@
 // Boot sequence (entry file: boot/island.ts): boot the bridge, wire the island, start the greeting.
 
 import "./style";
-import { Bridge, IS_TAURI, onEvent } from "./core/bridge";
+import { Bridge, IS_TAURI, onEvent, type Presence } from "./core/bridge";
 import { Sound } from "./core/sound";
 import { State, type Settings } from "./core/state";
 import type { ModuleDef, ModuleInfo } from "./core/moduleApi";
@@ -50,6 +50,8 @@ export async function startIsland(modules: ModuleDef[], catalog: ModuleInfo[]) {
         break;
     }
   });
+
+  await onEvent<Presence>("presence", (p) => island.applyPresence(p));
 
   await onEvent<null>("screen-changed", () => void Bridge.reposition());
 

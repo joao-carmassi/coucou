@@ -67,6 +67,20 @@ export interface Overlay {
   leaving?(nextView: string): void;
 }
 export type { RequestSpec };
+/** A short line on the compact island (api.island.notice). */
+export interface Notice {
+  text: string;
+  /** BAND scale; >= BAND.URGENT ignores presence quiet. Default BAND.NOTICE. */
+  priority?: number;
+  /** On-screen time once shown; default 4000, clamped to 1500..15000. */
+  ms?: number;
+  /** The same owner + key replaces in place (the on-screen time restarts). */
+  key?: string;
+  /** A click on the compact island while this is shown opens this view. */
+  view?: string;
+  /** May reveal a hidden island to compact (never while presence is quiet, unless urgent). */
+  peek?: boolean;
+}
 /** Where home is (hover / click on the compact island); to hold the island open on a card use api.island.request. */
 export interface HomeRequest { view: string; priority: number }
 export interface IslandHooks {
@@ -86,6 +100,8 @@ export interface IslandHost {
   open(view: string): void;
   /** The core queue: see api.island.request. `owner` is the module id. */
   addRequest(owner: string, spec: RequestSpec): Disposer;
+  /** The core notice queue: see api.island.notice. `owner` is the module id. */
+  addNotice(owner: string, n: Notice): Disposer;
   hide(): void;
   collapse(): void;
   reveal(): void;
@@ -187,6 +203,14 @@ export interface IslandApi {
      * `pin` holds the island open (no auto-close, Esc or click-outside) while it is in front. `ms` disposes it by itself.
      */
     request(spec: RequestSpec): Disposer;
+    /**
+     * A short line on the compact island, queued with the other modules' (highest priority first, then oldest; 12 at most).
+     * It shows only while the island is compact and no stronger status line or request is up; its on-screen time starts when it shows.
+     * Hidden or open island: it waits (60 s at most) unless `peek` reveals the compact island. Not shown while the user is in a
+     * full-screen app or a call (setting "Ocultar durante tela cheia e chamadas"), except `priority >= BAND.URGENT`.
+     * Dropped by the disposer, by this module stopping and by Pause (while paused the call is a no-op).
+     */
+    notice(n: Notice): Disposer;
     /** True while any pinned request exists (a note over it would be rude). */
     busy(): boolean;
     setView(view: string): void; close(): void; wake(): void; hide(): void;

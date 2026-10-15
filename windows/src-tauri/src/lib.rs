@@ -302,6 +302,8 @@ pub fn run() {
         take_settings_section,
         set_paused,
         crate::core::inbox::inbox_ingest,
+        crate::core::presence::presence_now,
+        crate::core::presence::presence_watch,
     ]);
     let mods = modules::handlers();
 

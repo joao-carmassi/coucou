@@ -8,6 +8,9 @@ import type { Settings } from "./state";
 
 export { IS_TAURI, command, commandOrThrow, onEvent };
 
+/** `quiet` already includes `mic`: a full-screen app, presentation, quiet hours or a call. */
+export interface Presence { quiet: boolean; mic: boolean }
+
 export interface BootInfo {
   settings: Settings;
   /** Logical screen rect of the monitor the island lives on. */
@@ -44,6 +47,9 @@ export const Bridge = {
 
   /** The section the settings window was opened for, once ("" for none). */
   takeSettingsSection: () => command<string>("take_settings_section"),
+
+  /** Turns the OS presence watch on or off (one subscriber); on, it answers with the current state. */
+  presenceWatch: (on: boolean) => command<Presence>("presence_watch", { on }),
 
   /** Tray → Pause. */
   setPaused: (paused: boolean) => command<void>("set_paused", { paused }),

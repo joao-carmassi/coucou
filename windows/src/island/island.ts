@@ -2,7 +2,7 @@
 // Mirrors IslandRootView.swift + IslandWindowController.swift. Core only.
 
 import { Tracked, Spring, clamp, mixColor } from "../core/anim";
-import { Bridge, IS_TAURI } from "../core/bridge";
+import { Bridge, IS_TAURI, type Presence } from "../core/bridge";
 import { wipe } from "../kit/canvas";
 import {
   COMPACT_BOT_CX, COMPACT_CONTENT_X, COMPACT_PAD, EXPANDED_CORNER, PANEL_W,
@@ -13,10 +13,12 @@ import type { BotEmoteName, IslandMode, IslandViewName } from "../core/layout";
 import { Avatar } from "../core/avatar";
 import { Hooks, emitMode } from "../core/hooks";
 import { glowOf } from "../mochi/moods";
-import { EXPANDED_W, PANEL_H } from "../core/moduleApi";
-import type { Disposer, IslandHost, Overlay, TabDef, ViewContext, ViewDef } from "../core/moduleApi";
+import { BAND, EXPANDED_W, PANEL_H } from "../core/moduleApi";
+import type { Disposer, IslandHost, Notice, Overlay, StatusLine, TabDef, ViewContext, ViewDef } from "../core/moduleApi";
 import { Holds, Last } from "../core/holds";
 import { Requests, type Req, type RequestSpec } from "../core/requests";
+import { Compact } from "../core/compact";
+import { NoticeQueue, type NoticeEntry } from "../core/notices";
 import { Sound } from "../core/sound";
 import { colorFor } from "../core/pills";
 import { State } from "../core/state";
@@ -123,6 +125,19 @@ export class Island implements IslandHost {
 
   private noteTimer: number | null = null;
 
+  // Notices (api.island.notice): the queue, the one entry on the compact line, and the single timeout.
+  private notices = new NoticeQueue();
+  private noticeEntry: NoticeEntry | null = null;
+  private noticeLine: StatusLine | null = null;
+  private noticeTimer: number | null = null;
+  /** Presence: a full-screen app, presentation, quiet hours or a call is in front (only known while watching). */
+  private quiet = false;
+  private watching = false;
+  /** The watch was just turned on and has not answered yet: hold the non-urgent ones meanwhile. */
+  private presencePending = false;
+  /** Inside clickCompact: only a click consumes the notice on show. */
+  private clicked = false;
+
   constructor(root: HTMLElement) {
     this.root = root;
     this.actions = this.makeActions();
@@ -131,6 +146,11 @@ export class Island implements IslandHost {
     this.wireInput();
     this.engine.onDizzy = () => this.handleDizzy();
     this.greeting.onComplete = () => this.fsm.greetComplete();
+    State.onPause((paused) => {
+      if (!paused) return;
+      this.notices.clear();
+      this.syncNotices();
+    });
     State.subscribe(() => {
       this.dirty = true;
       // Hidden draws nothing (h 0, bot opacity 0): keep the flag only; the next
@@ -236,11 +256,13 @@ export class Island implements IslandHost {
           const r = Requests.front();
           const target = this.homeTarget;
           this.homeTarget = null;
+          // A click on the compact island consumes the notice it shows; its view comes after a waiting request.
+          const noticed = target === null && this.clicked ? this.consumeNotice() : null;
           // Reopened on the waiting request (hover, or opened on its own view): it holds the island again.
           // Opened on some other view, the parked request stays parked.
           if (r && (target === null || target === r.view)) Requests.parked = false;
           this.syncPin();
-          this.expand(target ?? r?.view ?? this.resting() ?? State.defaultView());
+          this.expand(target ?? r?.view ?? noticed ?? this.resting() ?? State.defaultView());
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
         }
@@ -277,6 +299,7 @@ export class Island implements IslandHost {
       void Bridge.focusWindow(false);
     }
     if (mode !== "expanded") this.engine.resetMorph();
+    this.syncWatch();
     emitMode(mode, prev);
     this.updateWindowCollapsed();
     this.animateGeometry(modeOrder(mode) < modeOrder(prev));
@@ -398,6 +421,115 @@ export class Island implements IslandHost {
     this.fsm.forceHidden();
   }
 
+  // ── Notices + presence ──────────────────────────────────────────────────────
+
+  addNotice(owner: string, n: Notice): Disposer {
+    const wasEmpty = this.notices.size === 0;
+    const off = this.notices.add(owner, n, performance.now());
+    // A fullscreen exit may have fired no foreground event: ask again when something starts waiting.
+    if (wasEmpty && this.watching) this.askPresence();
+    this.syncNotices();
+    return () => {
+      off();
+      this.syncNotices();
+    };
+  }
+
+  /** Presence holds non-urgent notices only while the setting is on. */
+  private holdNotices(): boolean {
+    return State.settings.hideWhenBusy && (this.quiet || this.presencePending);
+  }
+
+  /**
+   * Puts the front notice on the compact line (owner "#notice"), reveals a hidden island for a `peek` one, drops finished
+   * ones and re-arms the single timeout: armed only while the queue is not empty.
+   */
+  private syncNotices() {
+    const now = performance.now();
+    this.notices.expired(now);
+    this.syncWatch(); // first: turning it on holds the non-urgent ones until the OS has answered
+    const front = this.notices.front(now, this.holdNotices());
+    const line = this.noticeLine;
+    if (front !== this.noticeEntry || (front && line && (front.text !== line.text || front.priority !== line.priority))) {
+      this.noticeEntry = front;
+      this.noticeLine = front ? { priority: front.priority, text: front.text, overGrid: true } : null;
+      Compact.set("#notice", this.noticeLine);
+      this.redraw();
+    } else if (front && front.shownAt == null) this.redraw(); // re-added on screen: its on-screen time restarts at the next sync
+    if (this.noticeTimer != null) window.clearTimeout(this.noticeTimer);
+    this.noticeTimer = null;
+    const due = this.notices.nextDeadline(now);
+    if (due != null) {
+      this.noticeTimer = window.setTimeout(() => {
+        this.noticeTimer = null;
+        this.syncNotices();
+      }, Math.max(0, due - now) + 5);
+    }
+    if (front?.peek && State.mode === "hidden") this.fsm.reveal();
+  }
+
+  /** The line on show is the notice: from now on its on-screen time runs. */
+  private startNoticeClock() {
+    const e = this.noticeEntry;
+    if (!e || e.shownAt != null || State.mode !== "compact" || State.statusLine !== this.noticeLine) return;
+    this.notices.shown(e, performance.now());
+    this.syncNotices();
+  }
+
+  /** Takes the notice the compact island is showing off the queue; returns its view (if it has a known one). */
+  private consumeNotice(): string | null {
+    const e = this.noticeEntry;
+    if (!e || e.shownAt == null || State.mode !== "compact" || State.statusLine !== this.noticeLine) return null;
+    this.notices.drop(e);
+    this.syncNotices();
+    return e.view && this.known(e.view) ? e.view : null;
+  }
+
+  /**
+   * The OS presence watch (one blocked thread in Rust, zero CPU) runs only while there is something to hide or hold:
+   * the setting is on and the island is visible or a notice waits.
+   */
+  private syncWatch() {
+    const want = State.settings.hideWhenBusy && (State.mode !== "hidden" || this.notices.size > 0);
+    if (want === this.watching) return;
+    this.watching = want;
+    if (!want) {
+      this.quiet = this.presencePending = false;
+      void Bridge.presenceWatch(false);
+      return;
+    }
+    this.askPresence();
+  }
+
+  /** The answer is the current state: taken silently (whoever woke the island meant to see it). */
+  private askPresence() {
+    this.presencePending = true;
+    void Bridge.presenceWatch(true).then((p) => {
+      if (!this.watching) return;
+      this.presencePending = false;
+      this.applyPresence(p ?? { quiet: false, mic: false }, true);
+    });
+  }
+
+  /** The only way a press on the compact island reaches the FSM: a click may consume the notice it shows. */
+  private clickCompact() {
+    this.clicked = true;
+    try { this.fsm.click(); } finally { this.clicked = false; }
+  }
+
+  /** From the `presence` event (and the first answer of the watch). A change into quiet folds a visible island. */
+  applyPresence(p: Presence, silent = false) {
+    const was = this.quiet;
+    this.quiet = p.quiet;
+    if (!silent && !was && p.quiet && State.settings.hideWhenBusy) {
+      // Requests ignore presence: a pinned one, or any at urgent priority, keeps the island up.
+      const front = Requests.front();
+      const keep = Requests.pinned() || (front?.priority ?? 0) >= BAND.URGENT;
+      if (State.mode !== "hidden" && !keep && !(State.mode === "expanded" && this.mouseInside())) this.fsm.forceHidden();
+    }
+    this.syncNotices();
+  }
+
   reveal() {
     this.fsm.reveal();
   }
@@ -435,7 +567,7 @@ export class Island implements IslandHost {
       const moved = this.nudge.moved;
       this.nudge = null;
       if (moved) this.scheduleNudgeReturn();
-      else this.fsm.click();
+      else this.clickCompact();
     }
   }
 
@@ -603,7 +735,7 @@ export class Island implements IslandHost {
       if (State.mode !== "expanded") {
         // Compact opens on the release: a press that travels is a sideways nudge.
         if (State.mode === "compact") this.nudge = { x: e.clientX, off: this.offset(this.width.value), moved: false };
-        else this.fsm.click();
+        else this.clickCompact();
         return;
       }
       // The slap (or news) waits for the release: past 7 px this is a drag-out.
@@ -1072,6 +1204,7 @@ export class Island implements IslandHost {
     syncMiniBotStates(State.pills);
     pruneMiniBots();
     this.engine.setState(this.effState());
+    this.startNoticeClock();
   }
 
   // ── IslandHost (what the registry gets) ─────────────────────────────────────
@@ -1192,6 +1325,7 @@ export class Island implements IslandHost {
     // Re-arm with the new delay (or cancel it, for "never") if already minimized.
     if (this.fsm.state === "petit" && !this.wasInIsland) this.fsm.mouseLeft();
     syncMiniBotStates(State.pills); // a changed colour map reaches the minis now
+    this.syncNotices();
     State.notify();
   }
 

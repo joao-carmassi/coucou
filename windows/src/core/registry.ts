@@ -147,6 +147,12 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
         const off: Disposer = () => { cancel?.(); scope.remove(off); r(); };
         return scope.add(off);
       },
+      notice(n) {
+        if (State.paused) return () => {};
+        const r = host.addNotice(id, n);
+        const off: Disposer = () => { scope.remove(off); r(); };
+        return scope.add(off);
+      },
       busy: () => Requests.busy(),
       setView: (v) => host.setView(v),
       close: () => host.collapse(),
