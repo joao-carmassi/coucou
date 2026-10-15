@@ -307,6 +307,10 @@ pub fn decline(_app: &AppHandle, request_id: &str) {
 
 /// One line, no '\n', at most 64 KiB.
 pub fn reply(_app: &AppHandle, request_id: &str, line: &str) -> Result<(), String> {
+    reply_line(request_id, line)
+}
+
+fn reply_line(request_id: &str, line: &str) -> Result<(), String> {
     if let Err(e) = check_reply(line) {
         // End the wait at once: the sender falls back to its terminal.
         send(request_id, Reply::Decline, false);
@@ -387,6 +391,16 @@ mod tests {
         m.insert("2".into(), ("y".into(), b));
         drop_channel(&mut m, "x");
         assert!(m.contains_key("2") && !m.contains_key("1"));
+    }
+
+    #[test]
+    fn bad_reply_declines_the_waiter() {
+        let (tx, mut rx) = mpsc::channel(4);
+        pending().as_mut().unwrap().insert("bad-1".into(), ("t".into(), tx));
+        assert!(reply_line("bad-1", "a
+b").is_err());
+        assert!(matches!(rx.try_recv(), Ok(Reply::Decline)));
+        assert!(!pending().as_ref().unwrap().contains_key("bad-1"));
     }
 
     #[test]
