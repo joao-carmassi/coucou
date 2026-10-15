@@ -104,10 +104,14 @@ test("alarms: day filter (0 = Sunday) and month/year rollover", () => {
   assert.equal(nextAlarm([al("11:00", [4])], now)!.at, new Date(2027, 0, 7, 11, 0).getTime()); // a week later
 });
 
-test("alarms: always local wall time, so a DST change cannot shift it", () => {
-  // Whatever the machine's zone does, the result must read back as the requested HH:MM.
-  for (const [y, m, d] of [[2026, 2, 8], [2026, 2, 29], [2026, 9, 25], [2026, 10, 1]]) {
-    const at = new Date(nextAlarm([al("08:15")], new Date(y, m, d, 20, 0))!.at);
-    assert.equal(`${at.getHours()}:${at.getMinutes()}`, "8:15");
-  }
+test("alarms: DST in America/New_York (spring gap, fall overlap)", () => {
+  // TZ is read by V8 when the zone is first needed; set it before any Date work in this test.
+  process.env.TZ = "America/New_York";
+  const iso = (ms: number) => new Date(ms).toISOString();
+  // 2026-03-08 02:30 does not exist: the Date constructor rolls it to 03:30 EDT (07:30Z), once, never skipping the day.
+  assert.equal(iso(nextAlarm([al("02:30")], new Date(2026, 2, 8, 0, 10))!.at), "2026-03-08T07:30:00.000Z");
+  assert.equal(iso(nextAlarm([al("08:15")], new Date(2026, 2, 7, 20, 0))!.at), "2026-03-08T12:15:00.000Z"); // 08:15 EDT
+  // Fall back 2026-11-01: 01:30 happens twice; the next one after 01:00 EDT (05:00Z) is the first (EDT, 05:30Z).
+  assert.equal(iso(nextAlarm([al("01:30")], new Date(Date.UTC(2026, 10, 1, 5, 0)))!.at), "2026-11-01T05:30:00.000Z");
+  assert.equal(iso(nextAlarm([al("08:15")], new Date(2026, 9, 31, 20, 0))!.at), "2026-11-01T13:15:00.000Z"); // 08:15 EST
 });

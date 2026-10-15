@@ -41,7 +41,7 @@ let opening: string | null = null;
 function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
   const mySettings = moduleSettings(id, MODULE_INFO.find((m) => m.id === id)?.settingsDefaults);
   const timeout = (fn: () => void, ms: number): Disposer => {
-    const d: Disposer = () => window.clearTimeout(t);
+    const d: Disposer = () => { window.clearTimeout(t); scope.remove(d); };
     const t = window.setTimeout(() => { scope.remove(d); fn(); }, ms);
     return scope.add(d);
   };

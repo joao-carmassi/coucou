@@ -5,7 +5,7 @@ import { BAND, type Disposer, type IslandApi, type ModuleDef } from "../../core/
 import { TimerClock } from "./timer";
 import { buildTimerView, type PomoUi } from "./view";
 import { pomoCfg, pomoLabel, pomoMinutes, pomoNext, pomoStart, type PomoState } from "./pomodoro";
-import { nextAlarm, parseAlarms } from "./alarms";
+import { ALARM_GRACE_MS, alarmText, nextAlarm, parseAlarms } from "./alarms";
 
 interface Cfg { timerPomodoro: unknown; timerPomodoroAuto: boolean; timerFocusPomodoro: boolean; timerAlarms: unknown }
 
@@ -37,7 +37,7 @@ function start(api: IslandApi): Disposer {
   const advance = (text: string | null) => {
     const c = readCfg(), cfg = pomoCfg(c.timerPomodoro);
     pomo = pomoNext(pomo!, cfg);
-    api.sound.play("finish");
+    if (text !== null) api.sound.play("finish"); // a skip is the user's own click: silent
     if (text !== null && !api.island.busy()) api.island.notice({ text: `${text} · ${pomoLabel(pomo, cfg)}`, priority: BAND.NOTICE, view: "timer", key: "pomodoro" });
     Timer.prepare("countdown", pomoMinutes(pomo, cfg)); // onChange -> arm: the hold stays
     if (c.timerPomodoroAuto !== false) Timer.start();
@@ -77,31 +77,41 @@ function start(api: IslandApi): Disposer {
   Timer.onChange = arm;
   // Alarms: ONE timeout, for the next fire time only (recomputed from Date: midnight and DST safe).
   // Re-armed after firing, a settings save and a visibility change (a wake from sleep shows up as one).
-  const armAlarm = () => {
-    alarmT?.(); alarmT = null;
+  // A pending alarm is kept across re-arms; only a changed fire time (or settings) replaces the timeout.
+  let pending: ReturnType<typeof nextAlarm> = null;
+  const fire = (p: NonNullable<typeof pending>) => {
+    const late = Date.now() - p.at, text = alarmText(p.alarms);
+    if (late < ALARM_GRACE_MS) {
+      api.sound.play("alert");
+      api.island.notice({ text: `Alarme ${text}`, priority: BAND.NOTICE + 10, key: "alarm", ms: 8000, peek: true });
+    } else api.island.notice({ text: `Alarme perdido ${text}`, priority: BAND.NOTICE, key: "alarm", ms: 8000 });
+  };
+  const armAlarm = (force = false) => {
+    // The machine slept past it: ring (or report it as missed) now, before choosing the next one.
+    if (pending && pending.at <= Date.now()) { const p = pending; pending = null; alarmT?.(); alarmT = null; fire(p); }
     const next = nextAlarm(parseAlarms(readCfg().timerAlarms), new Date());
+    if (!force && alarmT && next && pending && next.at === pending.at) return;
+    alarmT?.(); alarmT = null; pending = next;
     if (!next) return;
     // 2^31-1 is setTimeout's ceiling; waking early only re-arms.
     alarmT = api.timeout(() => {
       alarmT = null;
-      if (Date.now() >= next.at) {
-        const a = next.alarms[0];
-        api.sound.play("alert");
-        api.island.notice({ text: `Alarme ${a.time}${a.label ? ` · ${a.label}` : ""}`, priority: BAND.NOTICE + 10, key: "alarm", ms: 8000, peek: true });
-      }
+      if (Date.now() >= next.at) { pending = null; fire(next); }
       armAlarm();
     }, Math.min(Math.max(0, next.at - Date.now()), 2 ** 31 - 1));
   };
   armAlarm();
-  const offSettings = api.listen("settings-changed", armAlarm);
+  // Deferred: the settings snapshot may not have the saved keys yet when the event arrives.
+  const offSettings = api.listen("settings-changed", () => void api.timeout(() => armAlarm(true), 0));
   const offKeep = api.island.keepAwake(() => Timer.active);
   // Alt+F / palette: a focus phase (pomodoro when "Iniciar foco usa Pomodoro" is on, else a 25 min countdown), only while nothing is running.
   const offAction = api.actions.add({
     id: "focus", title: "Iniciar foco", keywords: ["timer", "pomodoro", "temporizador"], key: "f",
-    when: () => !Timer.active,
+    when: () => !Timer.active && !(pomo && Timer.status === "ready"), // a ready pomodoro phase waits for its own click
     run() {
       if (readCfg().timerFocusPomodoro) startPomo();
-      else { Timer.prepare("countdown", 25); Timer.start(); }
+      else {
+        pomo = null; Timer.prepare("countdown", 25); Timer.start(); }
     },
   });
   // The interval is off while hidden: catch the readout up when the island comes back.

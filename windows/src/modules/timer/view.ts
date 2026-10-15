@@ -65,8 +65,9 @@ export function buildTimerView(Timer: TimerClock, ctx: ViewContext, pomo: PomoUi
     sync() {
       // Nothing is touched while the tab is hidden.
       if (ctx.api.island.view() !== "timer") return;
-      if (Timer.status !== key) { key = Timer.status; draw(); }
-      if (key === "idle") return;
+      const k = Timer.status + (pomo.label() ?? ""); // a pomodoro phase change keeps the status "running"
+      if (k !== key) { key = k; draw(); }
+      if (Timer.status === "idle") return;
       readout.textContent = Timer.text();
       fill.style.width = `${Math.max(1.5, Timer.fraction() * 100)}%`;
     },

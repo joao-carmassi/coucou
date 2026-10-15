@@ -30,3 +30,7 @@ export function nextAlarm(alarms: Alarm[], now: Date): { at: number; alarms: Ala
   }
   return best;
 }
+
+/** Alarms missed by more than this (the machine slept through them) are reported, not rung. */
+export const ALARM_GRACE_MS = 5 * 60_000;
+export const alarmText = (list: Alarm[]) => list.map((a) => a.time + (a.label ? " · " + a.label : "")).filter((t, i, all) => all.indexOf(t) === i).join(" / ");
