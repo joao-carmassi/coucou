@@ -79,6 +79,7 @@ fn save_settings(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>,
         settings.palette_hotkey = core::hotkeys::clean(&settings.palette_hotkey, settings::DEFAULT_PALETTE_HOTKEY);
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
+        let screen_changed = screen_changed || current.island_placement != settings.island_placement;
         *current = settings.clone();
         // Saved inside the lock so two saves reach the disk in the order they were merged.
         if let Err(err) = settings::save(&settings) {
@@ -177,6 +178,17 @@ fn reposition(app: AppHandle, shared: State<Shared>) {
     island::apply_geometry(&app, &pref, collapsed);
     // The cursor poll skips idle ticks: tell it the window moved under a still cursor.
     island::refresh_click_through(&app, &shared.gate);
+}
+
+/// Alt-drag on the compact island: adds `dx` (logical px) to this display's stored offset.
+#[tauri::command]
+fn set_island_offset(app: AppHandle, shared: State<Shared>, dx: f64) {
+    island::adjust_placement(&app, &shared, Some(dx));
+}
+
+#[tauri::command]
+fn center_island(app: AppHandle, shared: State<Shared>) {
+    island::adjust_placement(&app, &shared, None);
 }
 
 #[tauri::command]
@@ -335,6 +347,8 @@ pub fn run() {
         set_island_rect,
         focus_window,
         reposition,
+        set_island_offset,
+        center_island,
         open_url,
         quit_app,
         log_line,

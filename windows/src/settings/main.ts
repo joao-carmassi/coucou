@@ -150,6 +150,11 @@ function generalSection(): HTMLElement {
     void save();
   });
 
+  const centerBtn = h("button", { type: "button", text: "Centralizar ilha" });
+  const placed = Object.keys(settings.islandPlacement ?? {}).length;
+  if (placed) centerBtn.title = `${placed} tela(s) com posição própria`;
+  centerBtn.addEventListener("click", () => void Bridge.centerIsland());
+
   const screen = h("select", {}) as HTMLSelectElement;
   screen.append(
     h("option", { value: "primary", text: "Tela principal" }),
@@ -189,6 +194,11 @@ function generalSection(): HTMLElement {
     h("div", { class: "row" },
       h("label", { text: "A ilha fica em" }),
       screen,
+    ),
+    h("div", { class: "row" },
+      h("label", { text: "Posição da ilha" }),
+      centerBtn,
+      h("span", { class: "hint", text: "Alt + arrastar a ilha compacta a move" }),
     ),
     h("div", { class: "row" },
       h("label", { text: "Dormir após" }),

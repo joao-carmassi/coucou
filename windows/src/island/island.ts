@@ -1,6 +1,7 @@
 // The island: DOM shell, sizing animation, Mochi placement, mouse handling.
 // Mirrors IslandRootView.swift + IslandWindowController.swift. Core only.
 
+import { commitDx } from "./placement";
 import { Tracked, Spring, clamp, mixColor } from "../core/anim";
 import { Bridge, IS_TAURI, type Presence } from "../core/bridge";
 import { wipe } from "../kit/canvas";
@@ -120,7 +121,7 @@ export class Island implements IslandHost {
 
   // Compact island nudged sideways so what's under it can be clicked; glides home.
   private offsetX = new Spring(0, 0.45, 1);
-  private nudge: { x: number; off: number; moved: boolean } | null = null;
+  private nudge: { x: number; off: number; moved: boolean; alt: boolean } | null = null;
   private nudgeTimer: number | null = null;
 
   private confusedRecovery: number | null = null;
@@ -644,9 +645,17 @@ export class Island implements IslandHost {
       // A Mochi with news to tell takes you to it (a module's avatarClick); any other gets his slap.
       if (!Hooks.some("avatarClick")) this.engine.slap();
     } else if (this.nudge) {
-      const moved = this.nudge.moved;
+      const { moved, alt } = this.nudge;
       this.nudge = null;
-      if (moved) this.scheduleNudgeReturn();
+      const dx = commitDx(alt, moved, this.offsetX.value, Math.max(0, (PANEL_W - this.width.value) / 2));
+      if (dx != null) {
+        // Alt-drag: the window itself moves; once it has, the island sits at the window centre again.
+        this.clearNudgeTimer();
+        void Bridge.setIslandOffset(dx).then(() => {
+          this.offsetX.set(0);
+          this.ensureRunning();
+        }).catch(() => this.scheduleNudgeReturn());
+      } else if (moved) this.scheduleNudgeReturn();
       else this.clickCompact();
     }
   }
@@ -814,7 +823,7 @@ export class Island implements IslandHost {
       Sound.resume();
       if (State.mode !== "expanded") {
         // Compact opens on the release: a press that travels is a sideways nudge.
-        if (State.mode === "compact") this.nudge = { x: e.clientX, off: this.offset(this.width.value), moved: false };
+        if (State.mode === "compact") this.nudge = { x: e.clientX, off: this.offset(this.width.value), moved: false, alt: e.altKey };
         else this.clickCompact();
         return;
       }

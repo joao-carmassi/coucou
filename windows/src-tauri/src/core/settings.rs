@@ -31,6 +31,8 @@ pub struct Settings {
     pub mochi_sleep_minutes: f64,
     /// Global hotkey that opens the command palette; "" = none.
     pub palette_hotkey: String,
+    /// Island offset from the centre of each display (key = `island::monitor_key`, value = logical px).
+    pub island_placement: BTreeMap<String, f64>,
     /// Keys this build no longer knows (the removed chat's `model`, `chatBackend`…):
     /// kept so saving never drops them from an installed settings.json.
     #[serde(flatten)]
@@ -64,6 +66,7 @@ impl Default for Settings {
             mochi_colors: Default::default(),
             mochi_sleep_minutes: 10.0,
             palette_hotkey: DEFAULT_PALETTE_HOTKEY.into(),
+            island_placement: Default::default(),
             extra: Default::default(),
         }
     }

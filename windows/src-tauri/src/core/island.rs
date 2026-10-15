@@ -155,6 +155,54 @@ pub fn screen_info(app: &AppHandle, pref: &str) -> ScreenInfo {
     }
 }
 
+/// Stable id of a display for per-display placement: "<name>:<w>x<h>" in physical pixels.
+pub fn monitor_key(name: Option<&str>, w: u32, h: u32) -> String {
+    format!("{}:{}x{}", name.unwrap_or(""), w, h)
+}
+
+/// Left edge of a window `panel_w` wide: centred on the display, moved by `dx_phys`,
+/// then kept fully inside it (a stale offset can never strand the island).
+pub fn place_x(mon_x: i32, mon_w: u32, panel_w: u32, dx_phys: i32) -> i32 {
+    let lo = mon_x as i64;
+    let hi = (lo + mon_w as i64 - panel_w as i64).max(lo);
+    let want = lo + (mon_w as i64 - panel_w as i64) / 2 + dx_phys as i64;
+    want.clamp(lo, hi) as i32
+}
+
+/// Adds `d` to the stored offset for `key`, limited to +-`limit`; zero removes the entry.
+fn add_offset(map: &mut std::collections::BTreeMap<String, f64>, key: &str, d: f64, limit: f64) {
+    let v = (map.get(key).copied().unwrap_or(0.0) + d).clamp(-limit, limit);
+    if v == 0.0 { map.remove(key); } else { map.insert(key.to_string(), v); }
+}
+
+/// Moves the island by `dx` logical px on the current display (None = back to the centre),
+/// saves under the settings lock like `save_settings`, and places the window again.
+pub fn adjust_placement(app: &AppHandle, shared: &crate::Shared, dx: Option<f64>) {
+    let pref = shared.settings.lock().unwrap().screen.clone();
+    let Some(m) = target_monitor(app, &pref) else { return };
+    let size = *m.size();
+    let key = monitor_key(m.name().map(String::as_str), size.width, size.height);
+    let fresh = {
+        let mut s = shared.settings.lock().unwrap();
+        match dx {
+            Some(d) if d.is_finite() => {
+                // Same bound `place_x` applies to the full panel: stored offsets never pile up past the edge.
+                let limit = ((size.width as f64 / m.scale_factor() - PANEL_W) / 2.0).max(0.0);
+                add_offset(&mut s.island_placement, &key, d, limit);
+            }
+            Some(_) => return,
+            None => { s.island_placement.remove(&key); }
+        }
+        if let Err(err) = crate::core::settings::save(&s) {
+            eprintln!("[coucou] could not save settings: {err}");
+        }
+        s.clone()
+    };
+    let _ = app.emit("settings-changed", fresh);
+    apply_geometry(app, &pref, shared.gate.collapsed.load(Ordering::Relaxed));
+    refresh_click_through(app, &shared.gate);
+}
+
 /// Places and sizes the window. `collapsed` picks the wake strip instead of the panel.
 pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
     let Some(win) = window(app) else { return };
@@ -167,7 +215,14 @@ pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
     let (lw, lh) = if collapsed { (STRIP_W, STRIP_H) } else { (PANEL_W, PANEL_H) };
     let pw = (lw * scale).round().max(1.0) as u32;
     let ph = (lh * scale).round().max(1.0) as u32;
-    let x = mp.x + (ms.width as i32 - pw as i32) / 2;
+    let dx = app
+        .try_state::<crate::Shared>()
+        .and_then(|sh| {
+            let key = monitor_key(m.name().map(String::as_str), ms.width, ms.height);
+            sh.settings.lock().unwrap().island_placement.get(&key).copied()
+        })
+        .unwrap_or(0.0);
+    let x = place_x(mp.x, ms.width, pw, (dx * scale).round() as i32);
     let y = mp.y;
 
     let _ = win.set_size(PhysicalSize::new(pw, ph));
@@ -384,5 +439,42 @@ pub fn refresh_click_through(app: &AppHandle, gate: &PollGate) {
 pub fn set_ignore_cursor(app: &AppHandle, ignore: bool) {
     if let Some(win) = window(app) {
         let _ = win.set_ignore_cursor_events(ignore);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn key_is_name_and_physical_size() {
+        assert_eq!(monitor_key(Some("DP-1"), 2560, 1440), "DP-1:2560x1440");
+        assert_eq!(monitor_key(None, 1920, 1080), ":1920x1080");
+    }
+
+    #[test]
+    fn place_x_centres_and_clamps() {
+        assert_eq!(place_x(0, 1920, 720, 0), 600);
+        assert_eq!(place_x(0, 1920, 720, 100), 700);
+        assert_eq!(place_x(0, 1920, 720, -5000), 0);
+        assert_eq!(place_x(0, 1920, 720, 5000), 1200);
+        // display left of the origin
+        assert_eq!(place_x(-1920, 1920, 720, 0), -1320);
+        assert_eq!(place_x(-1920, 1920, 720, -9999), -1920);
+        assert_eq!(place_x(-1920, 1920, 720, 9999), -720);
+        // panel wider than the display: pinned to its left edge
+        assert_eq!(place_x(10, 500, 720, 50), 10);
+    }
+
+    #[test]
+    fn offsets_add_clamp_and_clear() {
+        let mut m = std::collections::BTreeMap::new();
+        add_offset(&mut m, "a", 30.0, 100.0);
+        add_offset(&mut m, "a", 50.0, 100.0);
+        assert_eq!(m["a"], 80.0);
+        add_offset(&mut m, "a", 50.0, 100.0);
+        assert_eq!(m["a"], 100.0);
+        add_offset(&mut m, "a", -100.0, 100.0);
+        assert!(m.is_empty());
     }
 }
