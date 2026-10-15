@@ -83,6 +83,12 @@ impl TaskSet {
         g.1.push(t);
     }
 
+    /// Tasks still running (tests).
+    #[cfg(test)]
+    pub fn live(&self) -> usize {
+        self.0.lock().unwrap().1.iter().filter(|t| !t.finished()).count()
+    }
+
     #[cfg(test)]
     fn len(&self) -> usize {
         self.0.lock().unwrap().1.len()
@@ -132,6 +138,11 @@ impl Spawner {
             Ok(h) => self.tasks.push(Task::Thread(h)),
             Err(e) => log::line(format!("[module] {}: spawn failed: {e}", self.id)),
         }
+    }
+
+    #[cfg(test)]
+    pub fn for_test(tasks: &Arc<TaskSet>) -> Self {
+        Spawner { id: "test", stop: Arc::new(AtomicBool::new(false)), tasks: tasks.clone() }
     }
 
     /// An async task the host aborts on stop.

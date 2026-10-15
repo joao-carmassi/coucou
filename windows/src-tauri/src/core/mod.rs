@@ -3,6 +3,7 @@
 
 pub mod b64;
 pub mod drop_target;
+pub mod fswatch;
 pub mod host;
 pub mod inbox;
 pub mod hotkeys;
