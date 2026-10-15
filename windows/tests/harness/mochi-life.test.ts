@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import "./setup";
 import { colorFor } from "../../src/core/pills";
-import { BotEngine, bodyShade, levelAt, sleepDue, LEVEL_DECAY_MS } from "../../src/mochi/engine";
+import { BotEngine, bodyShade, glanceOffset, levelAt, sleepDue, LEVEL_DECAY_MS } from "../../src/mochi/engine";
 import { greetingLine } from "../../src/mochi/greeting";
 
 describe("colorFor", () => {
@@ -55,6 +55,12 @@ describe("level and rest", () => {
     for (let i = 0; i < 5; i++) isl.avatarLevel(0.8);
     expect(raf).not.toHaveBeenCalled();
   });
+});
+
+test("glanceOffset only idle and inside window", () => {
+  expect(glanceOffset("idle", 1, 2, 0.4)).toBe(0.4);
+  expect(glanceOffset("idle", 3, 2, 0.4)).toBe(0);
+  expect(glanceOffset("sleeping", 1, 2, 0.4)).toBe(0);
 });
 
 test("greetingLine", () => {

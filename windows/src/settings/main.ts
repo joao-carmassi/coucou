@@ -41,13 +41,15 @@ function toggle(on: boolean, onChange: (v: boolean) => void): HTMLElement {
 /** Per-Mochi body colours: "main" plus free-text keys (pill id or "prefix*"), each a #rrggbb picker. */
 function colorsRows(): HTMLElement {
   const box = h("div", {});
+  const pending = new Set<string>();
   const render = () => {
     const map = settings.mochiColors ?? {};
-    const rows = ["main", ...Object.keys(map).filter((k) => k !== "main")].map((k) => {
+    const rows = ["main", ...new Set([...Object.keys(map), ...pending])].filter((k, i, a) => k !== "main" || i === 0 || a.indexOf(k) === i).map((k) => {
       const pick = h("input", { type: "color", value: map[k] ?? "#ededef" }) as HTMLInputElement;
       pick.addEventListener("change", () => {
         if (!/^#[0-9a-f]{6}$/i.test(pick.value)) return;
         settings.mochiColors = { ...settings.mochiColors, [k]: pick.value };
+        pending.delete(k);
         void save();
       });
       const row = h("div", { class: "row" }, h("label", { text: k === "main" ? "Mochi principal" : k }), pick);
@@ -55,6 +57,7 @@ function colorsRows(): HTMLElement {
       clear.addEventListener("click", () => {
         const rest = { ...settings.mochiColors };
         delete rest[k];
+        pending.delete(k);
         settings.mochiColors = rest;
         void save();
         render();
@@ -67,8 +70,7 @@ function colorsRows(): HTMLElement {
     add.addEventListener("click", () => {
       const k = key.value.trim();
       if (!k || k.length > 64) return;
-      settings.mochiColors = { ...settings.mochiColors, [k]: settings.mochiColors?.[k] ?? "#ededef" };
-      void save();
+      pending.add(k); // saved once its picker changes
       render();
     });
     box.replaceChildren(...rows, h("div", { class: "row" }, key, add));

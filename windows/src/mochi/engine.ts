@@ -122,6 +122,9 @@ export const LEVEL_DECAY_MS = 300;
 export const LEVEL_SQUASH = 0.06;
 export const levelAt = (v: number, at: number, nowMs: number) => Math.max(0, v * (1 - (nowMs - at) / LEVEL_DECAY_MS));
 
+/** Sideways look offset of an idle glance: only while idle and inside its window. */
+export const glanceOffset = (state: string, nowS: number, until: number, to: number) => (state === "idle" && nowS < until ? to : 0);
+
 /** Idle rest: true once `minutes` (0 = never) have passed since the last sign of life. */
 export const sleepDue = (sinceMs: number, nowMs: number, minutes: number) => minutes > 0 && nowMs - sinceMs >= minutes * 60_000;
 
@@ -209,6 +212,8 @@ export class BotEngine {
 
   private lvV = 0;
   private lvAt = -1e9;
+  private glanceTo = 0;
+  private glanceUntil = 0;
   private nextGlance = now() + 6 + Math.random() * 8;
 
   /** Loudness 0..1. False when dropped (too soon after the last one); 0 is never dropped. */
@@ -597,6 +602,7 @@ export class BotEngine {
       tp = this.miniLookTarget.y * 0.5;
     }
 
+    ty += glanceOffset(this.state, n, this.glanceUntil, this.glanceTo);
     this.tgYaw = ty;
     this.tgPitch = tp;
     this.tgTilt = this.cfg.tilt;
@@ -627,9 +633,9 @@ export class BotEngine {
     // Idle life of the main Mochi: an occasional glance to the side, only while truly at rest.
     if (!this.isMini && n > this.nextGlance) {
       this.nextGlance = n + 6 + Math.random() * 10;
-      if (this.state === "idle" && !this.locks.has("yaw") && Math.abs(this.lookX) < 0.05) {
-        const to = (Math.random() < 0.5 ? -1 : 1) * (0.35 + Math.random() * 0.3);
-        this.anim("yaw", [[to, 260, Ease.out], [to, 500 + Math.random() * 500, Ease.lin], [0, 320, Ease.inOut]]);
+      if (this.state === "idle") {
+        this.glanceTo = (Math.random() < 0.5 ? -1 : 1) * (0.35 + Math.random() * 0.3);
+        this.glanceUntil = n + 0.7 + Math.random() * 0.6;
       }
     }
 
@@ -802,7 +808,7 @@ export class BotEngine {
     x.fill(body);
 
     const effectiveTint = this.tint * (1 - this.morph);
-    if (!shade && effectiveTint > 0.01) {
+    if (effectiveTint > 0.01) {
       const tg = x.createLinearGradient(0, ry, 0, -ry);
       tg.addColorStop(0, rgba(this.col, 0.72 * effectiveTint));
       tg.addColorStop(1, rgba(this.col, 0));

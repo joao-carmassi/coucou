@@ -1191,6 +1191,7 @@ export class Island implements IslandHost {
     this.fsm.petitToHiddenDelay = State.settings.compactHideInterval;
     // Re-arm with the new delay (or cancel it, for "never") if already minimized.
     if (this.fsm.state === "petit" && !this.wasInIsland) this.fsm.mouseLeft();
+    syncMiniBotStates(State.pills); // a changed colour map reaches the minis now
     State.notify();
   }
 
