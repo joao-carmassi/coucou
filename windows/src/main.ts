@@ -21,6 +21,7 @@ export async function startIsland(modules: ModuleDef[], catalog: ModuleInfo[]) {
   island.applySettings();
   Registry.init(island, modules, catalog);
   Registry.apply(boot?.modules ?? Registry.defaults(State.settings.modulesEnabled));
+  if (boot?.safeMode) island.note("Modo seguro: o Coucou não fechou bem nas últimas inicializações.");
   await onEvent<Record<string, boolean>>("modules-changed", Registry.apply);
   if (boot && !boot.cursorPoll) island.followPageCursor();
 

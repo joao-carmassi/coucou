@@ -23,6 +23,9 @@ pub struct Shared {
     /// Section the settings window should scroll to. Kept until the window
     /// takes it, because the first-launch offer can fire before its page loads.
     pub settings_section: Mutex<String>,
+    /// Safe mode only: the module switches as stored on disk. The in-memory ones are reduced and never written.
+    pub real_modules: Option<BTreeMap<String, bool>>,
+    pub safe_mode: bool,
 }
 
 #[derive(Serialize)]
@@ -35,6 +38,7 @@ pub struct BootInfo {
     /// the cursor from its own mouse events.
     cursor_poll: bool,
     modules: BTreeMap<String, bool>,
+    safe_mode: bool,
 }
 
 #[tauri::command]
@@ -51,6 +55,7 @@ fn boot(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>) -> BootI
         version: env!("CARGO_PKG_VERSION").to_string(),
         cursor_poll: platform::CURSOR_POLL,
         modules: host.state(),
+        safe_mode: shared.safe_mode,
     }
 }
 
@@ -75,11 +80,17 @@ fn save_settings(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>,
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
         *current = settings.clone();
+        // Saved inside the lock so two saves reach the disk in the order they were merged.
+        // shortcut: in safe mode module toggles are not persisted; restart normally to change them.
+        let mut disk = settings.clone();
+        if let Some(real) = &shared.real_modules {
+            disk.modules_enabled = real.clone();
+        }
+        if let Err(err) = settings::save(&disk) {
+            eprintln!("[coucou] could not save settings: {err}");
+        }
         (settings, screen_changed, autostart_changed)
     };
-    if let Err(err) = settings::save(&settings) {
-        eprintln!("[coucou] could not save settings: {err}");
-    }
     if autostart_changed {
         let manager = app.autolaunch();
         let result = if settings.autostart { manager.enable() } else { manager.disable() };
@@ -283,6 +294,12 @@ pub fn run() {
     if migrated && ok {
         let _ = settings::save(&loaded);
     }
+    let safe_mode = core::safe_mode::begin();
+    let real_modules = safe_mode.then(|| loaded.modules_enabled.clone());
+    if safe_mode {
+        log::line("[safe-mode] repeated unclean starts: only the safe set is on this run".to_string());
+        loaded.modules_enabled = modules::CATALOG.iter().map(|m| (m.id.to_string(), modules::SAFE_MODULES.contains(&m.id))).collect();
+    }
     let gate = Arc::new(PollGate::new());
     let core = host::handler(tauri::generate_handler![
         boot,
@@ -311,6 +328,8 @@ pub fn run() {
             settings: Mutex::new(loaded.clone()),
             gate: gate.clone(),
             settings_section: Mutex::new(String::new()),
+            real_modules,
+            safe_mode,
         })
         .invoke_handler(move |inv| {
             // Route by command-name prefix: a handler consumes the invoke, so they cannot be chained.
