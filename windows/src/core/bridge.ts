@@ -45,6 +45,9 @@ export const Bridge = {
   /** Alt-drag release: adds `dx` (logical px) to this display's stored island offset. */
   setIslandOffset: (dx: number) => command<void>("set_island_offset", { dx }),
 
+  /** Alt-drag in progress: the window follows at stored offset + `dx` (logical px), nothing saved. */
+  dragIsland: (dx: number) => command<void>("drag_island", { dx }),
+
   centerIsland: () => command<void>("center_island"),
 
   reposition: () => command<void>("reposition"),

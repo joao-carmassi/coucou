@@ -121,7 +121,27 @@ export class Island implements IslandHost {
 
   // Compact island nudged sideways so what's under it can be clicked; glides home.
   private offsetX = new Spring(0, 0.45, 1);
-  private nudge: { x: number; off: number; moved: boolean; alt: boolean } | null = null;
+  private nudge: { x: number; off: number; moved: boolean; alt: boolean; sx: number; dx: number } | null = null;
+  // Alt-drag: the window follows the pointer (screenX, so the moving window can't skew it); IPCs are chained, one per frame.
+  private dragIpc: Promise<unknown> = Promise.resolve();
+  private dragRaf = 0;
+  private onDragMove = (e: MouseEvent) => {
+    const n = this.nudge;
+    if (!n || !n.alt || !(e.buttons & 1)) return;
+    n.dx = e.screenX - n.sx;
+    if (!n.moved && Math.abs(n.dx) <= 5) return;
+    n.moved = true;
+    if (!this.dragRaf) this.dragRaf = requestAnimationFrame(() => {
+      this.dragRaf = 0;
+      const d = this.nudge?.dx;
+      if (d != null) this.dragIpc = this.dragIpc.then(() => Bridge.dragIsland(this.nudge?.dx ?? d)).catch(() => {});
+    });
+  };
+  private endDrag() {
+    window.removeEventListener("mousemove", this.onDragMove);
+    if (this.dragRaf) cancelAnimationFrame(this.dragRaf);
+    this.dragRaf = 0;
+  }
   private nudgeTimer: number | null = null;
 
   private confusedRecovery: number | null = null;
@@ -291,6 +311,7 @@ export class Island implements IslandHost {
     State.mode = mode;
     this.tintRequest = null;
     // Any change of mode sends a nudged island home.
+    if (this.nudge?.alt) { this.endDrag(); if (this.nudge.moved) void this.dragIpc.then(() => Bridge.reposition()); }
     this.nudge = null;
     this.clearNudgeTimer();
     this.offsetX.target = 0;
@@ -645,16 +666,18 @@ export class Island implements IslandHost {
       // A Mochi with news to tell takes you to it (a module's avatarClick); any other gets his slap.
       if (!Hooks.some("avatarClick")) this.engine.slap();
     } else if (this.nudge) {
-      const { moved, alt } = this.nudge;
+      const { moved, alt, dx: dragged } = this.nudge;
       this.nudge = null;
-      const dx = commitDx(alt, moved, this.offsetX.value, Math.max(0, (PANEL_W - this.width.value) / 2));
+      this.endDrag();
+      // The window follows the pointer, so the only bound is the one the host applies (place_x).
+      const dx = commitDx(alt, moved, alt ? dragged : this.offsetX.value, alt ? Infinity : Math.max(0, (PANEL_W - this.width.value) / 2));
       if (dx != null) {
         // Alt-drag: the window itself moves; once it has, the island sits at the window centre again.
         this.clearNudgeTimer();
-        void Bridge.setIslandOffset(dx).then(() => {
+        void this.dragIpc.then(() => Bridge.setIslandOffset(dx)).then(() => {
           this.offsetX.set(0);
           this.ensureRunning();
-        }).catch(() => this.scheduleNudgeReturn());
+        }).catch(() => { this.scheduleNudgeReturn(); void Bridge.reposition(); });
       } else if (moved) this.scheduleNudgeReturn();
       else this.clickCompact();
     }
@@ -823,8 +846,10 @@ export class Island implements IslandHost {
       Sound.resume();
       if (State.mode !== "expanded") {
         // Compact opens on the release: a press that travels is a sideways nudge.
-        if (State.mode === "compact") this.nudge = { x: e.clientX, off: this.offset(this.width.value), moved: false, alt: e.altKey };
-        else this.clickCompact();
+        if (State.mode === "compact") {
+          this.nudge = { x: e.clientX, off: this.offset(this.width.value), moved: false, alt: e.altKey, sx: e.screenX, dx: 0 };
+          if (e.altKey) window.addEventListener("mousemove", this.onDragMove);
+        } else this.clickCompact();
         return;
       }
       // The slap (or news) waits for the release: past 7 px this is a drag-out.
@@ -872,7 +897,7 @@ export class Island implements IslandHost {
     const released = this.lastDown && !down;
     const pressed = down && !this.lastDown;
     this.lastDown = down;
-    if (this.nudge && down && (this.nudge.moved || Math.abs(x - this.nudge.x) > 5)) {
+    if (this.nudge && !this.nudge.alt && down && (this.nudge.moved || Math.abs(x - this.nudge.x) > 5)) {
       this.nudge.moved = true;
       const m = Math.max(0, (PANEL_W - this.width.value) / 2);
       this.offsetX.set(clamp(this.nudge.off + x - this.nudge.x, -m, m)); // x only, never y
