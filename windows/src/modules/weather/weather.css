@@ -1,0 +1,15 @@
+/* Clima: current conditions, hour strip and day strip. Prefix weather-; kit classes are reused, never redefined. */
+.weather-body { padding: 4px 16px 4px 84px; gap: 6px; }
+.weather-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.weather-head .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weather-now { display: flex; align-items: center; gap: 10px; }
+.weather-icon { font-size: 30px; line-height: 1; }
+.weather-main { display: flex; flex-direction: column; min-width: 0; }
+.weather-temp { font-size: 24px; font-weight: 600; line-height: 1.1; }
+.weather-detail { margin-left: auto; text-align: right; white-space: nowrap; }
+.weather-hours, .weather-days { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.weather-hours::-webkit-scrollbar, .weather-days::-webkit-scrollbar { display: none; }
+.weather-cell { display: flex; flex-direction: column; align-items: center; min-width: 46px; font-size: 12px; white-space: nowrap; }
+.weather-days .weather-cell { flex: 1 1 0; min-width: 0; }
+.weather-swap { animation: weather-swap 0.2s ease-out; }
+@keyframes weather-swap { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }

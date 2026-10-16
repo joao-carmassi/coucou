@@ -1,0 +1,10 @@
+{
+  "id": "weather",
+  "label": "Clima",
+  "default": false,
+  "order": 15,
+  "settingsDefaults": {
+    "weatherPlace": null,
+    "weatherUnits": "C"
+  }
+}
