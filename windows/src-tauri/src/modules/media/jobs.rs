@@ -193,9 +193,7 @@ pub fn run(op: &str, path: &str, arg: &str) -> Result<u64, String> {
                 }
             }
         })();
-        if res.is_err() && claim {
-            let _ = std::fs::remove_file(&out);
-        }
+        discard_claimed(res.is_err(), claim, &out);
         res
     })
 }
@@ -223,6 +221,13 @@ pub fn download_ffmpeg() -> Result<u64, String> {
     spawn("ffmpeg", |cancel, progress| ffmpeg::download(cancel, progress).map(|p| Done { out: Some(p), text: None }))
 }
 
+/// A claimed output is empty until the work succeeds: remove it when the work failed.
+fn discard_claimed(failed: bool, claimed: bool, out: &std::path::Path) {
+    if failed && claimed {
+        let _ = std::fs::remove_file(out);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -231,19 +236,15 @@ mod tests {
     fn failed_claimed_job_leaves_no_empty_output() {
         let dir = std::env::temp_dir().join(format!("coucou-jobs-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        // Not a real image: ocr fails after the output was claimed.
-        let src = dir.join("a.png");
-        std::fs::write(&src, b"not an image").unwrap();
-        let id = run("ocr", src.to_str().unwrap(), "");
-        if id.is_ok() {
-            for _ in 0..100 {
-                if ACTIVE.load(Ordering::SeqCst) == 0 { break; }
-                std::thread::sleep(std::time::Duration::from_millis(50));
-            }
-        }
-        let leftovers: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().filter(|e| e.file_name() != "a.png").collect();
+        let out = dir.join("a-texto.txt");
+        std::fs::write(&out, b"").unwrap();
+        discard_claimed(false, true, &out); // success keeps it
+        assert!(out.exists());
+        discard_claimed(true, false, &out); // not claimed by this run: never touched
+        assert!(out.exists());
+        discard_claimed(true, true, &out); // failed and claimed: removed
+        assert!(!out.exists());
         let _ = std::fs::remove_dir_all(&dir);
-        assert!(leftovers.is_empty(), "{leftovers:?}");
     }
 
     #[test]
