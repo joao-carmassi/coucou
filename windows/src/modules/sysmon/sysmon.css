@@ -1,0 +1,16 @@
+/* Sistema: this module's classes, all prefixed "sysmon-". */
+.sysmon-body { padding: 4px 14px 6px 84px; max-height: 300px; overflow-y: auto; font: 400 11.5px var(--font); color: var(--dim); display: flex; flex-direction: column; gap: 8px; }
+.sysmon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px 10px; }
+.sysmon-cell { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.sysmon-k { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--dim); }
+.sysmon-v { font: 600 16px/20px var(--font); color: var(--ink); font-variant-numeric: tabular-nums; }
+.sysmon-sub { font-size: 10.5px; color: var(--dim); overflow-wrap: anywhere; }
+.sysmon-bar { display: block; height: 3px; border-radius: 999px; background: var(--surface-track); overflow: hidden; }
+.sysmon-bar > i { display: block; height: 100%; background: var(--amber); }
+.sysmon-procs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sysmon-list { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sysmon-proc { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.sysmon-name { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.sysmon-lhm, .sysmon-tools { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.sysmon-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.sysmon-row .island-field { flex: 1; min-width: 120px; }
