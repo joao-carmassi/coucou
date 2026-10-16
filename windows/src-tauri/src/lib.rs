@@ -192,6 +192,12 @@ fn set_island_offset(app: AppHandle, shared: State<Shared>, dx: f64) {
     island::adjust_placement(&app, &shared, Some(dx));
 }
 
+/// Live Alt-drag step: moves the window to the stored offset plus `dx`, nothing saved.
+#[tauri::command]
+fn drag_island(app: AppHandle, shared: State<Shared>, dx: f64) {
+    island::drag_placement(&app, &shared, dx);
+}
+
 #[tauri::command]
 fn center_island(app: AppHandle, shared: State<Shared>) {
     island::adjust_placement(&app, &shared, None);
@@ -355,6 +361,7 @@ pub fn run() {
         forget_foreground,
         reposition,
         set_island_offset,
+        drag_island,
         center_island,
         open_url,
         quit_app,

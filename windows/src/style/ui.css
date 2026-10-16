@@ -9,7 +9,8 @@
   --surface-tile-hover: color-mix(in srgb, var(--card), #fff 7%);
 
   --on-light: #0b0c0e;       /* a mark or a word on a light or a coloured ground */
-}
+
+}
 @property --accent {
   syntax: "<color>";
   inherits: true;
@@ -83,6 +84,11 @@
   color: var(--ink);
   font: 400 12.5px var(--font);
   outline: none;
+}
+
+/* In a column (the palette) the row-sized grow would stretch the field into the free height, which is most of it with 0 or 1 matches. */
+.stack > .island-field {
+  flex: none;
 }
 
 .island-field::placeholder {

@@ -3,7 +3,7 @@ import type { ModuleSettings } from "../../core/moduleSettings";
 import { h } from "../../kit/dom";
 import { pomoCfg, type PomoCfg } from "./pomodoro";
 
-type Cfg = { timerPomodoro: unknown; timerPomodoroAuto: boolean; timerFocusPomodoro: boolean };
+type Cfg = { timerPomodoro: unknown; timerPomodoroAuto: boolean };
 
 function timerSettingsSection(ms: ModuleSettings): { el: HTMLElement } {
   const cfg = ms.get<Cfg>();
@@ -27,9 +27,7 @@ function timerSettingsSection(ms: ModuleSettings): { el: HTMLElement } {
       num("Foco (min)", "work", 600), num("Pausa curta (min)", "short", 600), num("Pausa longa (min)", "long", 600),
       num("Pausa longa a cada (ciclos)", "every", 24),
       h("div", { class: "row" }, h("label", { text: "Iniciar a próxima fase sozinho" }),
-        toggle(cfg.timerPomodoroAuto !== false, (v) => void ms.save({ timerPomodoroAuto: v }), "Iniciar a próxima fase sozinho")),
-      h("div", { class: "row" }, h("label", { text: "\"Iniciar foco\" usa o Pomodoro" }),
-        toggle(!!cfg.timerFocusPomodoro, (v) => void ms.save({ timerFocusPomodoro: v }), "Iniciar foco usa o Pomodoro"))),
+        toggle(cfg.timerPomodoroAuto !== false, (v) => void ms.save({ timerPomodoroAuto: v }), "Iniciar a próxima fase sozinho"))),
   };
 }
 

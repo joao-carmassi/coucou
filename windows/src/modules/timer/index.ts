@@ -6,13 +6,13 @@ import { TimerClock } from "./timer";
 import { buildTimerView, type PomoUi } from "./view";
 import { pomoCfg, pomoLabel, pomoMinutes, pomoNext, pomoStart, type PomoState } from "./pomodoro";
 
-interface Cfg { timerPomodoro: unknown; timerPomodoroAuto: boolean; timerFocusPomodoro: boolean }
+interface Cfg { timerPomodoro: unknown; timerPomodoroAuto: boolean }
 
 // State lives here (not in State); the object is inert until start() gives it an onChange.
 const Timer = new TimerClock();
 // Pomodoro phase on top of the countdown; null = a plain timer / stopwatch.
 let pomo: PomoState | null = null;
-let readCfg: () => Cfg = () => ({ timerPomodoro: null, timerPomodoroAuto: true, timerFocusPomodoro: false });
+let readCfg: () => Cfg = () => ({ timerPomodoro: null, timerPomodoroAuto: true });
 const pomoUi: PomoUi = {
   label: () => (pomo ? pomoLabel(pomo, pomoCfg(readCfg().timerPomodoro)) : null),
   start: () => startPomo(),
@@ -74,15 +74,11 @@ function start(api: IslandApi): Disposer {
   readCfg = () => api.settings<Cfg>();
   Timer.onChange = arm;
   const offKeep = api.island.keepAwake(() => Timer.active);
-  // Alt+F / palette: a focus phase (pomodoro when "Iniciar foco usa Pomodoro" is on, else a 25 min countdown), only while nothing is running.
+  // Alt+F / palette: a pomodoro work phase, only while nothing is running.
   const offAction = api.actions.add({
     id: "focus", title: "Iniciar foco", keywords: ["timer", "pomodoro", "temporizador"], key: "f",
     when: () => !Timer.active && !(pomo && Timer.status === "ready"), // a ready pomodoro phase waits for its own click
-    run() {
-      if (readCfg().timerFocusPomodoro) startPomo();
-      else {
-        pomo = null; Timer.prepare("countdown", 25); Timer.start(); }
-    },
+    run: () => startPomo(),
   });
   // The interval is off while hidden: catch the readout up when the island comes back.
   const offVis = api.onVisibility((mode) => { if (mode !== "hidden" && Timer.status === "running") refresh(); });

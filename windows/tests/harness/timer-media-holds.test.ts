@@ -16,7 +16,7 @@ const loadCatalog = async () => {
   return {
     MODULE_INFO: buildCatalog([
       { id: "dummy", label: "Dummy", default: true, order: 200 },
-      { id: "timer", label: "Timer", default: true, order: 210, settingsDefaults: { timerPomodoro: { work: 25, short: 5, long: 15, every: 4 }, timerPomodoroAuto: true, timerFocusPomodoro: false } },
+      { id: "timer", label: "Timer", default: true, order: 210, settingsDefaults: { timerPomodoro: { work: 25, short: 5, long: 15, every: 4 }, timerPomodoroAuto: true } },
       { id: "media", label: "Mídia", default: true, order: 220 },
     ], true),
   };

@@ -203,6 +203,20 @@ pub fn adjust_placement(app: &AppHandle, shared: &crate::Shared, dx: Option<f64>
     refresh_click_through(app, &shared.gate);
 }
 
+/// Live Alt-drag: puts the window at the stored offset plus `dx` logical px (clamped by
+/// `place_x`) without saving; the release commits through `adjust_placement`.
+pub fn drag_placement(app: &AppHandle, shared: &crate::Shared, dx: f64) {
+    if !dx.is_finite() { return }
+    let pref = shared.settings.lock().unwrap().screen.clone();
+    let (Some(win), Some(m)) = (window(app), target_monitor(app, &pref)) else { return };
+    let (scale, mp, ms) = (m.scale_factor(), *m.position(), *m.size());
+    let key = monitor_key(m.name().map(String::as_str), ms.width, ms.height);
+    let base = shared.settings.lock().unwrap().island_placement.get(&key).copied().unwrap_or(0.0);
+    let pw = (PANEL_W * scale).round().max(1.0) as u32;
+    let x = place_x(mp.x, ms.width, pw, ((base + dx) * scale).round() as i32);
+    let _ = win.set_position(PhysicalPosition::new(x, mp.y));
+}
+
 /// Places and sizes the window. `collapsed` picks the wake strip instead of the panel.
 pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
     let Some(win) = window(app) else { return };
