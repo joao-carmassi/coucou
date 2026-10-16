@@ -1,0 +1,8 @@
+/* Calendário: a day header, event rows, the join link */
+.cal-body { padding: 4px 16px 4px 84px; gap: 2px; }
+.cal-next { font: 400 11.5px var(--font); color: var(--dim); margin-bottom: 2px; }
+.cal-list { display: flex; flex-direction: column; gap: 1px; max-height: 168px; overflow: hidden; }
+.cal-day { font: 600 10.5px var(--font); color: var(--dim); text-transform: uppercase; letter-spacing: .04em; margin-top: 3px; }
+.cal-foot { display: flex; align-items: center; gap: 8px; margin-top: 2px; font: 400 11px var(--font); color: var(--dim); }
+.cal-err { color: var(--red); }
+.cal-join { color: var(--amber); }

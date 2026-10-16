@@ -1,0 +1,11 @@
+{
+  "id": "calendar",
+  "label": "Calendário",
+  "default": false,
+  "order": 16,
+  "settingsDefaults": {
+    "calendarRemindMin": 10,
+    "calendarDaysAhead": 7
+  },
+  "presets": ["tudo", "vitrine"]
+}
