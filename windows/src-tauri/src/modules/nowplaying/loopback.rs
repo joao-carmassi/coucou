@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use windows::Win32::Media::Audio::{
-    eConsole, eRender, IAudioCaptureClient, IAudioClient, IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_BUFFERFLAGS_SILENT,
+    eConsole, eRender, IAudioCaptureClient, IAudioClient, IMMDevice, IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_BUFFERFLAGS_SILENT,
     AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK,
 };
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_ALL, COINIT_MULTITHREADED};
@@ -34,14 +34,25 @@ fn round2(v: f32) -> f32 {
 pub fn run(app: &AppHandle, stop: &AtomicBool, off: &AtomicBool) {
     let done = || stop.load(Ordering::SeqCst) || off.load(Ordering::SeqCst);
     let com = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }.is_ok();
+    let mut wait = Duration::from_secs(1);
     while !done() {
-        if let Err(e) = unsafe { capture(app, &done) } {
-            log::line(format!("nowplaying: loopback stopped: {e}"));
-            for _ in 0..10 {
-                if done() {
-                    break;
+        let started = Instant::now();
+        match unsafe { capture(app, &done) } {
+            // Ended by itself (the default device changed): reopen at once.
+            Ok(()) => wait = Duration::from_secs(1),
+            Err(e) => {
+                // Log the first failure of a run only; back off up to 30 s while it keeps failing.
+                if started.elapsed() > Duration::from_secs(10) {
+                    wait = Duration::from_secs(1);
                 }
-                std::thread::sleep(Duration::from_millis(100));
+                if wait == Duration::from_secs(1) {
+                    log::line(format!("nowplaying: loopback stopped: {e}"));
+                }
+                let until = Instant::now() + wait;
+                while !done() && Instant::now() < until {
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                wait = (wait * 2).min(Duration::from_secs(30));
             }
         }
     }
@@ -50,9 +61,18 @@ pub fn run(app: &AppHandle, stop: &AtomicBool, off: &AtomicBool) {
     }
 }
 
+/// Endpoint id as a String; the COM string is freed.
+unsafe fn id_of(d: &IMMDevice) -> windows::core::Result<String> {
+    let p = d.GetId()?;
+    let s = p.to_string().unwrap_or_default();
+    CoTaskMemFree(Some(p.0 as *const _));
+    Ok(s)
+}
+
 unsafe fn capture(app: &AppHandle, done: &dyn Fn() -> bool) -> windows::core::Result<()> {
     let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
     let device = enumerator.GetDefaultAudioEndpoint(eRender, eConsole)?;
+    let device_id = id_of(&device)?;
     let client: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
     let fmt = client.GetMixFormat()?;
     let (rate, channels, bits) = ((*fmt).nSamplesPerSec, (*fmt).nChannels as usize, (*fmt).wBitsPerSample);
@@ -69,10 +89,19 @@ unsafe fn capture(app: &AppHandle, done: &dyn Fn() -> bool) -> windows::core::Re
     let mut analyzer = Analyzer::new(rate);
     let mut window: VecDeque<f32> = VecDeque::with_capacity(FFT_N * 2);
     let mut last_emit = Instant::now();
+    let mut polls = 0u32;
     let mut fresh = false; // new samples since the last emit (no packets while nothing plays)
     let result = (|| -> windows::core::Result<()> {
         while !done() {
             std::thread::sleep(POLL);
+            polls += 1;
+            // Once a second: did the default output device change? Then end, and `run` reopens on the new one.
+            if polls % 50 == 0 {
+                let now = enumerator.GetDefaultAudioEndpoint(eRender, eConsole).and_then(|d| id_of(&d));
+                if now.is_ok_and(|n| n != device_id) {
+                    return Ok(());
+                }
+            }
             while cap.GetNextPacketSize()? > 0 {
                 let (mut data, mut frames, mut flags) = (std::ptr::null_mut(), 0u32, 0u32);
                 cap.GetBuffer(&mut data, &mut frames, &mut flags, None, None)?;

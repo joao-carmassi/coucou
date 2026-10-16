@@ -34,7 +34,9 @@ impl Module for NowPlaying {
         *TX.lock().unwrap() = Some(tx.clone());
         *SPAWNER.lock().unwrap() = Some(ctx.spawner());
         let app = ctx.app.clone();
-        ctx.spawn(move |_| session::run(&app, tx, rx));
+        let gen = session::GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        *session::LAST.lock().unwrap() = None;
+        ctx.spawn(move |_| session::run(&app, tx, rx, gen));
     }
 
     fn stop(&self, ctx: &ModuleCtx) {

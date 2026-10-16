@@ -20,7 +20,7 @@ pub enum SampleFmt {
     I16,
 }
 
-/// First FFT bin of each band plus the end (`bands + 1` values, strictly increasing, last <= n/2 + 1).
+/// First FFT bin of each band plus the end (`bands + 1` values, non-decreasing, all <= n/2 + 1; a band may be empty at low rates).
 pub fn band_edges(sample_rate: u32, n: usize, bands: usize) -> Vec<usize> {
     let max = n / 2 + 1;
     let ratio = (HI_HZ / LO_HZ).powf(1.0 / bands as f32);
@@ -29,7 +29,7 @@ pub fn band_edges(sample_rate: u32, n: usize, bands: usize) -> Vec<usize> {
         let hz = LO_HZ * ratio.powi(k as i32);
         let bin = (hz * n as f32 / sample_rate.max(1) as f32).round() as usize;
         let prev = edges[k - 1];
-        edges.push(bin.max(prev + 1).min(max.max(prev + 1)));
+        edges.push(bin.max(prev + 1).min(max)); // low rates run out of bins: trailing bands are empty
     }
     edges
 }
@@ -107,7 +107,11 @@ impl Analyzer {
         // A Hann-windowed full-scale sine peaks at N/4.
         let scale = 4.0 / FFT_N as f32;
         for (b, o) in out.iter_mut().enumerate() {
-            let peak = self.spec[self.edges[b]..self.edges[b + 1].min(self.spec.len())].iter().map(|c| c.norm()).fold(0.0, f32::max);
+            let (lo, hi) = (self.edges[b].min(self.spec.len()), self.edges[b + 1].min(self.spec.len()));
+            if lo >= hi {
+                continue;
+            }
+            let peak = self.spec[lo..hi].iter().map(|c| c.norm()).fold(0.0, f32::max);
             *o = level_of_mag(peak * scale);
         }
         out
@@ -124,11 +128,23 @@ mod tests {
 
     #[test]
     fn edges_strictly_increase_and_stay_in_range() {
-        for rate in [22_050u32, 44_100, 48_000, 96_000] {
+        for rate in [8_000u32, 11_025, 22_050, 44_100, 48_000, 96_000] {
             let e = band_edges(rate, FFT_N, BANDS);
             assert_eq!(e.len(), BANDS + 1);
-            assert!(e.windows(2).all(|w| w[0] < w[1]), "{rate}: {e:?}");
+            assert!(e.windows(2).all(|w| w[0] <= w[1]), "{rate}: {e:?}");
+            if rate >= 44_100 {
+                assert!(e.windows(2).all(|w| w[0] < w[1]), "{rate}: {e:?}");
+            }
             assert!(*e.last().unwrap() <= FFT_N / 2 + 1);
+        }
+    }
+
+    #[test]
+    fn low_sample_rates_do_not_panic() {
+        for rate in [8_000u32, 11_025] {
+            let mut a = Analyzer::new(rate);
+            let b = a.analyze(&sine(500.0, rate, 0.5));
+            assert!(b.iter().any(|v| *v > 0.5), "{rate}: {b:?}");
         }
     }
 

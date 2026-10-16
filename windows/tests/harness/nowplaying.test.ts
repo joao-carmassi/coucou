@@ -104,12 +104,13 @@ describe("nowplaying lifecycle", () => {
   it("dance off and the view closed: no capture even while playing", async () => {
     State.settings.nowplayingDance = false;
     emit("nowplaying-state", track(true, "Outra"));
+    emit("settings-changed", {});
     await tick(100);
     expect(captures().at(-1)).toBe(false);
-    State.settings.nowplayingDance = true;
-    island.hide();
-    island.reveal();
-    await tick(500);
+    State.settings.nowplayingDance = true; // switched back on in the settings window: no island event but this one
+    emit("settings-changed", {});
+    await tick(100);
+    expect(captures().at(-1)).toBe(true);
   });
 
   it("stop releases the capture, the pill, the listeners", async () => {

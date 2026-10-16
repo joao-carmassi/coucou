@@ -68,6 +68,8 @@ pub fn parse_action(s: &str) -> Option<Action> {
 
 /// Last snapshot sent (the view asks for it when it opens).
 pub static LAST: Mutex<Option<Snapshot>> = Mutex::new(None);
+/// Which worker owns LAST: a detached old worker (stuck past the stop grace) must not touch a restarted one's state.
+pub static GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 const DRIFT_MS: i64 = 2_000;
 const ART_PX: u32 = 96;
@@ -125,7 +127,13 @@ pub fn base64(data: &[u8]) -> String {
 
 /// Cover bytes (any format `image` reads) to a 96 px JPEG data URL; None when it cannot be read or stays over 48 KiB.
 pub fn art_data_url(bytes: &[u8]) -> Option<String> {
-    let img = image::load_from_memory(bytes).ok()?;
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().ok()?;
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(4096);
+    limits.max_image_height = Some(4096);
+    limits.max_alloc = Some(64 * 1024 * 1024);
+    reader.limits(limits);
+    let img = reader.decode().ok()?;
     let small = img.thumbnail(ART_PX, ART_PX).to_rgb8();
     let mut jpg = Vec::new();
     image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpg, 80).encode_image(&small).ok()?;
@@ -151,7 +159,7 @@ fn read_art(props: &windows::Media::Control::GlobalSystemMediaTransportControlsS
 }
 
 /// Reads the session; `art` is the cover already known for this track (an empty cover is asked for again).
-fn read(s: &Session, cached: &mut (String, Option<String>)) -> Option<Snapshot> {
+fn read(s: &Session, cached: &mut (String, bool, Option<String>)) -> Option<Snapshot> {
     let props = s.TryGetMediaPropertiesAsync().ok()?.get().ok()?;
     let text = |r: windows::core::Result<windows::core::HSTRING>| r.map(|h| h.to_string()).unwrap_or_default();
     let (title, artist, album) = (text(props.Title()), text(props.Artist()), text(props.AlbumTitle()));
@@ -172,8 +180,9 @@ fn read(s: &Session, cached: &mut (String, Option<String>)) -> Option<Snapshot> 
         }
     }
     let key = format!("{app_id}\u{1}{title}\u{1}{artist}\u{1}{album}");
-    if cached.0 != key || cached.1.is_none() {
-        *cached = (key, read_art(&props));
+    if cached.0 != key || !cached.1 {
+        // A miss is cached too (cached.1 = looked up), so a coverless track is not re-read on every event.
+        *cached = (key, true, read_art(&props));
     }
     Some(Snapshot {
         app: app_label(&app_id),
@@ -188,7 +197,7 @@ fn read(s: &Session, cached: &mut (String, Option<String>)) -> Option<Snapshot> 
         position_ms,
         duration_ms,
         at: at as u64,
-        art: cached.1.clone(),
+        art: cached.2.clone(),
     })
 }
 
@@ -196,6 +205,7 @@ fn read(s: &Session, cached: &mut (String, Option<String>)) -> Option<Snapshot> 
 struct Subscription {
     session: Session,
     tokens: [i64; 3],
+    count: usize,
 }
 
 impl Subscription {
@@ -207,34 +217,46 @@ impl Subscription {
             }
         };
         let (a, b, c) = (ping(tx), ping(tx), ping(tx));
-        let tokens = [
-            session.MediaPropertiesChanged(&TypedEventHandler::new(move |_, _| {
-                a();
-                Ok(())
-            }))?,
-            session.PlaybackInfoChanged(&TypedEventHandler::new(move |_, _| {
-                b();
-                Ok(())
-            }))?,
-            session.TimelinePropertiesChanged(&TypedEventHandler::new(move |_, _| {
-                c();
-                Ok(())
-            }))?,
-        ];
-        Ok(Subscription { session, tokens })
+        // Built one by one: if a later registration fails, dropping `sub` removes the earlier ones.
+        let mut sub = Subscription { session: session.clone(), tokens: [0; 3], count: 0 };
+        sub.tokens[0] = session.MediaPropertiesChanged(&TypedEventHandler::new(move |_, _| {
+            a();
+            Ok(())
+        }))?;
+        sub.count = 1;
+        sub.tokens[1] = session.PlaybackInfoChanged(&TypedEventHandler::new(move |_, _| {
+            b();
+            Ok(())
+        }))?;
+        sub.count = 2;
+        sub.tokens[2] = session.TimelinePropertiesChanged(&TypedEventHandler::new(move |_, _| {
+            c();
+            Ok(())
+        }))?;
+        sub.count = 3;
+        Ok(sub)
     }
 }
 
 impl Drop for Subscription {
     fn drop(&mut self) {
-        let _ = self.session.RemoveMediaPropertiesChanged(self.tokens[0]);
-        let _ = self.session.RemovePlaybackInfoChanged(self.tokens[1]);
-        let _ = self.session.RemoveTimelinePropertiesChanged(self.tokens[2]);
+        if self.count > 0 {
+            let _ = self.session.RemoveMediaPropertiesChanged(self.tokens[0]);
+        }
+        if self.count > 1 {
+            let _ = self.session.RemovePlaybackInfoChanged(self.tokens[1]);
+        }
+        if self.count > 2 {
+            let _ = self.session.RemoveTimelinePropertiesChanged(self.tokens[2]);
+        }
     }
 }
 
-fn publish(app: &AppHandle, snap: Option<Snapshot>) {
+fn publish(app: &AppHandle, snap: Option<Snapshot>, gen: u64) {
     let mut last = LAST.lock().unwrap();
+    if GEN.load(std::sync::atomic::Ordering::SeqCst) != gen {
+        return;
+    }
     if needs_emit(last.as_ref(), snap.as_ref()) {
         let _ = app.emit("nowplaying-state", &snap);
         *last = snap;
@@ -242,7 +264,7 @@ fn publish(app: &AppHandle, snap: Option<Snapshot>) {
 }
 
 /// The worker. Returns when `Quit` arrives (or the channel closes). Event handlers are removed before it returns.
-pub fn run(app: &AppHandle, tx: Sender<Msg>, rx: Receiver<Msg>) {
+pub fn run(app: &AppHandle, tx: Sender<Msg>, rx: Receiver<Msg>, gen: u64) {
     let _ = unsafe { RoInitialize(RO_INIT_MULTITHREADED) };
     let mgr = match Manager::RequestAsync().and_then(|op| op.get()) {
         Ok(m) => m,
@@ -257,7 +279,7 @@ pub fn run(app: &AppHandle, tx: Sender<Msg>, rx: Receiver<Msg>) {
         Ok(())
     }));
     let mut sub: Option<Subscription> = None;
-    let mut cached = (String::new(), None);
+    let mut cached = (String::new(), false, None);
     let mut pending = Some(Msg::Session);
     loop {
         let msg = match pending.take() {
@@ -299,13 +321,16 @@ pub fn run(app: &AppHandle, tx: Sender<Msg>, rx: Receiver<Msg>) {
             sub = mgr.GetCurrentSession().ok().and_then(|s| Subscription::new(s, &tx).ok());
         }
         let snap = sub.as_ref().and_then(|s| read(&s.session, &mut cached));
-        publish(app, snap);
+        publish(app, snap, gen);
     }
     drop(sub);
     if let Ok(t) = token {
         let _ = mgr.RemoveCurrentSessionChanged(t);
     }
-    *LAST.lock().unwrap() = None;
+    let mut last = LAST.lock().unwrap();
+    if GEN.load(std::sync::atomic::Ordering::SeqCst) == gen {
+        *last = None;
+    }
 }
 
 #[cfg(test)]

@@ -11,8 +11,14 @@ use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, 
 use windows::Win32::System::Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION};
 
 /// Lowercase last name of an app id: "Spotify.exe" -> "spotify"; "Microsoft.ZuneMusic_8we!Microsoft.ZuneMusic" -> "zunemusic".
+/// A packaged id ending in the generic "App" uses the package name before "!" instead.
 pub fn app_key(id: &str) -> String {
-    let after = id.rsplit('!').next().unwrap_or(id);
+    let mut parts = id.rsplit('!');
+    let last = parts.next().unwrap_or(id);
+    let after = match parts.next() {
+        Some(pkg) if last.eq_ignore_ascii_case("app") => pkg,
+        _ => last,
+    };
     let before = after.split('_').next().unwrap_or(after);
     let lower = before.to_lowercase();
     let lower = lower.strip_suffix(".exe").unwrap_or(&lower);
@@ -26,14 +32,17 @@ pub fn app_label(id: &str) -> String {
     c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
 }
 
+/// Player ids whose audio runs under another exe name.
+const ALIASES: &[(&str, &str)] = &[("zunemusic", "ui")];
+
 /// Does the audio process `exe` (file name, any case) belong to the player `id`?
-/// Equal keys, or one contains the other when both have 4+ letters ("msedge" vs "edge" style names).
+/// Equal keys, or a pair in ALIASES (a containment rule would let "msedge" move "msedgewebview2").
 pub fn exe_matches(id: &str, exe: &str) -> bool {
     let (k, e) = (app_key(id), app_key(exe));
     if k.is_empty() || e.is_empty() {
         return false;
     }
-    k == e || (k.len() >= 4 && e.len() >= 4 && (e.contains(&k) || k.contains(&e)))
+    k == e || ALIASES.iter().any(|(a, b)| (k == *a && e == *b) || (k == *b && e == *a))
 }
 
 fn clamp01(v: f32) -> f32 {
@@ -121,8 +130,10 @@ mod tests {
         assert!(exe_matches("msedge.exe", "msedge.exe"));
         assert!(!exe_matches("Spotify.exe", "chrome.exe"));
         assert!(!exe_matches("", "chrome.exe"));
-        // Short names never match by containment.
         assert!(!exe_matches("vlc.exe", "vlcx.exe"));
+        assert!(!exe_matches("msedge.exe", "msedgewebview2.exe"));
+        assert_eq!(app_key("Some.Pkg_abc!App"), "pkg");
+        assert_eq!(app_label("Some.Pkg_abc!App"), "Pkg");
     }
 
     #[test]

@@ -59,6 +59,8 @@ function start(api: IslandApi): Disposer {
       NP.paintBars?.();
       if (cfg().nowplayingDance !== false) api.avatar.level(danceLevel(p.level, NP.sens));
     }),
+    // The settings window saved: the core updates State after its own listener, so look one tick later.
+    api.listen("settings-changed", () => { api.timeout(reconcile, 0); }),
     api.island.onChange(reconcile),
     api.onVisibility(reconcile),
     api.onPause(reconcile),
