@@ -27,6 +27,7 @@ test("presets: set modulesEnabled from catalog data, every id covers the catalog
   assert.equal(presetModules(cat, "tudo").clock, true, "tudo does not turn the dev-only module off");
   const tudo = presetModules(cat, "tudo");
   const vit = presetModules(cat, "vitrine");
+  for (const x of cat) if (x.id !== "demo") assert.ok(tudo[x.id], `tudo includes ${x.id}`);
   for (const id of Object.keys(tudo)) if (tudo[id]) assert.ok(vit[id], `vitrine includes ${id}`);
   assert.ok(Object.values(presetModules(cat, "nao-existe")).every((v) => !v));
 });

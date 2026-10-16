@@ -1,9 +1,9 @@
 // Mídia commands, same names and argument shapes as at m3-ok.
 
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
 
 use super::{capture, ffmpeg, jobs, media, tools};
-use crate::core::host::blocking;
+use crate::core::host::{blocking, ModuleHost};
 use crate::core::log;
 use crate::core::inbox::{self, DroppedFile};
 
@@ -50,13 +50,15 @@ pub async fn media_remove(path: String) -> Result<(), String> {
 
 /// What a file can be asked to do (kind, size, dimensions, pages, tool ids).
 #[tauri::command]
-pub async fn media_tool_info(path: String) -> Result<jobs::Info, String> {
+pub async fn media_tool_info(host: State<'_, ModuleHost>, path: String) -> Result<jobs::Info, String> {
+    host.require("media")?;
     blocking(move || jobs::info(&path)).await?
 }
 
 /// Starts a tool on a worker thread; progress and the result arrive as `media-tool` events.
 #[tauri::command]
-pub async fn media_tool_run(op: String, path: String, arg: Option<String>) -> Result<u64, String> {
+pub async fn media_tool_run(host: State<'_, ModuleHost>, op: String, path: String, arg: Option<String>) -> Result<u64, String> {
+    host.require("media")?;
     blocking(move || jobs::run(&op, &path, arg.as_deref().unwrap_or(""))).await?
 }
 

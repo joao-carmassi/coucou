@@ -40,7 +40,9 @@ function start(api: IslandApi): Disposer {
   arm();
   // Settings can flip alerts while running: look again whenever the island's state changes (cheap, no timer).
   const offChange = api.island.onChange(arm);
-  return () => { offChange(); probe?.(); probe = null; temp = null; };
+  // And on a settings change (deferred: the stored settings are replaced by a listener that runs after ours).
+  const offSettings = api.listen("settings-changed", () => void api.timeout(arm, 0));
+  return () => { offChange(); offSettings(); probe?.(); probe = null; temp = null; };
 }
 
 export const sysmonModule: ModuleDef = {

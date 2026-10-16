@@ -32,8 +32,10 @@ pub fn kind_of(path: &Path) -> Kind {
 }
 
 /// Operation ids the UI may ask for, per kind (the Rust side re-checks: the webview is not trusted).
-pub fn ops_for(kind: Kind) -> &'static [&'static str] {
+pub fn ops_for(kind: Kind, ext: &str) -> &'static [&'static str] {
     match kind {
+        // No gif encoder: compress/strip would fail on .gif.
+        Kind::Image if ext == "gif" => &["convert", "resize", "clipboard", "ocr"],
         Kind::Image => &["convert", "resize", "compress", "strip", "clipboard", "ocr"],
         Kind::Video => &["gif", "vcompress", "audio"],
         Kind::Pdf | Kind::Other => &[],
@@ -176,8 +178,10 @@ mod tests {
         assert_eq!(kind_of(Path::new("x.mkv")), Kind::Video);
         assert_eq!(kind_of(Path::new("x.pdf")), Kind::Pdf);
         assert_eq!(kind_of(Path::new("x")), Kind::Other);
-        assert!(ops_for(Kind::Image).contains(&"ocr") && !ops_for(Kind::Image).contains(&"gif"));
-        assert!(ops_for(Kind::Other).is_empty());
+        assert!(ops_for(Kind::Image, "png").contains(&"ocr") && !ops_for(Kind::Image, "png").contains(&"gif"));
+        assert!(ops_for(Kind::Image, "png").contains(&"compress"));
+        assert!(!ops_for(Kind::Image, "gif").contains(&"compress") && !ops_for(Kind::Image, "gif").contains(&"strip"));
+        assert!(ops_for(Kind::Other, "").is_empty());
         assert!(needs_ffmpeg("gif") && !needs_ffmpeg("convert"));
     }
 

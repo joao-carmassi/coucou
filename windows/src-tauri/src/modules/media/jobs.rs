@@ -119,6 +119,9 @@ pub struct Info {
 
 pub fn info(path: &str) -> Result<Info, String> {
     let p = Path::new(path);
+    if !tools::is_local_abs(p) {
+        return Err("caminho não permitido".into());
+    }
     let meta = std::fs::metadata(p).map_err(|_| "arquivo não encontrado".to_string())?;
     if !meta.is_file() {
         return Err("não é um arquivo".into());
@@ -135,7 +138,7 @@ pub fn info(path: &str) -> Result<Info, String> {
         width: dims.map(|d| d.0),
         height: dims.map(|d| d.1),
         pages,
-        ops: tools::ops_for(kind),
+        ops: tools::ops_for(kind, &tools::ext_of(p)),
         ffmpeg: ffmpeg::locate().is_some(),
     })
 }
@@ -149,7 +152,7 @@ pub fn run(op: &str, path: &str, arg: &str) -> Result<u64, String> {
     if !src.is_file() {
         return Err("arquivo não encontrado".into());
     }
-    if !tools::ops_for(tools::kind_of(&src)).contains(&op) {
+    if !tools::ops_for(tools::kind_of(&src), &tools::ext_of(&src)).contains(&op) {
         return Err("esta ferramenta não serve para este tipo de arquivo".into());
     }
     if tools::needs_ffmpeg(op) && ffmpeg::locate().is_none() {
@@ -161,31 +164,39 @@ pub fn run(op: &str, path: &str, arg: &str) -> Result<u64, String> {
         let dir = src.parent().unwrap_or(Path::new("."));
         let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("arquivo");
         // Claimed with create_new for ffmpeg/OCR: two jobs never share a name, and only files this run made are deleted.
-        let out = reserve(dir, stem, &suffix, &ext, matches!(op_s.as_str(), "ocr" | "gif" | "vcompress" | "audio"))?;
-        let check = || if cancel.load(Ordering::SeqCst) { Err("cancelled".to_string()) } else { Ok(()) };
-        check()?;
-        match op_s.as_str() {
-            "clipboard" => imageops::to_clipboard(&src).map(|()| Done::default()),
-            "ocr" => {
-                let text = ocr::recognize(&src)?;
-                check()?;
-                if text.trim().is_empty() {
-                    return Err("Nenhum texto encontrado na imagem.".into());
+        let claim = matches!(op_s.as_str(), "ocr" | "gif" | "vcompress" | "audio");
+        let out = reserve(dir, stem, &suffix, &ext, claim)?;
+        // A claimed output is empty until the work succeeds: never leave a 0-byte file behind.
+        let res = (|| -> Result<Done, String> {
+            let check = || if cancel.load(Ordering::SeqCst) { Err("cancelled".to_string()) } else { Ok(()) };
+            check()?;
+            match op_s.as_str() {
+                "clipboard" => imageops::to_clipboard(&src).map(|()| Done::default()),
+                "ocr" => {
+                    let text = ocr::recognize(&src)?;
+                    check()?;
+                    if text.trim().is_empty() {
+                        return Err("Nenhum texto encontrado na imagem.".into());
+                    }
+                    std::fs::write(&out, &text).map_err(|e| e.to_string())?;
+                    Ok(Done { out: Some(out.clone()), text: Some(text) })
                 }
-                std::fs::write(&out, &text).map_err(|e| e.to_string())?;
-                Ok(Done { out: Some(out), text: Some(text) })
-            }
-            "gif" | "vcompress" | "audio" => ffmpeg::run(&op_s, &src, &out, cancel, progress).map(|()| Done { out: Some(out), text: None }),
-            _ => {
-                imageops::run(&op_s, &src, &arg_s, &out)?;
-                // Lossless WebP can grow; never keep a bigger "compressed" file silently.
-                if op_s == "compress" && std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0) >= std::fs::metadata(&src).map(|m| m.len()).unwrap_or(u64::MAX) {
-                    let _ = std::fs::remove_file(&out);
-                    return Err("Não ficou menor que o original; nada foi salvo.".into());
+                "gif" | "vcompress" | "audio" => ffmpeg::run(&op_s, &src, &out, cancel, progress).map(|()| Done { out: Some(out.clone()), text: None }),
+                _ => {
+                    imageops::run(&op_s, &src, &arg_s, &out)?;
+                    // Lossless WebP can grow; never keep a bigger "compressed" file silently.
+                    if op_s == "compress" && std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0) >= std::fs::metadata(&src).map(|m| m.len()).unwrap_or(u64::MAX) {
+                        let _ = std::fs::remove_file(&out);
+                        return Err("Não ficou menor que o original; nada foi salvo.".into());
+                    }
+                    Ok(Done { out: Some(out.clone()), text: None })
                 }
-                Ok(Done { out: Some(out), text: None })
             }
+        })();
+        if res.is_err() && claim {
+            let _ = std::fs::remove_file(&out);
         }
+        res
     })
 }
 
@@ -210,4 +221,33 @@ pub fn download_ffmpeg() -> Result<u64, String> {
         return Err("o ffmpeg já está disponível".into());
     }
     spawn("ffmpeg", |cancel, progress| ffmpeg::download(cancel, progress).map(|p| Done { out: Some(p), text: None }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn failed_claimed_job_leaves_no_empty_output() {
+        let dir = std::env::temp_dir().join(format!("coucou-jobs-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // Not a real image: ocr fails after the output was claimed.
+        let src = dir.join("a.png");
+        std::fs::write(&src, b"not an image").unwrap();
+        let id = run("ocr", src.to_str().unwrap(), "");
+        if id.is_ok() {
+            for _ in 0..100 {
+                if ACTIVE.load(Ordering::SeqCst) == 0 { break; }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+        }
+        let leftovers: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().filter(|e| e.file_name() != "a.png").collect();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(leftovers.is_empty(), "{leftovers:?}");
+    }
+
+    #[test]
+    fn info_rejects_unc() {
+        assert!(info(r"\server\share.png").is_err());
+    }
 }
