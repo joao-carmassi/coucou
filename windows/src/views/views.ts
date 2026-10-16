@@ -197,7 +197,7 @@ function buildPalette(actions: ViewActions, pick: (e: Entry) => void): PaletteVi
   };
   input.addEventListener("input", () => { at = 0; draw(); });
 
-  const el = h("div", { class: "view" }, card(null, h("div", { class: "stack", style: "padding:6px 16px 6px 84px;gap:6px" }, input, list)));
+  const el = h("div", { class: "view" }, card(null, h("div", { class: "stack", style: "padding:18px 16px 6px 84px;gap:6px;justify-content:flex-start" }, input, list)));
   return {
     el,
     sync: draw,

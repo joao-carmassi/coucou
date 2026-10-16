@@ -65,6 +65,10 @@ pub struct PollGate {
     /// Island geometry / ignore state changed: the poll must re-evaluate even
     /// though the cursor stands still.
     recheck: AtomicBool,
+    /// The front end shows the compact island (the only view that may overshoot the display edge).
+    compact: AtomicBool,
+    /// A native Alt-drag is running (at most one).
+    dragging: AtomicBool,
 }
 
 impl PollGate {
@@ -76,12 +80,26 @@ impl PollGate {
             rect: Mutex::new(IslandRect::default()),
             ignoring: AtomicBool::new(false),
             recheck: AtomicBool::new(true),
+            compact: AtomicBool::new(false),
+            dragging: AtomicBool::new(false),
         }
     }
 
     pub fn set_rect(&self, rect: IslandRect) {
         *self.rect.lock().unwrap() = rect;
         self.recheck.store(true, Ordering::Relaxed);
+    }
+
+    /// Returns true when the flag changed (the window must then be placed again).
+    pub fn set_compact(&self, on: bool) -> bool {
+        self.compact.swap(on, Ordering::Relaxed) != on
+    }
+
+    /// Logical px the window may hang past each display edge so the compact island
+    /// itself can sit flush with it.
+    fn overshoot(&self, collapsed: bool) -> f64 {
+        if collapsed || !self.compact.load(Ordering::Relaxed) { return 0.0 }
+        overshoot_logical(self.rect.lock().unwrap().w)
     }
 
     /// Forces the next poll tick to re-apply the flag (after a window resize).
@@ -162,59 +180,160 @@ pub fn monitor_key(name: Option<&str>, w: u32, h: u32) -> String {
 
 /// Left edge of a window `panel_w` wide: centred on the display, moved by `dx_phys`,
 /// then kept fully inside it (a stale offset can never strand the island).
+#[cfg(test)]
 pub fn place_x(mon_x: i32, mon_w: u32, panel_w: u32, dx_phys: i32) -> i32 {
+    place_x_over(mon_x, mon_w, panel_w, dx_phys, 0)
+}
+
+/// `place_x` that lets the window hang `over` physical px past either display edge.
+pub fn place_x_over(mon_x: i32, mon_w: u32, panel_w: u32, dx_phys: i32, over: i32) -> i32 {
     let lo = mon_x as i64;
     let hi = (lo + mon_w as i64 - panel_w as i64).max(lo);
     let want = lo + (mon_w as i64 - panel_w as i64) / 2 + dx_phys as i64;
-    want.clamp(lo, hi) as i32
+    want.clamp(lo - over as i64, hi + over as i64) as i32
 }
 
-/// Adds `d` to the stored offset for `key`, limited to +-`limit`; zero removes the entry.
-fn add_offset(map: &mut std::collections::BTreeMap<String, f64>, key: &str, d: f64, limit: f64) {
-    let v = (map.get(key).copied().unwrap_or(0.0) + d).clamp(-limit, limit);
-    if v == 0.0 { map.remove(key); } else { map.insert(key.to_string(), v); }
+/// Island width assumed before the front end has pushed its rect.
+const DEFAULT_ISLAND_W: f64 = 200.0;
+
+/// Slack on each side of a compact island of width `w` inside the panel window.
+pub fn overshoot_logical(w: f64) -> f64 {
+    let w = if w > 0.0 { w } else { DEFAULT_ISLAND_W };
+    ((PANEL_W - w) / 2.0).max(0.0)
 }
 
-/// Moves the island by `dx` logical px on the current display (None = back to the centre),
-/// saves under the settings lock like `save_settings`, and places the window again.
-pub fn adjust_placement(app: &AppHandle, shared: &crate::Shared, dx: Option<f64>) {
-    let pref = shared.settings.lock().unwrap().screen.clone();
-    let Some(m) = target_monitor(app, &pref) else { return };
-    let size = *m.size();
-    let key = monitor_key(m.name().map(String::as_str), size.width, size.height);
+/// Cursor travel before a press counts as a drag, in physical px.
+const DRAG_SLOP: f64 = 5.0;
+
+/// Stored-offset change (logical px) for a cursor that went from `start` to `now` (physical px).
+pub fn drag_delta_logical(start: f64, now: f64, scale: f64) -> f64 {
+    (now - start) / scale
+}
+
+/// Stored-offset bound for a display `mon_w` physical px wide at `scale`: the panel stays
+/// on it, plus the compact island's slack.
+fn offset_limit(gate: &PollGate, mon_w: u32, scale: f64) -> f64 {
+    ((mon_w as f64 / scale - PANEL_W) / 2.0).max(0.0) + gate.overshoot(false)
+}
+
+/// Saves `value` (None = back to the centre) as the offset of display `key` under the
+/// settings lock like `save_settings`, and places the window again.
+fn store_offset(app: &AppHandle, shared: &crate::Shared, key: &str, value: Option<f64>) {
     let fresh = {
         let mut s = shared.settings.lock().unwrap();
-        match dx {
-            Some(d) if d.is_finite() => {
-                // Same bound `place_x` applies to the full panel: stored offsets never pile up past the edge.
-                let limit = ((size.width as f64 / m.scale_factor() - PANEL_W) / 2.0).max(0.0);
-                add_offset(&mut s.island_placement, &key, d, limit);
-            }
-            Some(_) => return,
-            None => { s.island_placement.remove(&key); }
+        match value {
+            Some(v) if v != 0.0 => { s.island_placement.insert(key.to_string(), v); }
+            _ => { s.island_placement.remove(key); }
         }
         if let Err(err) = crate::core::settings::save(&s) {
             eprintln!("[coucou] could not save settings: {err}");
         }
         s.clone()
     };
+    let pref = fresh.screen.clone();
     let _ = app.emit("settings-changed", fresh);
     apply_geometry(app, &pref, shared.gate.collapsed.load(Ordering::Relaxed));
     refresh_click_through(app, &shared.gate);
 }
 
-/// Live Alt-drag: puts the window at the stored offset plus `dx` logical px (clamped by
-/// `place_x`) without saving; the release commits through `adjust_placement`.
-pub fn drag_placement(app: &AppHandle, shared: &crate::Shared, dx: f64) {
-    if !dx.is_finite() { return }
+/// Moves the island by `dx` logical px on the current display (None = back to the centre).
+pub fn adjust_placement(app: &AppHandle, shared: &crate::Shared, dx: Option<f64>) {
     let pref = shared.settings.lock().unwrap().screen.clone();
-    let (Some(win), Some(m)) = (window(app), target_monitor(app, &pref)) else { return };
+    let Some(m) = target_monitor(app, &pref) else { return };
+    let size = *m.size();
+    let key = monitor_key(m.name().map(String::as_str), size.width, size.height);
+    let value = match dx {
+        Some(d) if d.is_finite() => {
+            let limit = offset_limit(&shared.gate, size.width, m.scale_factor());
+            let cur = shared.settings.lock().unwrap().island_placement.get(&key).copied().unwrap_or(0.0);
+            Some((cur + d).clamp(-limit, limit))
+        }
+        Some(_) => return,
+        None => None,
+    };
+    store_offset(app, shared, &key, value);
+}
+
+/// How an Alt-drag ended, as the front end hears it in "island-drag-end".
+enum DragEnd {
+    /// Window moved and the placement was saved.
+    Moved,
+    /// Press that never travelled: a click.
+    Still,
+    /// Not a click and not saved (display gone, window missing).
+    Aborted,
+}
+
+/// Clears the single-drag flag even if the drag thread panics.
+struct DragGuard(Arc<PollGate>);
+impl Drop for DragGuard {
+    fn drop(&mut self) { self.0.dragging.store(false, Ordering::SeqCst); }
+}
+
+/// Alt-drag, run natively: a thread follows the global cursor at ~120 Hz and moves the
+/// window itself, so no IPC and no front-end frame sits between hand and island.
+/// It exists only while the button is held; the release saves like `adjust_placement`.
+pub fn begin_drag(app: &AppHandle) {
+    let shared = app.state::<crate::Shared>();
+    if shared.gate.dragging.swap(true, Ordering::SeqCst) {
+        // Still committing the previous drag: let this press count as a click.
+        let _ = app.emit_to(WINDOW_LABEL, "island-drag-end", "still");
+        return;
+    }
+    let guard = DragGuard(shared.gate.clone());
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let end = run_drag(&app);
+        let shared = app.state::<crate::Shared>();
+        if !matches!(end, DragEnd::Moved) {
+            // Window back where the settings say.
+            let pref = shared.settings.lock().unwrap().screen.clone();
+            apply_geometry(&app, &pref, shared.gate.collapsed.load(Ordering::Relaxed));
+            refresh_click_through(&app, &shared.gate);
+        }
+        drop(guard);
+        let tag = match end { DragEnd::Moved => "moved", DragEnd::Still => "still", DragEnd::Aborted => "aborted" };
+        let _ = app.emit_to(WINDOW_LABEL, "island-drag-end", tag);
+    });
+}
+
+/// The drag loop. The display is fixed at the press: crossing onto another one keeps
+/// dragging against this one, and the commit uses its key and limit.
+fn run_drag(app: &AppHandle) -> DragEnd {
+    let shared = app.state::<crate::Shared>();
+    let pref = shared.settings.lock().unwrap().screen.clone();
+    let (Some(win), Some(m), Some((sx, _))) = (window(app), target_monitor(app, &pref), cursor_physical()) else {
+        return DragEnd::Aborted;
+    };
     let (scale, mp, ms) = (m.scale_factor(), *m.position(), *m.size());
     let key = monitor_key(m.name().map(String::as_str), ms.width, ms.height);
-    let base = shared.settings.lock().unwrap().island_placement.get(&key).copied().unwrap_or(0.0);
+    let limit = offset_limit(&shared.gate, ms.width, scale);
+    // A stored offset can exceed the current bound (the island got wider): start from the clamped one.
+    let stored = shared.settings.lock().unwrap().island_placement.get(&key).copied().unwrap_or(0.0);
+    let base = stored.clamp(-limit, limit);
     let pw = (PANEL_W * scale).round().max(1.0) as u32;
-    let x = place_x(mp.x, ms.width, pw, ((base + dx) * scale).round() as i32);
-    let _ = win.set_position(PhysicalPosition::new(x, mp.y));
+    let (mut last_cx, mut moved, mut last_x, mut last_over) = (sx, false, i32::MIN, i32::MIN);
+    while left_button_down() {
+        std::thread::sleep(Duration::from_millis(8));
+        let Some((cx, _)) = cursor_physical() else { break };
+        last_cx = cx;
+        if !moved && (cx - sx).abs() <= DRAG_SLOP * scale { continue }
+        moved = true;
+        // Re-read each tick: the island may expand mid-drag and then must stay inside the display.
+        let over = (shared.gate.overshoot(false) * scale).round() as i32;
+        if over != last_over { last_over = over; last_x = i32::MIN; }
+        let want = (base * scale).round() as i32 + (cx - sx).round() as i32;
+        let x = place_x_over(mp.x, ms.width, pw, want, over);
+        if x != last_x {
+            last_x = x;
+            let _ = win.set_position(PhysicalPosition::new(x, mp.y));
+        }
+    }
+    if !moved { return DragEnd::Still }
+    let limit = offset_limit(&shared.gate, ms.width, scale);
+    let value = (base + drag_delta_logical(sx, last_cx, scale)).clamp(-limit, limit);
+    store_offset(app, &shared, &key, Some(value));
+    DragEnd::Moved
 }
 
 /// Places and sizes the window. `collapsed` picks the wake strip instead of the panel.
@@ -236,7 +355,11 @@ pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
             sh.settings.lock().unwrap().island_placement.get(&key).copied()
         })
         .unwrap_or(0.0);
-    let x = place_x(mp.x, ms.width, pw, (dx * scale).round() as i32);
+    let over = app
+        .try_state::<crate::Shared>()
+        .map(|sh| (sh.gate.overshoot(collapsed) * scale).round() as i32)
+        .unwrap_or(0);
+    let x = place_x_over(mp.x, ms.width, pw, (dx * scale).round() as i32, over);
     let y = mp.y;
 
     let _ = win.set_size(PhysicalSize::new(pw, ph));
@@ -481,14 +604,27 @@ mod tests {
     }
 
     #[test]
-    fn offsets_add_clamp_and_clear() {
-        let mut m = std::collections::BTreeMap::new();
-        add_offset(&mut m, "a", 30.0, 100.0);
-        add_offset(&mut m, "a", 50.0, 100.0);
-        assert_eq!(m["a"], 80.0);
-        add_offset(&mut m, "a", 50.0, 100.0);
-        assert_eq!(m["a"], 100.0);
-        add_offset(&mut m, "a", -100.0, 100.0);
-        assert!(m.is_empty());
+    fn overshoot_lets_compact_reach_the_edge_expanded_stays_inside() {
+        // 720 window, 200 island: 260 px of slack each side
+        let over = overshoot_logical(200.0) as i32;
+        assert_eq!(over, 260);
+        assert_eq!(place_x_over(0, 1920, 720, -5000, over), -260);
+        assert_eq!(place_x_over(0, 1920, 720, 5000, over), 1460);
+        // island flush left: window x -260 puts the island at 0
+        assert_eq!(-260 + (720 - 200) / 2, 0);
+        // expanded: no overshoot, same as place_x
+        assert_eq!(place_x_over(0, 1920, 720, -5000, 0), 0);
+        assert_eq!(place_x_over(0, 1920, 720, 5000, 0), 1200);
+        assert_eq!(place_x_over(-1920, 1920, 720, -9999, over), -2180);
+        // unknown width falls back to a constant; a full-width island has no slack
+        assert_eq!(overshoot_logical(0.0), 260.0);
+        assert_eq!(overshoot_logical(720.0), 0.0);
+    }
+
+    #[test]
+    fn drag_delta_is_cursor_travel_in_logical_px() {
+        assert_eq!(drag_delta_logical(1000.0, 1300.0, 1.0), 300.0);
+        assert_eq!(drag_delta_logical(1000.0, 700.0, 1.5), -200.0);
+        assert_eq!(drag_delta_logical(500.0, 500.0, 2.0), 0.0);
     }
 }

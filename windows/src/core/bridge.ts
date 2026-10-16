@@ -39,14 +39,11 @@ export const Bridge = {
    * Pushes the island shape in window coordinates. Rust flips click-through from
    * its own cursor poll, so the flag is never a frame behind a click.
    */
-  setIslandRect: (x: number, y: number, width: number, height: number) =>
-    command<void>("set_island_rect", { x, y, width, height }),
+  setIslandRect: (x: number, y: number, width: number, height: number, compact: boolean) =>
+    command<void>("set_island_rect", { x, y, width, height, compact }),
 
-  /** Alt-drag release: adds `dx` (logical px) to this display's stored island offset. */
-  setIslandOffset: (dx: number) => command<void>("set_island_offset", { dx }),
-
-  /** Alt-drag in progress: the window follows at stored offset + `dx` (logical px), nothing saved. */
-  dragIsland: (dx: number) => command<void>("drag_island", { dx }),
+  /** Alt+press on the compact island: Rust follows the cursor, saves on release and emits "island-drag-end". */
+  beginIslandDrag: () => command<void>("begin_island_drag"),
 
   centerIsland: () => command<void>("center_island"),
 

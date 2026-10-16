@@ -15,10 +15,11 @@ let pomo: PomoState | null = null;
 let readCfg: () => Cfg = () => ({ timerPomodoro: null, timerPomodoroAuto: true });
 const pomoUi: PomoUi = {
   label: () => (pomo ? pomoLabel(pomo, pomoCfg(readCfg().timerPomodoro)) : null),
-  start: () => startPomo(),
+  start: () => preparePomo(),
   skip: () => skipPomo(),
   stop: () => { pomo = null; Timer.cancel(); },
 };
+let preparePomo = () => {};
 let startPomo = () => {};
 let skipPomo = () => {};
 
@@ -40,11 +41,12 @@ function start(api: IslandApi): Disposer {
     Timer.prepare("countdown", pomoMinutes(pomo, cfg)); // onChange -> arm: the hold stays
     if (c.timerPomodoroAuto !== false) Timer.start();
   };
-  startPomo = () => {
+  // The Pomodoro link only prepares (like Cronômetro); Alt+F / "Iniciar foco" runs it at once.
+  preparePomo = () => {
     pomo = pomoStart();
     Timer.prepare("countdown", pomoMinutes(pomo, pomoCfg(readCfg().timerPomodoro)));
-    Timer.start();
   };
+  startPomo = () => { preparePomo(); Timer.start(); };
   skipPomo = () => { if (pomo) advance(null); };
   const finish = () => {
     done = null;

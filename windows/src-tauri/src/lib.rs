@@ -141,8 +141,13 @@ fn set_collapsed(app: AppHandle, shared: State<Shared>, collapsed: bool) {
 
 /// The front end pushes the island shape; Rust decides click-through from it.
 #[tauri::command]
-fn set_island_rect(app: AppHandle, shared: State<Shared>, x: f64, y: f64, width: f64, height: f64) {
+fn set_island_rect(app: AppHandle, shared: State<Shared>, x: f64, y: f64, width: f64, height: f64, compact: bool) {
     shared.gate.set_rect(island::IslandRect { x, y, w: width, h: height });
+    // Only the compact island may hang the window past the display edge: re-place on change.
+    if shared.gate.set_compact(compact) {
+        let pref = shared.settings.lock().unwrap().screen.clone();
+        island::apply_geometry(&app, &pref, shared.gate.collapsed.load(std::sync::atomic::Ordering::Relaxed));
+    }
     // Without the cursor poll the input region is the click-through: it follows the island.
     if !platform::CURSOR_POLL {
         island::refresh_click_through(&app, &shared.gate);
@@ -186,16 +191,10 @@ fn reposition(app: AppHandle, shared: State<Shared>) {
     island::refresh_click_through(&app, &shared.gate);
 }
 
-/// Alt-drag on the compact island: adds `dx` (logical px) to this display's stored offset.
+/// Alt+press on the compact island: Rust follows the cursor until the button comes up.
 #[tauri::command]
-fn set_island_offset(app: AppHandle, shared: State<Shared>, dx: f64) {
-    island::adjust_placement(&app, &shared, Some(dx));
-}
-
-/// Live Alt-drag step: moves the window to the stored offset plus `dx`, nothing saved.
-#[tauri::command]
-fn drag_island(app: AppHandle, shared: State<Shared>, dx: f64) {
-    island::drag_placement(&app, &shared, dx);
+fn begin_island_drag(app: AppHandle) {
+    island::begin_drag(&app);
 }
 
 #[tauri::command]
@@ -360,8 +359,7 @@ pub fn run() {
         focus_window,
         forget_foreground,
         reposition,
-        set_island_offset,
-        drag_island,
+        begin_island_drag,
         center_island,
         open_url,
         quit_app,
