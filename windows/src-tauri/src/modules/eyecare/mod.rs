@@ -1,0 +1,307 @@
+// Pausas: screen time per foreground exe. Rust side of the module.
+//
+// Privacy: only executable file names (never window titles, URLs or paths) and whole seconds per local day,
+// kept in %LOCALAPPDATA%\Coucou\eyecare.json for `eyecareKeepDays` days. Nothing leaves the machine.
+//
+// Cost: no thread and no timer of its own. The shared foreground hook (core/presence) calls `on_fg` at every
+// foreground change; the open segment is closed there. The frontend's single reminder timeout calls
+// `eyecare_checkpoint`, which cuts the open segment and removes the time the user was idle.
+// shortcut: time is credited when a segment closes; an idle stretch is only detected at a checkpoint, so with
+// reminders off one unbroken stretch in one app is credited at most SEG_CAP_SECS.
+
+use std::collections::BTreeMap;
+use std::sync::Mutex;
+use std::time::Instant;
+
+use tauri::AppHandle;
+
+use crate::core::host::{Module, ModuleCtx};
+use crate::core::platform;
+use crate::core::presence::{self, Foreground};
+use crate::core::settings::Settings;
+
+pub const PREFIXES: &[&str] = &["eyecare_"];
+
+const FILE: &str = "eyecare.json";
+/// Input idle time that is not counted (reading, thinking).
+const IDLE_GRACE_MS: u64 = 60_000;
+/// Most one segment may credit when no checkpoint cut it.
+const SEG_CAP_SECS: u64 = 3600;
+/// Disk writes at most this often from the foreground hook (checkpoints and stop always write).
+const WRITE_EVERY_SECS: u64 = 60;
+const DEFAULT_EXCLUDED: &[&str] = &["lockapp.exe"];
+
+type Days = BTreeMap<String, BTreeMap<String, u64>>;
+
+struct Cfg {
+    excluded: Vec<String>,
+    keep_days: i64,
+}
+
+struct Acc {
+    days: Days,
+    cur: Option<(String, Instant)>,
+    cfg: Cfg,
+    dirty: bool,
+    written: Instant,
+}
+
+static ACC: Mutex<Option<Acc>> = Mutex::new(None);
+
+fn lock() -> std::sync::MutexGuard<'static, Option<Acc>> {
+    ACC.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+// ── Pure logic ────────────────────────────────────────────────────────────────
+
+/// Seconds to credit for a segment of `elapsed_ms` when the user has been idle `idle_ms` (the idle time past the
+/// grace is taken off), capped at SEG_CAP_SECS.
+fn credit(elapsed_ms: u64, idle_ms: u64) -> u64 {
+    let lost = idle_ms.saturating_sub(IDLE_GRACE_MS).min(elapsed_ms);
+    ((elapsed_ms - lost) / 1000).min(SEG_CAP_SECS)
+}
+
+/// Days since 1970-01-01 of a civil date (proleptic Gregorian).
+fn day_number(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+/// "YYYY-MM-DD" -> day number.
+fn parse_day(k: &str) -> Option<i64> {
+    let mut it = k.split('-').map(|p| p.parse::<i64>().ok());
+    let (y, m, d) = (it.next()??, it.next()??, it.next()??);
+    ((1..=12).contains(&m) && (1..=31).contains(&d) && it.next().is_none()).then(|| day_number(y, m, d))
+}
+
+/// Drops days older than `keep` days counting `today` (and keys that are not dates).
+fn prune(days: &mut Days, today: i64, keep: i64) {
+    days.retain(|k, _| parse_day(k).is_some_and(|n| n > today - keep && n <= today + 1));
+}
+
+fn is_excluded(exe: &str, excluded: &[String]) -> bool {
+    exe.is_empty() || excluded.iter().any(|e| e == exe)
+}
+
+fn today_key() -> (String, i64) {
+    let t = platform::local_time();
+    (format!("{:04}-{:02}-{:02}", t.year, t.month, t.day), day_number(t.year.into(), t.month.into(), t.day.into()))
+}
+
+fn cfg_of(s: &Settings) -> Cfg {
+    let excluded = match s.extra.get("eyecareExcluded").and_then(|v| v.as_array()) {
+        Some(a) => a.iter().filter_map(|v| v.as_str()).map(|e| e.trim().to_ascii_lowercase()).filter(|e| !e.is_empty()).collect(),
+        None => DEFAULT_EXCLUDED.iter().map(|e| e.to_string()).collect(),
+    };
+    let keep_days = s.extra.get("eyecareKeepDays").and_then(|v| v.as_f64()).map_or(30, |n| (n as i64).clamp(1, 90));
+    Cfg { excluded, keep_days }
+}
+
+impl Acc {
+    /// Credits the open segment up to `now` and starts a new one for `next` (None = nothing is counted).
+    fn switch(&mut self, now: Instant, idle_ms: u64, next: Option<String>) {
+        if let Some((exe, since)) = self.cur.take() {
+            let secs = credit(now.duration_since(since).as_millis() as u64, idle_ms);
+            if secs > 0 && !is_excluded(&exe, &self.cfg.excluded) {
+                let (day, n) = today_key();
+                *self.days.entry(day).or_default().entry(exe).or_insert(0) += secs;
+                prune(&mut self.days, n, self.cfg.keep_days);
+                self.dirty = true;
+            }
+        }
+        self.cur = next.filter(|e| !is_excluded(e, &self.cfg.excluded)).map(|e| (e, now));
+    }
+
+    fn flush(&mut self) {
+        if self.dirty {
+            self.dirty = false;
+            let _ = write(&self.days);
+        }
+        self.written = Instant::now();
+    }
+}
+
+// ── Disk ──────────────────────────────────────────────────────────────────────
+
+fn path() -> std::path::PathBuf {
+    platform::local_dir().join(FILE)
+}
+
+fn read() -> Days {
+    std::fs::read_to_string(path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+}
+
+fn write(days: &Days) -> std::io::Result<()> {
+    let p = path();
+    if let Some(dir) = p.parent() {
+        platform::ensure_private_dir(dir)?;
+    }
+    let tmp = p.with_extension("json.tmp");
+    std::fs::write(&tmp, serde_json::to_string(days).unwrap_or_default())?;
+    std::fs::rename(tmp, p)
+}
+
+// ── Module ────────────────────────────────────────────────────────────────────
+
+pub struct EyecareModule;
+
+/// Runs on the shared hook thread: short, no module stop, no unsubscribe.
+fn on_fg(_app: &AppHandle, fg: &Foreground) {
+    let mut g = lock();
+    let Some(acc) = g.as_mut() else { return };
+    acc.switch(Instant::now(), presence::user_idle_ms(), Some(fg.exe.clone()));
+    if acc.dirty && acc.written.elapsed().as_secs() >= WRITE_EVERY_SECS {
+        acc.flush();
+    }
+}
+
+fn forget_excluded(acc: &mut Acc) {
+    let ex = acc.cfg.excluded.clone();
+    for d in acc.days.values_mut() {
+        d.retain(|exe, _| !is_excluded(exe, &ex));
+    }
+}
+
+impl Module for EyecareModule {
+    fn id(&self) -> &'static str {
+        "eyecare"
+    }
+
+    fn start(&self, ctx: &ModuleCtx, s: &Settings) {
+        let cfg = cfg_of(s);
+        let mut days = read();
+        prune(&mut days, today_key().1, cfg.keep_days);
+        let mut acc = Acc { days, cur: None, cfg, dirty: false, written: Instant::now() };
+        forget_excluded(&mut acc);
+        acc.switch(Instant::now(), 0, Some(presence::foreground_now().exe));
+        *lock() = Some(acc);
+        presence::on_foreground(ctx, on_fg);
+        // Registered after the hook's own stopper, so it runs first (stoppers run in reverse).
+        ctx.on_stop(|| {
+            if let Some(mut acc) = lock().take() {
+                acc.switch(Instant::now(), presence::user_idle_ms(), None);
+                acc.dirty = true;
+                acc.flush();
+            }
+        });
+    }
+
+    fn apply(&self, _ctx: &ModuleCtx, s: &Settings) {
+        if let Some(acc) = lock().as_mut() {
+            acc.cfg = cfg_of(s);
+            // A newly excluded app is forgotten, not just ignored from now on.
+            forget_excluded(acc);
+            let cur = acc.cur.take().map(|c| c.0);
+            acc.cur = cur.filter(|e| !is_excluded(e, &acc.cfg.excluded)).map(|e| (e, Instant::now()));
+            acc.dirty = true;
+        }
+    }
+}
+
+/// Cuts the open segment (idle time removed) and answers the ms since the last input.
+#[tauri::command]
+pub fn eyecare_checkpoint() -> u64 {
+    let idle = presence::user_idle_ms();
+    if let Some(acc) = lock().as_mut() {
+        let cur = acc.cur.as_ref().map(|c| c.0.clone());
+        acc.switch(Instant::now(), idle, cur);
+        acc.flush();
+    }
+    idle
+}
+
+/// day -> exe -> seconds, after a checkpoint. Empty while the module is off.
+#[tauri::command]
+pub fn eyecare_usage() -> Days {
+    eyecare_checkpoint();
+    lock().as_ref().map(|a| a.days.clone()).unwrap_or_default()
+}
+
+/// "Apagar dados": forgets everything, memory and file.
+#[tauri::command]
+pub fn eyecare_clear() {
+    if let Some(acc) = lock().as_mut() {
+        acc.days.clear();
+        acc.dirty = false;
+        acc.cur = acc.cur.take().map(|(e, _)| (e, Instant::now()));
+    }
+    let _ = std::fs::remove_file(path());
+}
+
+pub fn modules() -> Vec<Box<dyn Module>> {
+    vec![Box::new(EyecareModule)]
+}
+
+pub fn handler() -> crate::core::host::Handler {
+    crate::core::host::handler(tauri::generate_handler![eyecare_checkpoint, eyecare_usage, eyecare_clear])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn acc(excluded: &[&str]) -> Acc {
+        let cfg = Cfg { excluded: excluded.iter().map(|e| e.to_string()).collect(), keep_days: 30 };
+        Acc { days: Days::new(), cur: None, cfg, dirty: false, written: Instant::now() }
+    }
+
+    #[test]
+    fn credit_removes_idle_past_grace_and_caps() {
+        assert_eq!(credit(600_000, 0), 600);
+        assert_eq!(credit(600_000, 30_000), 600); // within grace
+        assert_eq!(credit(600_000, 360_000), 300); // 6 min idle, 1 min grace -> 5 min lost
+        assert_eq!(credit(600_000, 9_999_999), 0);
+        assert_eq!(credit(10 * 3600 * 1000, 0), SEG_CAP_SECS);
+    }
+
+    #[test]
+    fn prune_keeps_a_rolling_window() {
+        let today = day_number(2026, 3, 1);
+        let mut d = Days::new();
+        for k in ["2026-03-01", "2026-02-10", "2026-01-31", "2026-01-30", "junk"] {
+            d.insert(k.into(), BTreeMap::new());
+        }
+        prune(&mut d, today, 30); // 30 days counting today: back to 2026-01-31
+        assert_eq!(d.keys().map(String::as_str).collect::<Vec<_>>(), ["2026-01-31", "2026-02-10", "2026-03-01"]);
+        assert_eq!(day_number(1970, 1, 1), 0);
+        assert_eq!(day_number(2024, 3, 1) - day_number(2024, 2, 28), 2); // leap year
+    }
+
+    #[test]
+    fn switch_credits_the_previous_exe_only() {
+        let mut a = acc(&["lockapp.exe"]);
+        let t0 = Instant::now();
+        a.switch(t0, 0, Some("code.exe".into()));
+        a.switch(t0 + Duration::from_secs(90), 0, Some("lockapp.exe".into()));
+        assert!(a.cur.is_none(), "an excluded app is not tracked");
+        assert_eq!(a.days.values().next().unwrap()["code.exe"], 90);
+        a.switch(t0 + Duration::from_secs(200), 0, Some("code.exe".into()));
+        assert!(a.days.values().all(|d| !d.contains_key("lockapp.exe")));
+    }
+
+    #[test]
+    fn idle_segment_credits_nothing() {
+        let mut a = acc(&[]);
+        let t0 = Instant::now();
+        a.switch(t0, 0, Some("code.exe".into()));
+        a.switch(t0 + Duration::from_secs(600), 3_600_000, Some("code.exe".into()));
+        assert!(a.days.is_empty());
+    }
+
+    #[test]
+    fn config_defaults_and_clamps() {
+        let mut s = Settings::default();
+        assert_eq!(cfg_of(&s).excluded, ["lockapp.exe"]);
+        assert_eq!(cfg_of(&s).keep_days, 30);
+        s.extra.insert("eyecareExcluded".into(), serde_json::json!([" Chrome.EXE ", ""]));
+        s.extra.insert("eyecareKeepDays".into(), serde_json::json!(500));
+        let c = cfg_of(&s);
+        assert_eq!(c.excluded, ["chrome.exe"]);
+        assert_eq!(c.keep_days, 90);
+    }
+}
