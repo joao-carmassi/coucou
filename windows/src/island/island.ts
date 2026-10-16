@@ -134,7 +134,7 @@ export class Island implements IslandHost {
     if (!this.dragRaf) this.dragRaf = requestAnimationFrame(() => {
       this.dragRaf = 0;
       const d = this.nudge?.dx;
-      if (d != null) this.dragIpc = this.dragIpc.then(() => Bridge.dragIsland(d)).catch(() => {});
+      if (d != null) this.dragIpc = this.dragIpc.then(() => Bridge.dragIsland(this.nudge?.dx ?? d)).catch(() => {});
     });
   };
   private endDrag() {
@@ -677,7 +677,7 @@ export class Island implements IslandHost {
         void this.dragIpc.then(() => Bridge.setIslandOffset(dx)).then(() => {
           this.offsetX.set(0);
           this.ensureRunning();
-        }).catch(() => this.scheduleNudgeReturn());
+        }).catch(() => { this.scheduleNudgeReturn(); void Bridge.reposition(); });
       } else if (moved) this.scheduleNudgeReturn();
       else this.clickCompact();
     }

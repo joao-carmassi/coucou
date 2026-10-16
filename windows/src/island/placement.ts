@@ -3,8 +3,9 @@
 /**
  * What an Alt-drag commits on release: the logical dx to add to the stored placement,
  * or null when nothing is committed (no Alt, never moved, or moved under 1 px).
- * `offset` is the island's current sideways offset in its window, `limit` how far
- * the window lets it go (the island can never leave the window, so never the display).
+ * Alt-drag: `offset` is the pointer's screen delta since the press (the window follows it
+ * live) and `limit` is Infinity: the host clamps with `place_x`. Otherwise `offset` is the
+ * island's sideways offset in its window and `limit` how far the window lets it go.
  */
 export function commitDx(alt: boolean, moved: boolean, offset: number, limit: number): number | null {
   if (!alt || !moved) return null;
