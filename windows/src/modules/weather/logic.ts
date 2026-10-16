@@ -52,12 +52,6 @@ export function dayLabel(date: string, today: string): string {
 }
 
 /** Local calendar day of `ms` as "YYYY-MM-DD" (the format Open-Meteo uses with timezone=auto). */
-export function localDay(ms: number): string {
-  const d = new Date(ms);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
 export function cacheKey(place: Pick<Place, "lat" | "lon">, units: Units): string {
   return `${place.lat},${place.lon},${units}`;
 }

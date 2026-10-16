@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CACHE_MS, cacheKey, describe, dayLabel, fmtTemp, hourLabel, isFresh, localDay, placeLabel, statusText } from "../src/modules/weather/logic.ts";
+import { CACHE_MS, cacheKey, describe, dayLabel, fmtTemp, hourLabel, isFresh, placeLabel, statusText } from "../src/modules/weather/logic.ts";
 import type { Forecast } from "../src/modules/weather/logic.ts";
 
 test("WMO codes map to pt-BR text and an icon, day and night", () => {
@@ -39,10 +39,6 @@ test("day label: Hoje for today, else a short weekday", () => {
   // 2026-10-16 is a Friday.
   assert.equal(dayLabel("2026-10-16", "2026-10-15"), "sex");
   assert.equal(dayLabel("2026-10-17", "2026-10-15"), "sáb");
-});
-
-test("localDay is the calendar day of a local timestamp", () => {
-  assert.equal(localDay(new Date(2026, 9, 5, 23, 30).getTime()), "2026-10-05");
 });
 
 test("cache is fresh for CACHE_MS and never for a future or missing entry", () => {

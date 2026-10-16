@@ -3,12 +3,13 @@
 import { h, clear, replay } from "../../kit/dom";
 import { card, view } from "../../kit/card";
 import type { ViewContext, ViewHost } from "../../core/moduleApi";
-import { cacheKey, describe, dayLabel, fmtTemp, hourLabel, localDay, placeLabel } from "./logic";
+import { cacheKey, describe, dayLabel, fmtTemp, hourLabel, placeLabel } from "./logic";
 import type { Forecast, Place, Units } from "./logic";
 import { weatherCfg } from "./store";
 import type { WeatherStore } from "./store";
 
-export function buildWeatherView(ctx: ViewContext, store: WeatherStore): ViewHost {
+/** `onSync` runs on every visible sync (the module refreshes its status line there). */
+export function buildWeatherView(ctx: ViewContext, store: WeatherStore, onSync: () => void): ViewHost {
   const body = h("div", { class: "stack weather-body" });
   const el = view(card(null, body));
   let shown = "";
@@ -35,7 +36,8 @@ export function buildWeatherView(ctx: ViewContext, store: WeatherStore): ViewHos
     }
     const f: Forecast = fresh.forecast;
     const now = describe(f.current.code, f.current.isDay);
-    const today = localDay(Date.now());
+    // "Hoje" by the city's own date (the forecast's local time), not the machine's clock.
+    const today = f.current.time.slice(0, 10);
     body.append(
       h("div", { class: "weather-now" },
         h("span", { class: "weather-icon", text: now.icon }),
@@ -46,11 +48,13 @@ export function buildWeatherView(ctx: ViewContext, store: WeatherStore): ViewHos
       h("div", { class: "weather-hours" }, ...f.hours.map((x) => h("div", { class: "weather-cell" },
         h("span", { class: "sub", text: hourLabel(x.time) }),
         h("span", { text: describe(x.code).icon }),
-        h("span", { text: fmtTemp(x.temp, units) })))),
+        h("span", { text: fmtTemp(x.temp, units) }),
+        h("span", { class: "sub", text: `💧${Math.round(x.rain)}%` })))),
       h("div", { class: "weather-days" }, ...f.days.map((d) => h("div", { class: "weather-cell" },
         h("span", { class: "sub", text: dayLabel(d.date, today) }),
         h("span", { text: describe(d.code).icon }),
-        h("span", { text: `${Math.round(d.min)}° / ${Math.round(d.max)}°` })))),
+        h("span", { text: `${Math.round(d.min)}° / ${Math.round(d.max)}°` }),
+        h("span", { class: "sub", text: `💧${Math.round(d.rain)}%` })))),
     );
     replay(body, "weather-swap");
   };
@@ -60,6 +64,7 @@ export function buildWeatherView(ctx: ViewContext, store: WeatherStore): ViewHos
     sync() {
       // Nothing is fetched or touched while the view is hidden or the island is folded.
       if (ctx.api.island.view() !== "weather" || ctx.api.island.mode() !== "expanded") return;
+      onSync();
       const { place, units } = weatherCfg(ctx.api);
       if (place) store.load(place, units);
       const c = store.cache;

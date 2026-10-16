@@ -102,23 +102,9 @@ fn num(o: &Value, k: &str) -> Result<f64, String> {
     field(o, k)?.as_f64().ok_or_else(|| format!("campo inválido: {k}"))
 }
 
-fn nums(o: &Value, k: &str) -> Result<Vec<f64>, String> {
-    field(o, k)?
-        .as_array()
-        .ok_or_else(|| format!("campo inválido: {k}"))?
-        .iter()
-        .map(|x| x.as_f64().ok_or_else(|| format!("valor inválido em {k}")))
-        .collect()
-}
-
-/// A null probability (Open-Meteo leaves gaps) reads as 0; temperatures and codes must be present.
-fn rain_nums(o: &Value, k: &str) -> Result<Vec<f64>, String> {
-    Ok(field(o, k)?
-        .as_array()
-        .ok_or_else(|| format!("campo inválido: {k}"))?
-        .iter()
-        .map(|x| x.as_f64().unwrap_or(0.0))
-        .collect())
+/// Entries may be null in Open-Meteo's arrays; the caller skips the ones it cannot use.
+fn opt_nums(o: &Value, k: &str) -> Result<Vec<Option<f64>>, String> {
+    Ok(field(o, k)?.as_array().ok_or_else(|| format!("campo inválido: {k}"))?.iter().map(Value::as_f64).collect())
 }
 
 fn strs(o: &Value, k: &str) -> Result<Vec<String>, String> {
@@ -131,6 +117,7 @@ fn strs(o: &Value, k: &str) -> Result<Vec<String>, String> {
 }
 
 /// Open-Meteo JSON -> Forecast. Hours start at the current hour (the API starts at midnight), 12 of them.
+/// An hour or day without a temperature or code is skipped; a missing probability reads as 0.
 pub fn parse_forecast(v: &Value) -> Result<Forecast, String> {
     let cur = field(v, "current")?;
     let current = Current {
@@ -146,32 +133,43 @@ pub fn parse_forecast(v: &Value) -> Result<Forecast, String> {
     // Hourly times are whole hours; the current time carries minutes, so the window starts at the current hour.
     let since = current.time.get(..13).unwrap_or(&current.time).to_string() + ":00";
     let hourly = field(v, "hourly")?;
-    let (ht, htemp, hcode, hrain) = (strs(hourly, "time")?, nums(hourly, "temperature_2m")?, nums(hourly, "weather_code")?, rain_nums(hourly, "precipitation_probability")?);
-    let hours = ht
-        .iter()
-        .zip(&htemp)
-        .zip(&hcode)
-        .zip(&hrain)
-        .filter(|(((t, _), _), _)| t.as_str() >= since.as_str())
+    let (ht, htemp, hcode, hrain) = (
+        strs(hourly, "time")?,
+        opt_nums(hourly, "temperature_2m")?,
+        opt_nums(hourly, "weather_code")?,
+        opt_nums(hourly, "precipitation_probability")?,
+    );
+    let hours = (0..ht.len())
+        .filter_map(|i| {
+            let t = ht.get(i)?;
+            let temp = htemp.get(i).copied().flatten()?;
+            let code = hcode.get(i).copied().flatten()?;
+            if t.as_str() < since.as_str() {
+                return None;
+            }
+            let rain = hrain.get(i).copied().flatten().unwrap_or(0.0);
+            Some(Hour { time: t.clone(), temp, code: code as u32, rain })
+        })
         .take(HOURS)
-        .map(|(((t, temp), code), rain)| Hour { time: t.clone(), temp: *temp, code: *code as u32, rain: *rain })
         .collect();
 
     let daily = field(v, "daily")?;
     let (dd, dmin, dmax, dcode, drain) = (
         strs(daily, "time")?,
-        nums(daily, "temperature_2m_min")?,
-        nums(daily, "temperature_2m_max")?,
-        nums(daily, "weather_code")?,
-        rain_nums(daily, "precipitation_probability_max")?,
+        opt_nums(daily, "temperature_2m_min")?,
+        opt_nums(daily, "temperature_2m_max")?,
+        opt_nums(daily, "weather_code")?,
+        opt_nums(daily, "precipitation_probability_max")?,
     );
-    let days = dd
-        .iter()
-        .zip(&dmin)
-        .zip(&dmax)
-        .zip(&dcode)
-        .zip(&drain)
-        .map(|((((d, min), max), code), rain)| Day { date: d.clone(), min: *min, max: *max, code: *code as u32, rain: *rain })
+    let days = (0..dd.len())
+        .filter_map(|i| {
+            let d = dd.get(i)?;
+            let min = dmin.get(i).copied().flatten()?;
+            let max = dmax.get(i).copied().flatten()?;
+            let code = dcode.get(i).copied().flatten()?;
+            let rain = drain.get(i).copied().flatten().unwrap_or(0.0);
+            Some(Day { date: d.clone(), min, max, code: code as u32, rain })
+        })
         .collect();
 
     Ok(Forecast { current, hours, days })
@@ -197,14 +195,30 @@ pub fn parse_places(v: &Value) -> Vec<Place> {
         .unwrap_or_default()
 }
 
+/// The answer is a few KiB; anything bigger is not Open-Meteo and is not read.
+const MAX_BODY: usize = 256 * 1024;
+
 async fn get_json(url: reqwest::Url) -> Result<Value, String> {
-    static HTTP: LazyLock<reqwest::Client> =
-        LazyLock::new(|| reqwest::Client::builder().timeout(Duration::from_secs(10)).build().unwrap_or_default());
-    let res = HTTP.get(url).send().await.map_err(|_| "sem conexão com o serviço de clima".to_string())?;
+    // Redirects off: the hosts are fixed, a redirect would send the request somewhere else.
+    static HTTP: LazyLock<reqwest::Client> = LazyLock::new(|| {
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(10))
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap_or_default()
+    });
+    let mut res = HTTP.get(url).send().await.map_err(|_| "sem conexão com o serviço de clima".to_string())?;
     if !res.status().is_success() {
         return Err(format!("o serviço de clima respondeu {}", res.status().as_u16()));
     }
-    res.json::<Value>().await.map_err(|_| "resposta inválida do serviço de clima".to_string())
+    let mut body = Vec::new();
+    while let Some(chunk) = res.chunk().await.map_err(|_| "falha ao ler a resposta do serviço de clima".to_string())? {
+        if body.len() + chunk.len() > MAX_BODY {
+            return Err("resposta grande demais do serviço de clima".into());
+        }
+        body.extend_from_slice(&chunk);
+    }
+    serde_json::from_slice(&body).map_err(|_| "resposta inválida do serviço de clima".to_string())
 }
 
 /// `units`: "F" for Fahrenheit, anything else Celsius.
@@ -285,6 +299,18 @@ mod tests {
         v["current"]["time"] = json!("2026-10-15T00:20");
         v["hourly"] = json!({ "time": hours, "temperature_2m": temps, "weather_code": codes, "precipitation_probability": rain });
         assert_eq!(parse_forecast(&v).unwrap().hours.len(), HOURS);
+    }
+
+    #[test]
+    fn null_entries_are_skipped_not_fatal() {
+        let mut v = sample();
+        // Last hour has no temperature, last day no code: both are dropped, the rest still parses.
+        v["hourly"]["temperature_2m"][3] = json!(null);
+        v["daily"]["weather_code"][1] = json!(null);
+        let f = parse_forecast(&v).unwrap();
+        assert_eq!(f.hours.len(), 2);
+        assert_eq!(f.hours.last().unwrap().time, "2026-10-15T15:00");
+        assert_eq!(f.days.len(), 1);
     }
 
     #[test]
