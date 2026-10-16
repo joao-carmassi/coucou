@@ -15,8 +15,8 @@ export interface DropAction {
 export const UPLOAD_SERVICE = { dropAction: "upload.dropAction" } as const;
 
 export function extOf(path: string): string {
-  const name = path.split(/[\/]/).pop() ?? "";
-  const i = name.lastIndexOf(".");
+  const name = path.split(/[\\/]/).pop() ?? "";
+  const i = name.lastIndexOf("."); // the name only: a dotted folder does not count
   return i > 0 ? name.slice(i + 1).toLowerCase() : "";
 }
 

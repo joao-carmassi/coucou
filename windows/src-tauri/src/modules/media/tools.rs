@@ -11,7 +11,7 @@ pub enum Kind {
     Other,
 }
 
-pub const IMAGE_EXT: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "gif"];
+pub const IMAGE_EXT: &[&str] = &["png", "jpg", "jpeg", "webp", "gif"];
 pub const VIDEO_EXT: &[&str] = &["mp4", "mkv", "mov", "webm", "avi"];
 
 pub fn ext_of(path: &Path) -> String {
@@ -38,6 +38,12 @@ pub fn ops_for(kind: Kind) -> &'static [&'static str] {
         Kind::Video => &["gif", "vcompress", "audio"],
         Kind::Pdf | Kind::Other => &[],
     }
+}
+
+/// Absolute drive path; UNC and device paths are refused: opening them reaches the network.
+pub fn is_local_abs(p: &Path) -> bool {
+    let s = p.to_string_lossy();
+    p.is_absolute() && !s.starts_with(r"\\") && !s.starts_with("//")
 }
 
 pub fn needs_ffmpeg(op: &str) -> bool {
@@ -101,9 +107,9 @@ pub fn output_name(op: &str, arg: &str, src_ext: &str) -> Option<(String, String
     })
 }
 
-/// `-progress pipe:1` prefix shared by every ffmpeg run; `-n` refuses to overwrite.
+/// `-progress pipe:1` prefix shared by every ffmpeg run; `-y` is safe: the output is a file this run reserved.
 fn base(input: &Path) -> Vec<String> {
-    ["-hide_banner", "-nostdin", "-n", "-progress", "pipe:1", "-nostats", "-i"]
+    ["-hide_banner", "-nostdin", "-y", "-progress", "pipe:1", "-nostats", "-i"]
         .iter().map(|s| s.to_string()).chain([input.to_string_lossy().into_owned()]).collect()
 }
 
@@ -145,7 +151,7 @@ pub fn count_pdf_pages(bytes: &[u8]) -> u32 {
     let mut i = 0;
     while let Some(p) = bytes[i..].windows(5).position(|w| w == b"/Type") {
         let mut j = i + p + 5;
-        while j < bytes.len() && bytes[j] == b' ' { j += 1; }
+        while j < bytes.len() && matches!(bytes[j], b' ' | b'\r' | b'\n' | b'\t') { j += 1; }
         if bytes[j..].starts_with(b"/Page") && !bytes[j..].starts_with(b"/Pages") { n += 1; }
         i += p + 5;
     }
@@ -155,6 +161,14 @@ pub fn count_pdf_pages(bytes: &[u8]) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_paths_only() {
+        assert!(is_local_abs(Path::new(r"C:\a\b.png")));
+        assert!(!is_local_abs(Path::new(r"\\srv\s\b.png")));
+        assert!(!is_local_abs(Path::new(r"\\?\C:\b.png")));
+        assert!(!is_local_abs(Path::new("rel.png")));
+    }
 
     #[test]
     fn routing_by_extension() {
@@ -199,7 +213,7 @@ mod tests {
     #[test]
     fn ffmpeg_command_lines() {
         let a = ffmpeg_args("gif", Path::new("in.mp4"), Path::new("out.gif")).unwrap();
-        assert_eq!(&a[..3], ["-hide_banner", "-nostdin", "-n"], "never overwrite");
+        assert_eq!(&a[..3], ["-hide_banner", "-nostdin", "-y"], "output is pre-reserved by the caller");
         assert_eq!(a[a.iter().position(|x| x == "-i").unwrap() + 1], "in.mp4");
         assert_eq!(a.last().unwrap(), "out.gif");
         assert!(a.contains(&"-an".to_string()));
@@ -222,5 +236,6 @@ mod tests {
     fn pdf_pages() {
         let pdf = b"<</Type /Pages /Count 2>> <</Type /Page>> <</Type/Page /X 1>> <</Type /Catalog>>";
         assert_eq!(count_pdf_pages(pdf), 2);
+        assert_eq!(count_pdf_pages(b"<</Type\r\n/Page>> <</Type\n/Pages>>"), 1);
     }
 }

@@ -3,7 +3,7 @@
 
 import { extOf, type DropAction } from "../upload/api";
 
-export const IMAGE_EXT = ["png", "jpg", "jpeg", "webp", "bmp", "gif"] as const;
+export const IMAGE_EXT = ["png", "jpg", "jpeg", "webp", "gif"] as const;
 export const VIDEO_EXT = ["mp4", "mkv", "mov", "webm", "avi"] as const;
 
 export interface ToolSpec { id: string; label: string; op: string; arg?: string; accepts: readonly string[]; order: number; hideFor?: string }

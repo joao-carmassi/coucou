@@ -14,7 +14,7 @@ pub fn recognize(path: &Path) -> Result<String, String> {
     let abs = std::fs::canonicalize(path).map_err(|e| e.to_string())?;
     // canonicalize gives \\?\C:\...; StorageFile wants the plain form.
     let plain = abs.to_string_lossy().trim_start_matches(r"\\?\").to_string();
-    unsafe { RoInitialize(RO_INIT_MULTITHREADED) }.ok();
+    let inited = unsafe { RoInitialize(RO_INIT_MULTITHREADED) }.is_ok();
     let res = (|| {
         let engine = OcrEngine::TryCreateFromUserProfileLanguages()
             .map_err(|_| "O Windows não tem um idioma de OCR instalado.".to_string())?;
@@ -22,12 +22,15 @@ pub fn recognize(path: &Path) -> Result<String, String> {
         let stream = file.OpenAsync(FileAccessMode::Read).map_err(e)?.get().map_err(e)?;
         let bmp = BitmapDecoder::CreateAsync(&stream).map_err(e)?.get().map_err(e)?
             .GetSoftwareBitmapAsync().map_err(e)?.get().map_err(e)?;
-        if bmp.PixelWidth().unwrap_or(0) as u32 > OcrEngine::MaxImageDimension().unwrap_or(10000) {
+        let max = OcrEngine::MaxImageDimension().unwrap_or(10000) as i32;
+        if bmp.PixelWidth().unwrap_or(0) > max || bmp.PixelHeight().unwrap_or(0) > max {
             return Err("Imagem grande demais para o OCR do Windows.".to_string());
         }
         let out = engine.RecognizeAsync(&bmp).map_err(e)?.get().map_err(e)?;
         Ok(out.Text().map_err(e)?.to_string())
     })();
-    unsafe { RoUninitialize() };
+    if inited {
+        unsafe { RoUninitialize() };
+    }
     res
 }

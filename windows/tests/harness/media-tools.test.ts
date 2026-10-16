@@ -51,6 +51,8 @@ describe("media tools", () => {
     expect(labels("C:/a.MP4")).toEqual(["Criar GIF", "Comprimir vídeo", "Extrair áudio"]);
     expect(labels("C:/a.pdf")).toEqual(["Info do PDF"]);
     expect(labels("C:/a.zip")).toEqual([]);
+    expect(labels("C:\dir.v2\a.PDF")).toEqual(["Info do PDF"]);
+    expect(labels("C:\dir.png\README")).toEqual([]);
     expect(toolsFor("x.jpeg").map((t) => t.id)).not.toContain("to-jpg");
   });
 

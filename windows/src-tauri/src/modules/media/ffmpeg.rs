@@ -110,7 +110,11 @@ fn fetch(zip: &Path, cancel: &AtomicBool, progress: &dyn Fn(u8)) -> Result<(), S
     let mut sha = Sha256::new();
     let mut got = 0u64;
     tauri::async_runtime::block_on(async {
-        let client = reqwest::Client::builder().connect_timeout(Duration::from_secs(20)).build().map_err(|e| e.to_string())?;
+        let policy = reqwest::redirect::Policy::custom(|a| {
+            let ok = a.url().scheme() == "https" && a.url().host_str().is_some_and(|h| h == "github.com" || h.ends_with(".githubusercontent.com"));
+            if ok && a.previous().len() < 5 { a.follow() } else { a.error("redirect não permitido") }
+        });
+        let client = reqwest::Client::builder().redirect(policy).connect_timeout(Duration::from_secs(20)).build().map_err(|e| e.to_string())?;
         let mut resp = client.get(URL).send().await.and_then(|r| r.error_for_status()).map_err(|e| format!("download falhou: {e}"))?;
         let mut last = 255u8;
         while let Some(chunk) = tokio::time::timeout(Duration::from_secs(30), resp.chunk())
@@ -142,7 +146,20 @@ fn fetch(zip: &Path, cancel: &AtomicBool, progress: &dyn Fn(u8)) -> Result<(), S
 
 fn extract(zip: &Path, dir: &Path) -> Result<PathBuf, String> {
     let tar = std::env::var_os("SystemRoot").map(PathBuf::from).unwrap_or_else(|| "C:\\Windows".into()).join("System32").join("tar.exe");
-    let st = cmd(&tar).arg("-xf").arg(zip).arg("-C").arg(dir).args(["--strip-components=2", ENTRY])
+    let stage = dir.join("extract.part");
+    let _ = std::fs::remove_dir_all(&stage);
+    std::fs::create_dir_all(&stage).map_err(|e| e.to_string())?;
+    let r = extract_into(&tar, zip, &stage).and_then(|exe| {
+        let dest = dir.join("ffmpeg.exe");
+        std::fs::rename(&exe, &dest).map_err(|e| e.to_string())?;
+        Ok(dest)
+    });
+    let _ = std::fs::remove_dir_all(&stage);
+    r
+}
+
+fn extract_into(tar: &Path, zip: &Path, dir: &Path) -> Result<PathBuf, String> {
+    let st = cmd(tar).arg("-xf").arg(zip).arg("-C").arg(dir).args(["--strip-components=2", ENTRY])
         .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
         .status().map_err(|e| format!("não consegui extrair: {e}"))?;
     let exe = dir.join("ffmpeg.exe");

@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
@@ -23,6 +23,9 @@ struct Runtime {
 static RT: Mutex<Option<Runtime>> = Mutex::new(None);
 /// Cancel flags of the jobs in flight, by id.
 static JOBS: Mutex<Option<HashMap<u64, Arc<AtomicBool>>>> = Mutex::new(None);
+/// Jobs in flight; beyond MAX_JOBS the answer is "ocupado".
+static ACTIVE: AtomicUsize = AtomicUsize::new(0);
+const MAX_JOBS: usize = 2;
 static NEXT: AtomicU64 = AtomicU64::new(1);
 
 pub fn init(ctx: &ModuleCtx) {
@@ -69,6 +72,10 @@ where
 {
     let rt = RT.lock().unwrap();
     let rt = rt.as_ref().ok_or("módulo desligado")?;
+    if ACTIVE.fetch_add(1, Ordering::SeqCst) >= MAX_JOBS {
+        ACTIVE.fetch_sub(1, Ordering::SeqCst);
+        return Err("ocupado: espere a ferramenta atual terminar".into());
+    }
     let id = NEXT.fetch_add(1, Ordering::SeqCst);
     let cancel = Arc::new(AtomicBool::new(false));
     JOBS.lock().unwrap().get_or_insert_with(HashMap::new).insert(id, cancel.clone());
@@ -91,6 +98,7 @@ where
             }
         }
         if let Some(j) = JOBS.lock().unwrap().as_mut() { j.remove(&id); }
+        ACTIVE.fetch_sub(1, Ordering::SeqCst);
     });
     Ok(id)
 }
@@ -135,6 +143,9 @@ pub fn info(path: &str) -> Result<Info, String> {
 /// Validates and starts one tool. Every check is repeated here: the webview is not trusted.
 pub fn run(op: &str, path: &str, arg: &str) -> Result<u64, String> {
     let src = PathBuf::from(path);
+    if !tools::is_local_abs(&src) {
+        return Err("caminho não permitido".into());
+    }
     if !src.is_file() {
         return Err("arquivo não encontrado".into());
     }
@@ -149,7 +160,8 @@ pub fn run(op: &str, path: &str, arg: &str) -> Result<u64, String> {
     spawn(op, move |cancel, progress| {
         let dir = src.parent().unwrap_or(Path::new("."));
         let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("arquivo");
-        let out = tools::unique_path(dir, stem, &suffix, &ext, |p| p.exists());
+        // Claimed with create_new for ffmpeg/OCR: two jobs never share a name, and only files this run made are deleted.
+        let out = reserve(dir, stem, &suffix, &ext, matches!(op_s.as_str(), "ocr" | "gif" | "vcompress" | "audio"))?;
         let check = || if cancel.load(Ordering::SeqCst) { Err("cancelled".to_string()) } else { Ok(()) };
         check()?;
         match op_s.as_str() {
@@ -164,9 +176,33 @@ pub fn run(op: &str, path: &str, arg: &str) -> Result<u64, String> {
                 Ok(Done { out: Some(out), text: Some(text) })
             }
             "gif" | "vcompress" | "audio" => ffmpeg::run(&op_s, &src, &out, cancel, progress).map(|()| Done { out: Some(out), text: None }),
-            _ => imageops::run(&op_s, &src, &arg_s, &out).map(|()| Done { out: Some(out), text: None }),
+            _ => {
+                imageops::run(&op_s, &src, &arg_s, &out)?;
+                // Lossless WebP can grow; never keep a bigger "compressed" file silently.
+                if op_s == "compress" && std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0) >= std::fs::metadata(&src).map(|m| m.len()).unwrap_or(u64::MAX) {
+                    let _ = std::fs::remove_file(&out);
+                    return Err("Não ficou menor que o original; nada foi salvo.".into());
+                }
+                Ok(Done { out: Some(out), text: None })
+            }
         }
     })
+}
+
+/// The next free `stem<suffix>.ext`; with `claim` the file is created empty so nobody else can take the name.
+fn reserve(dir: &Path, stem: &str, suffix: &str, ext: &str, claim: bool) -> Result<PathBuf, String> {
+    for _ in 0..50 {
+        let p = tools::unique_path(dir, stem, suffix, ext, |p| p.exists());
+        if !claim {
+            return Ok(p);
+        }
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&p) {
+            Ok(_) => return Ok(p),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    Err("não consegui reservar um nome para o resultado".into())
 }
 
 pub fn download_ffmpeg() -> Result<u64, String> {

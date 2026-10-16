@@ -5,7 +5,7 @@ import type { Disposer, IslandApi } from "../../core/moduleApi";
 import { MediaBridge, type ToolEvent } from "./bridge";
 import { doneText, type ToolSpec } from "./tools";
 
-const fileName = (p: string) => p.split(/[\/]/).pop() ?? p;
+const fileName = (p: string) => p.split(/[\\/]/).pop() ?? p;
 
 export class ToolRunner {
   private jobs = new Map<number, { label: string; on?: (e: ToolEvent) => void }>();
@@ -26,7 +26,7 @@ export class ToolRunner {
   async run(t: ToolSpec, path: string): Promise<void> {
     if (t.op === "info") {
       const i = await MediaBridge.toolInfo(path);
-      const pages = i.pages != null ? `${i.pages} ${i.pages === 1 ? "página" : "páginas"} · ` : "";
+      const pages = i.pages ? `${i.pages} ${i.pages === 1 ? "página" : "páginas"} · ` : "";
       this.api.island.notice({ text: `${fileName(path)}: ${pages}${i.sizeText}`, ms: 6000, key: "media-info" });
       return;
     }
