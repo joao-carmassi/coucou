@@ -3,10 +3,10 @@
 import { h, clear } from "../../kit/dom";
 import { card, view } from "../../kit/card";
 import type { ViewContext, ViewHost } from "../../core/moduleApi";
-import { SysmonBridge, type LhmInfo, type Port, type Reading, type Snapshot } from "./bridge";
+import { SysmonBridge, type LhmInfo, type Reading, type Snapshot } from "./bridge";
 import { bytes, pct, rate, showOf } from "./logic";
 
-interface Cfg { sysmonShow: unknown; sysmonLhm: boolean; sysmonLhmPort: number; sysmonSpeedUrl: string }
+interface Cfg { sysmonShow: unknown; sysmonLhm: boolean; sysmonLhmPort: number }
 const msg = (e: unknown) => String(e).replace(/^Error:\s*/, "");
 
 export function buildSysmonView(ctx: ViewContext, onTemp: (c: number | null) => void): ViewHost {
@@ -14,8 +14,7 @@ export function buildSysmonView(ctx: ViewContext, onTemp: (c: number | null) => 
   const metrics = h("div", { class: "sysmon-grid" });
   const procs = h("div", { class: "sysmon-procs" });
   const lhmBox = h("div", { class: "sysmon-lhm" });
-  const tools = h("div", { class: "sysmon-tools" });
-  const body = h("div", { class: "sysmon-body" }, metrics, procs, lhmBox, tools);
+  const body = h("div", { class: "sysmon-body" }, metrics, procs, lhmBox);
   const el = view(card(null, body));
   let tick: (() => void) | null = null;
   let n = 0;
@@ -56,24 +55,13 @@ export function buildSysmonView(ctx: ViewContext, onTemp: (c: number | null) => 
     }
   };
 
-  const killBtn = (p: { pid: number; name: string }) => {
-    const b = h("button", { class: "link-btn text-link", text: "Encerrar" }) as HTMLButtonElement;
-    let armed = false;
-    b.addEventListener("click", () => {
-      if (!armed) { armed = true; b.textContent = "Confirmar?"; api.timeout(() => { armed = false; b.textContent = "Encerrar"; }, 3000); return; }
-      b.disabled = true;
-      SysmonBridge.kill(p.pid, p.name).then(() => api.island.note(`${p.name} encerrado`), (e) => { b.disabled = false; api.island.error(msg(e)); });
-    });
-    return b;
-  };
-
   const drawProcs = () => {
     clear(procs);
     const s = last;
     if (!s || !showOf(api.settings<Cfg>().sysmonShow).top || !s.byCpu || !s.byMem) return;
     const list = (title: string, items: typeof s.byCpu, val: (p: { cpu: number; mem: number }) => string) =>
       h("div", { class: "sysmon-list" }, h("span", { class: "sysmon-k", text: title }),
-        ...items!.slice(0, 5).map((p) => h("div", { class: "sysmon-proc" }, h("span", { class: "sysmon-name", text: p.name }), h("span", { class: "sysmon-sub", text: val(p) }), killBtn(p))));
+        ...items!.slice(0, 5).map((p) => h("div", { class: "sysmon-proc" }, h("span", { class: "sysmon-name", text: p.name }), h("span", { class: "sysmon-sub", text: val(p) }))));
     procs.append(list("Mais CPU", s.byCpu, (p) => pct(p.cpu)), list("Mais memória", s.byMem, (p) => bytes(p.mem)));
   };
 
@@ -103,36 +91,6 @@ export function buildSysmonView(ctx: ViewContext, onTemp: (c: number | null) => 
     }
   };
 
-  // Tools: built once (inputs keep focus across samples).
-  const out = h("div", { class: "sysmon-sub" });
-  const url = h("input", { class: "island-field", type: "text", placeholder: "https://… (arquivo grande de sua escolha)", spellcheck: "false", value: api.settings<Cfg>().sysmonSpeedUrl }) as HTMLInputElement;
-  const target = h("span", { class: "sysmon-sub" });
-  const go = h("button", { class: "btn secondary", text: "Testar velocidade" }) as HTMLButtonElement;
-  url.addEventListener("input", () => {
-    if (!url.value.trim()) { target.textContent = ""; return; }
-    SysmonBridge.endpoint(url.value).then((host) => (target.textContent = `Vai contatar: ${host}`), (e) => (target.textContent = msg(e)));
-  });
-  url.addEventListener("change", () => void api.saveSettings({ sysmonSpeedUrl: url.value.trim() }));
-  go.addEventListener("click", () => {
-    go.disabled = true; out.textContent = "Baixando…";
-    SysmonBridge.speedtest(url.value).then(
-      (r) => { out.textContent = `${r.mbps.toFixed(1).replace(".", ",")} Mbps (${bytes(r.bytes)} em ${(r.ms / 1000).toFixed(1).replace(".", ",")} s, de ${r.host})`; },
-      (e) => { out.textContent = msg(e); },
-    ).finally(() => (go.disabled = false));
-  });
-  const ports = h("div", { class: "sysmon-list" });
-  const portsBtn = h("button", { class: "btn secondary", text: "Portas abertas" });
-  portsBtn.addEventListener("click", () => {
-    SysmonBridge.ports().then((l: Port[]) => {
-      clear(ports);
-      for (const p of l.slice(0, 12)) ports.append(h("div", { class: "sysmon-proc" }, h("span", { class: "sysmon-name", text: `:${p.port}` }), h("span", { class: "sysmon-sub", text: `${p.process || "?"} (${p.pid})${p.exposed ? " · aberta à rede" : ""}` })));
-      if (!l.length) ports.append(h("span", { class: "sysmon-sub", text: "Nenhuma porta TCP em escuta." }));
-    }, (e) => api.island.error(msg(e)));
-  });
-  tools.append(
-    h("div", { class: "sysmon-row" }, portsBtn, go, url), target,
-    h("span", { class: "sysmon-sub", text: "O teste de velocidade só roda ao clicar e baixa de um único endereço https que você escolher." }), out, ports);
-
   const sample = async () => {
     if (busy) return;
     busy = true;
@@ -155,12 +113,14 @@ export function buildSysmonView(ctx: ViewContext, onTemp: (c: number | null) => 
   };
 
   const open = () => api.island.view() === "sysmon" && api.island.mode() === "expanded";
-  const stop = () => { tick?.(); tick = null; n = 0; last = null; readings = null; void SysmonBridge.release().catch(() => {}); };
+  const stop = () => { tick?.(); tick = null; n = 0; last = null; readings = null; onTemp(null); void SysmonBridge.release().catch(() => {}); };
   const arm = () => {
     if (tick) return;
     void SysmonBridge.lhmInfo().then((i) => { lhmInfo = i; if (last) drawLhm(); }, () => {});
     void sample();
     tick = api.interval(() => { if (!open()) return stop(); void sample(); }, 2000, { whenVisible: true });
   };
+  // A hidden island ticks nothing, so the interval cannot notice: release here too.
+  api.onVisibility((mode) => { if (mode === "hidden") stop(); });
   return { el, sync() { if (open()) arm(); } };
 }

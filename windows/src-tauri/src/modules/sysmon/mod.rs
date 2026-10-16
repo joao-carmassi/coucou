@@ -3,9 +3,8 @@
 
 pub mod lhm;
 pub mod metrics;
-pub mod tools;
 
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
@@ -18,9 +17,14 @@ pub struct Sysmon;
 static SAMPLER: Mutex<Option<metrics::Sampler>> = Mutex::new(None);
 static ALERT_CPU: Mutex<Option<(u64, u64, u64)>> = Mutex::new(None);
 
+/// A panic under the lock must never make release (or the next sample) panic too.
+fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 fn release() {
-    *SAMPLER.lock().unwrap() = None;
-    *ALERT_CPU.lock().unwrap() = None;
+    *lock(&SAMPLER) = None;
+    *lock(&ALERT_CPU) = None;
 }
 
 impl Module for Sysmon {
@@ -43,8 +47,7 @@ pub fn modules() -> Vec<Box<dyn Module>> {
 
 pub fn handler() -> crate::core::host::Handler {
     crate::core::host::handler(tauri::generate_handler![
-        sysmon_sample, sysmon_release, sysmon_alert_probe, sysmon_ports, sysmon_kill, sysmon_speedtest, sysmon_endpoint,
-        sysmon_lhm_info, sysmon_lhm_read, sysmon_lhm_install, sysmon_lhm_open,
+        sysmon_sample, sysmon_release, sysmon_alert_probe, sysmon_lhm_info, sysmon_lhm_read, sysmon_lhm_install, sysmon_lhm_open,
     ])
 }
 
@@ -63,13 +66,13 @@ pub struct SampleOpts {
 #[tauri::command]
 pub async fn sysmon_sample(app: AppHandle, opts: SampleOpts) -> Result<metrics::Snapshot, String> {
     gate(&app)?;
-    blocking(move || SAMPLER.lock().unwrap().get_or_insert_with(metrics::Sampler::new).sample(opts.procs, opts.temps)).await
+    blocking(move || lock(&SAMPLER).get_or_insert_with(metrics::Sampler::new).sample(opts.procs, opts.temps)).await
 }
 
 /// The view went away: drop the PDH query and the previous readings.
 #[tauri::command]
 pub async fn sysmon_release() -> Result<(), String> {
-    *SAMPLER.lock().unwrap() = None;
+    *lock(&SAMPLER) = None;
     Ok(())
 }
 
@@ -93,44 +96,19 @@ pub async fn sysmon_alert_probe(app: AppHandle, tick: u32) -> Result<Probe, Stri
     blocking(move || {
         let mut p = Probe::default();
         let cur = metrics::cpu_times();
-        let mut prev = ALERT_CPU.lock().unwrap();
+        let mut prev = lock(&ALERT_CPU);
         if let (Some(a), Some(b)) = (*prev, cur) {
             p.cpu = metrics::cpu_pct(a, b);
         }
         *prev = cur;
         if tick % 4 == 3 {
-            let drive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
-            p.disk = metrics::disks().into_iter().find(|d| d.name.eq_ignore_ascii_case(&drive)).and_then(|d| used_pct(d.total, d.free));
+            p.disk = metrics::system_drive().and_then(|(t, f)| used_pct(t, f));
         } else {
             p.ram = metrics::ram().and_then(|(u, t)| used_pct(t, t.saturating_sub(u)));
         }
         p
     })
     .await
-}
-
-#[tauri::command]
-pub async fn sysmon_ports(app: AppHandle) -> Result<Vec<tools::Port>, String> {
-    gate(&app)?;
-    blocking(tools::listening_ports).await
-}
-
-#[tauri::command]
-pub async fn sysmon_kill(app: AppHandle, pid: u32, name: String) -> Result<(), String> {
-    gate(&app)?;
-    blocking(move || tools::kill(pid, &name)).await?
-}
-
-/// The host a speed test would contact, for the label next to the button.
-#[tauri::command]
-pub fn sysmon_endpoint(url: String) -> Result<String, String> {
-    tools::endpoint_host(&url)
-}
-
-#[tauri::command]
-pub async fn sysmon_speedtest(app: AppHandle, url: String) -> Result<tools::SpeedResult, String> {
-    gate(&app)?;
-    tools::speedtest(&url).await
 }
 
 #[tauri::command]
@@ -173,9 +151,9 @@ mod tests {
 
     #[test]
     fn release_clears_everything() {
-        *SAMPLER.lock().unwrap() = Some(metrics::Sampler::new());
-        *ALERT_CPU.lock().unwrap() = Some((1, 2, 3));
+        *lock(&SAMPLER) = Some(metrics::Sampler::new());
+        *lock(&ALERT_CPU) = Some((1, 2, 3));
         release();
-        assert!(SAMPLER.lock().unwrap().is_none() && ALERT_CPU.lock().unwrap().is_none());
+        assert!(lock(&SAMPLER).is_none() && lock(&ALERT_CPU).is_none());
     }
 }

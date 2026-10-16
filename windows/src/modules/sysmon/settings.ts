@@ -4,7 +4,7 @@ import { h } from "../../kit/dom";
 import { SysmonBridge, type LhmInfo } from "./bridge";
 import { bytes, clampInt, showOf, type Show } from "./logic";
 
-type Cfg = { sysmonShow: unknown; sysmonAlerts: boolean; sysmonCpuMax: number; sysmonRamMax: number; sysmonDiskMax: number; sysmonTempMax: number; sysmonLhm: boolean; sysmonLhmPort: number; sysmonSpeedUrl: string };
+type Cfg = { sysmonShow: unknown; sysmonAlerts: boolean; sysmonCpuMax: number; sysmonRamMax: number; sysmonDiskMax: number; sysmonTempMax: number; sysmonLhm: boolean; sysmonLhmPort: number };
 
 function sysmonSettingsSection(ms: ModuleSettings): { el: HTMLElement } {
   const cfg = ms.get<Cfg>();

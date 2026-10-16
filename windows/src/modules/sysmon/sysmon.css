@@ -11,6 +11,4 @@
 .sysmon-list { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .sysmon-proc { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
 .sysmon-name { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
-.sysmon-lhm, .sysmon-tools { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
-.sysmon-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.sysmon-row .island-field { flex: 1; min-width: 120px; }
+.sysmon-lhm { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }

@@ -11,8 +11,7 @@
     "sysmonDiskMax": 95,
     "sysmonTempMax": 85,
     "sysmonLhm": false,
-    "sysmonLhmPort": 8085,
-    "sysmonSpeedUrl": ""
+    "sysmonLhmPort": 8085
   },
   "machineKeys": ["sysmonLhm", "sysmonLhmPort"],
   "presets": ["tudo", "vitrine"]

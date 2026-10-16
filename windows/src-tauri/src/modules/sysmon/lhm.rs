@@ -94,10 +94,14 @@ pub async fn read(port: u16) -> Option<Vec<Reading>> {
     if port < 1024 {
         return None;
     }
-    let client = reqwest::Client::builder().timeout(std::time::Duration::from_millis(1500)).no_proxy().build().ok()?;
-    let body = client.get(format!("http://127.0.0.1:{port}/data.json")).send().await.ok()?.error_for_status().ok()?.bytes().await.ok()?;
-    if body.len() > 2_000_000 {
-        return None;
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_millis(1500)).no_proxy().redirect(reqwest::redirect::Policy::none()).build().ok()?;
+    let mut resp = client.get(format!("http://127.0.0.1:{port}/data.json")).send().await.ok()?.error_for_status().ok()?;
+    let mut body = Vec::new();
+    while let Some(c) = resp.chunk().await.ok()? {
+        body.extend_from_slice(&c);
+        if body.len() > 2_000_000 {
+            return None; // stream-capped: a hostile local listener cannot make us buffer more
+        }
     }
     Some(parse_data(&String::from_utf8_lossy(&body)))
 }
@@ -157,7 +161,25 @@ pub fn extract_zip(zip_path: &Path, dest: &Path) -> Result<usize, String> {
 }
 
 /// Download the pinned zip, check size and SHA-256 BEFORE extracting, extract to a temp folder, then rename into place.
+static INSTALLING: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
+
+/// Clears the busy flag on every exit path.
+struct Busy;
+impl Drop for Busy {
+    fn drop(&mut self) {
+        *INSTALLING.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = false;
+    }
+}
+
 pub async fn install() -> Result<(), String> {
+    {
+        let mut b = INSTALLING.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if *b {
+            return Err("já há um download em andamento".into());
+        }
+        *b = true;
+    }
+    let _busy = Busy;
     let tools = tools_dir();
     std::fs::create_dir_all(&tools).map_err(|e| e.to_string())?;
     let part = tools.join("LibreHardwareMonitor.zip.part");
@@ -168,7 +190,14 @@ pub async fn install() -> Result<(), String> {
 }
 
 async fn fetch_and_unpack(tools: &Path, part: &Path) -> Result<(), String> {
-    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(300)).build().map_err(|e| e.to_string())?;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .https_only(true)
+        .redirect(reqwest::redirect::Policy::custom(|a| {
+            let ok = a.url().host_str().is_some_and(|h| h == "github.com" || h.ends_with(".githubusercontent.com"));
+            if a.previous().len() >= 5 || !ok { a.stop() } else { a.follow() }
+        }))
+        .build().map_err(|e| e.to_string())?;
     let mut resp = client.get(URL).send().await.map_err(|e| format!("falha ao baixar: {e}"))?.error_for_status().map_err(|e| format!("falha ao baixar: {e}"))?;
     let mut file = std::fs::File::create(part).map_err(|e| e.to_string())?;
     let mut got = 0u64;

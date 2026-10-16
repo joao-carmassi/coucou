@@ -157,6 +157,14 @@ pub fn disks() -> Vec<Disk> {
     out
 }
 
+/// (total, free) bytes of %SystemDrive% (one call, no walk over the other drives).
+pub fn system_drive() -> Option<(u64, u64)> {
+    let root: Vec<u16> = format!("{}\\", std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into())).encode_utf16().chain(Some(0)).collect();
+    let (mut free, mut total) = (0u64, 0u64);
+    unsafe { GetDiskFreeSpaceExW(PCWSTR(root.as_ptr()), Some(&mut free), Some(&mut total), None).ok()? };
+    (total > 0).then_some((total, free))
+}
+
 /// Total (in, out) octets of the physical interfaces that are up.
 pub fn net_octets() -> Option<(u64, u64)> {
     unsafe {
@@ -227,6 +235,7 @@ struct TempInfo {
     over: i16,
     under: i16,
     flags: [u8; 4],
+    reserved1: u32,
 }
 
 #[repr(C)]
@@ -268,7 +277,7 @@ pub fn drive_temp(n: u32) -> Option<f32> {
 
 /// A reading counts only when the call worked, the descriptor is complete and the value is plausible.
 pub fn parse_drive_temp(ok: bool, got: usize, count: u16, celsius: i16) -> Option<f32> {
-    (ok && got >= 16 && count >= 1 && (1..=150).contains(&celsius)).then_some(celsius as f32)
+    (ok && got >= 40 && count >= 1 && (1..=150).contains(&celsius)).then_some(celsius as f32)
 }
 
 fn drive_temps() -> Vec<DriveTemp> {
@@ -476,12 +485,12 @@ mod tests {
 
     #[test]
     fn drive_temp_needs_a_plausible_complete_answer() {
-        assert_eq!(parse_drive_temp(true, 32, 1, 41), Some(41.0));
-        assert_eq!(parse_drive_temp(false, 32, 1, 41), None);
-        assert_eq!(parse_drive_temp(true, 8, 1, 41), None, "short answer");
-        assert_eq!(parse_drive_temp(true, 32, 0, 41), None, "no sensor");
-        assert_eq!(parse_drive_temp(true, 32, 1, 0), None);
-        assert_eq!(parse_drive_temp(true, 32, 1, -5), None);
+        assert_eq!(parse_drive_temp(true, 48, 1, 41), Some(41.0));
+        assert_eq!(parse_drive_temp(false, 48, 1, 41), None);
+        assert_eq!(parse_drive_temp(true, 39, 1, 41), None, "short answer");
+        assert_eq!(parse_drive_temp(true, 48, 0, 41), None, "no sensor");
+        assert_eq!(parse_drive_temp(true, 48, 1, 0), None);
+        assert_eq!(parse_drive_temp(true, 48, 1, -5), None);
     }
 
     #[test]
