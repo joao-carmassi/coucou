@@ -61,6 +61,8 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # F03: FFT for the spectrum (nowplaying loopback analysis).
 realfft = "3"
 toml_edit = "0.22"
+# sysmon: extracts the pinned LibreHardwareMonitor zip (enclosed_name blocks path traversal).
+zip = { version = "2", default-features = false, features = ["deflate"] }
 hmac = "0.12"
 # `#[implement]` (drop_target.rs) expands to paths in windows-core.
 windows-core = "0.61"
