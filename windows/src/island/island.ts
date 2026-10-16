@@ -652,11 +652,11 @@ export class Island implements IslandHost {
   }
 
   /** Rust finished an Alt-drag (placement already saved): the island is back at the window centre. */
-  dragEnded(moved: boolean) {
+  dragEnded(end: "moved" | "still" | "aborted") {
     this.offsetX.set(0);
     this.clearNudgeTimer();
     this.ensureRunning();
-    if (!moved && State.mode === "compact") this.clickCompact();
+    if (end === "still" && State.mode === "compact") this.clickCompact();
   }
 
   // ── Geometry ────────────────────────────────────────────────────────────────
