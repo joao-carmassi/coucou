@@ -6,6 +6,7 @@
 import { h, clear } from "../../kit/dom";
 import { card, view } from "../../kit/card";
 import { Up } from "./state";
+import { matchDropActions, UPLOAD_SERVICE, type DropAction } from "./api";
 import { CLAUDE_SERVICE, type LaunchFile } from "../claude/api";
 import type { IslandApi, ViewContext, ViewHost } from "../../core/moduleApi";
 
@@ -94,6 +95,7 @@ export function buildUploading(): ViewHost {
 export function buildChoose(ctx: ViewContext, cancel: () => void): ViewHost {
   const title = h("div", { class: "title" });
   const sub = h("div", { class: "sub", text: "O que você quer fazer com ele?" });
+  const chips = h("div", { class: "drop-chips" });
   const row = h(
     "div",
     { class: "actions" },
@@ -123,6 +125,18 @@ export function buildChoose(ctx: ViewContext, cancel: () => void): ViewHost {
         h("b", { text: Up.droppedFile?.name ?? "arquivo" }),
         document.createTextNode(" está pronto."),
       );
+      // Other modules' actions for this file type; the card closes once one is started.
+      const src = Up.droppedFile?.source ?? Up.droppedFile?.path;
+      clear(chips);
+      const fit = src ? matchDropActions(ctx.api.useAll<DropAction>(UPLOAD_SERVICE.dropAction), [src]) : [];
+      if (fit.length && !chips.parentElement) row.before(chips); // absent from the DOM when nobody offers anything
+      else if (!fit.length) chips.remove();
+      for (const a of fit) {
+        chips.append(h("button", {
+          class: "drop-chip", text: a.label,
+          onclick: () => { void Promise.resolve(a.run([src!])).catch((e) => ctx.api.island.error(e)); cancel(); },
+        }));
+      }
     },
   };
 }

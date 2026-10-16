@@ -185,3 +185,22 @@
 #views.hidden-by-upload .view.on { pointer-events: none !important; }
 
 #content.upload-active #header { pointer-events: auto; }
+
+.drop-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 2px;
+  max-height: 50px;
+  overflow: hidden;
+}
+.drop-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.drop-chip:hover { background: rgba(255, 255, 255, 0.16); }

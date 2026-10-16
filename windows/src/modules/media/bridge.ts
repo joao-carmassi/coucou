@@ -15,7 +15,28 @@ export const MediaBridge = {
   reveal: (path: string) => commandOrThrow<void>("media_reveal", { path }),
   /** Off the list only; the file stays on disk. */
   remove: (path: string) => commandOrThrow<void>("media_remove", { path }),
+  toolInfo: (path: string) => commandOrThrow<ToolInfo>("media_tool_info", { path }),
+  /** Starts a tool on a Rust worker; the id tags the `media-tool` events. */
+  toolRun: (op: string, path: string, arg?: string) => commandOrThrow<number>("media_tool_run", { op, path, arg: arg ?? null }),
+  toolCancel: (id: number) => commandOrThrow<void>("media_tool_cancel", { id }),
+  ffmpegStatus: () => commandOrThrow<FfmpegStatus>("media_ffmpeg_status"),
+  /** Only from the user's click. */
+  ffmpegDownload: () => commandOrThrow<number>("media_ffmpeg_download"),
 };
+
+export interface ToolInfo {
+  kind: "image" | "video" | "pdf" | "other";
+  size: number; sizeText: string;
+  width: number | null; height: number | null; pages: number | null;
+  ops: string[]; ffmpeg: boolean;
+}
+export interface FfmpegStatus { path: string | null; url: string; bytes: number; sizeText: string; sha256: string }
+/** Payload of the `media-tool` event. */
+export interface ToolEvent {
+  id: number; op: string;
+  state: "progress" | "done" | "error" | "cancelled";
+  pct: number; out: string | null; text: string | null; msg: string | null;
+}
 
 export interface MediaItem {
   path: string;
