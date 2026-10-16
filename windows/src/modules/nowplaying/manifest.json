@@ -1,0 +1,14 @@
+{
+  "id": "nowplaying",
+  "label": "Tocando agora",
+  "default": false,
+  "order": 13,
+  "settingsDefaults": {
+    "nowplayingDance": true,
+    "nowplayingSensitivity": 1
+  },
+  "presets": [
+    "tudo",
+    "vitrine"
+  ]
+}
