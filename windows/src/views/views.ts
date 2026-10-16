@@ -176,7 +176,7 @@ const MAX_MATCHES = 6;
 /** The input and its matches; the island's key handler drives arrows/Enter/Esc, the view only draws and takes typing and clicks. */
 function buildPalette(actions: ViewActions, pick: (e: Entry) => void): PaletteView {
   const input = h("input", { class: "island-field", type: "text", placeholder: "Digite um comando…", autocomplete: "off", spellcheck: false, "data-palette": true }) as HTMLInputElement;
-  const list = h("div", { class: "settings-rows" });
+  const list = h("div", { class: "settings-rows", style: "gap:2px;flex:1 1 auto;min-height:0;overflow-y:auto" });
   let at = 0;
   let shown: Entry[] = [];
   let sig = "";
@@ -197,11 +197,11 @@ function buildPalette(actions: ViewActions, pick: (e: Entry) => void): PaletteVi
   };
   input.addEventListener("input", () => { at = 0; draw(); });
 
-  const el = h("div", { class: "view" }, card(null, h("div", { class: "stack", style: "padding:18px 16px 6px 84px;gap:6px;justify-content:flex-start" }, input, list)));
+  const el = h("div", { class: "view", style: "transform:none" }, card(null, h("div", { class: "stack", style: "padding:18px 16px 14px 84px;gap:6px;justify-content:flex-start" }, input, list)));
   return {
     el,
     sync: draw,
-    focus: () => input.focus(),
+    focus: () => input.focus({ preventScroll: true }),
     reset() { input.value = ""; at = 0; sig = ""; },
     move(d) {
       if (!shown.length) return;

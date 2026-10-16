@@ -17,5 +17,5 @@ test("neutrality-audit: empty allowlist, 0 findings (incl. K3)", () => audit("ne
 
 test("palette: field never stretches into free height, and the stack is top-anchored", () => {
   assert.match(readFileSync("src/style/ui.css", "utf8"), /\.stack > \.island-field \{\s*flex: none;\s*\}/);
-  assert.match(readFileSync("src/views/views.ts", "utf8"), /padding:18px 16px 6px 84px;gap:6px;justify-content:flex-start/);
+  assert.match(readFileSync("src/views/views.ts", "utf8"), /padding:18px 16px 14px 84px;gap:6px;justify-content:flex-start/);
 });
