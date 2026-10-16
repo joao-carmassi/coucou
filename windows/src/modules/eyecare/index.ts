@@ -48,6 +48,6 @@ function start(api: IslandApi): Disposer {
 export const eyecareModule: ModuleDef = {
   id: "eyecare",
   views: [{ name: "eyecare", layout: { height: 190, botX: 54, botY: null, botDiameter: 46 }, build: (ctx) => buildView(ctx) }],
-  tabs: [{ view: "eyecare", title: "Pausas", icon: () => svg(ICONS.pulse, 13, { stroke: 2 }), order: 100 }],
+  tabs: [{ view: "eyecare", title: "Pausas", icon: () => svg(ICONS.eye, 13, { stroke: 2 }), order: 100 }],
   start,
 };

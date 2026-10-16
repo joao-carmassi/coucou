@@ -5,6 +5,13 @@ import { calls } from "./setup";
 import { dummyModule, dummyProbe } from "./dummyModule";
 
 const SNAP = { cpu: 1, ramUsed: 1, ramTotal: 2, disks: [], diskBusy: null, netDown: null, netUp: null, gpu: null, gpuMem: null, driveTemps: [{ name: "Disco 0", celsius: 99 }], byCpu: [], byMem: [] };
+const bus = vi.hoisted(() => ({ fns: [] as ((p: unknown) => void)[] }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: async (name: string, fn: (p: unknown) => void) => {
+    if (name === "settings-changed") bus.fns.push(fn);
+    return () => { const i = bus.fns.indexOf(fn); if (i >= 0) bus.fns.splice(i, 1); };
+  },
+}));
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: async (cmd: string, args?: unknown) => {
     calls.invoke.push({ cmd, args });
@@ -83,5 +90,26 @@ describe("sysmon module", () => {
     const after = n("sysmon_alert_probe");
     await tick(60_000);
     expect(n("sysmon_alert_probe")).toBe(after);
+  });
+
+  it("toggling sysmonAlerts in the settings window arms and disarms the probe", async () => {
+    const s = State.settings as unknown as Record<string, unknown>;
+    s.sysmonAlerts = false;
+    Registry.apply({ sysmon: true });
+    await tick(20);
+    const p0 = n("sysmon_alert_probe");
+    await tick(60_000);
+    expect(n("sysmon_alert_probe")).toBe(p0);
+    s.sysmonAlerts = true;
+    bus.fns.forEach((f) => f({}));
+    await tick(31_000);
+    expect(n("sysmon_alert_probe") - p0).toBe(2);
+    s.sysmonAlerts = false;
+    bus.fns.forEach((f) => f({}));
+    await tick(10);
+    const p1 = n("sysmon_alert_probe");
+    await tick(60_000);
+    expect(n("sysmon_alert_probe")).toBe(p1);
+    Registry.apply({ sysmon: false });
   });
 });

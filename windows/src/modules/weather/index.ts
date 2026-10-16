@@ -42,6 +42,6 @@ export const weatherModule: ModuleDef = {
     layout: { height: 240, botX: 54, botY: null, botDiameter: 46 },
     build: (ctx) => buildWeatherView(ctx, store, () => showStatus()),
   }],
-  tabs: [{ view: "weather", title: "Clima", icon: () => svg(ICONS.cloud, 13), order: 15 }],
+  tabs: [{ view: "weather", title: "Clima", icon: () => svg(ICONS.cloud, 13), order: 45 }],
   start,
 };
