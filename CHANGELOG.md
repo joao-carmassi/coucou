@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.10.0
+
+Five new modules (all off by default) and media tools.
+
+- Tocando (`nowplaying`): what is playing through Windows media controls (title, artist, cover, play/pause/next/previous, progress when known), per-app volume, and Mochi dancing to the music (local loopback analysis only while playing and visible). Alt+P / Alt+N.
+- Sistema (`sysmon`): CPU, RAM, GPU, disk, network and temperatures while the view is open; opt-in alerts; CPU temperature through LibreHardwareMonitor (read locally, or an opt-in pinned download with SHA-256).
+- Clima (`weather`): current weather and forecast from Open-Meteo for a city you pick; no keys, no location lookup.
+- Agenda (`calendar`): ICS calendar links (kept in Credential Manager) with recurring events and time zones, plus a reminder notice before each event.
+- Pausas (`eyecare`): break reminders and screen time per app, stored only on this machine.
+- Mídia: drop an image, PDF or video on the island and pick a tool: convert, resize, compress, strip metadata, copy, OCR, GIF/compress/audio (ffmpeg from PATH or an opt-in pinned download).
+- Core: generic `user_idle_ms` and `foreground_now`; `api.provide`-based drop actions for the upload card.
+
 ## 0.9.0
 
 Core foundation for the next modules (everything new is generic API, no module names in the core).
