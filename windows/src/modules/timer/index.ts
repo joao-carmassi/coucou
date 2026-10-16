@@ -5,15 +5,14 @@ import { BAND, type Disposer, type IslandApi, type ModuleDef } from "../../core/
 import { TimerClock } from "./timer";
 import { buildTimerView, type PomoUi } from "./view";
 import { pomoCfg, pomoLabel, pomoMinutes, pomoNext, pomoStart, type PomoState } from "./pomodoro";
-import { ALARM_GRACE_MS, alarmText, nextAlarm, parseAlarms } from "./alarms";
 
-interface Cfg { timerPomodoro: unknown; timerPomodoroAuto: boolean; timerFocusPomodoro: boolean; timerAlarms: unknown }
+interface Cfg { timerPomodoro: unknown; timerPomodoroAuto: boolean; timerFocusPomodoro: boolean }
 
 // State lives here (not in State); the object is inert until start() gives it an onChange.
 const Timer = new TimerClock();
 // Pomodoro phase on top of the countdown; null = a plain timer / stopwatch.
 let pomo: PomoState | null = null;
-let readCfg: () => Cfg = () => ({ timerPomodoro: null, timerPomodoroAuto: true, timerFocusPomodoro: false, timerAlarms: [] });
+let readCfg: () => Cfg = () => ({ timerPomodoro: null, timerPomodoroAuto: true, timerFocusPomodoro: false });
 const pomoUi: PomoUi = {
   label: () => (pomo ? pomoLabel(pomo, pomoCfg(readCfg().timerPomodoro)) : null),
   start: () => startPomo(),
@@ -27,7 +26,6 @@ function start(api: IslandApi): Disposer {
   let tick: Disposer | null = null;
   let done: Disposer | null = null;
   let hold: Disposer | null = null;
-  let alarmT: Disposer | null = null;
   const refresh = () => {
     api.status.set(Timer.active ? { priority: 50, text: Timer.text(), overGrid: true } : null);
     api.island.redraw();
@@ -75,34 +73,6 @@ function start(api: IslandApi): Disposer {
   pomo = null;
   readCfg = () => api.settings<Cfg>();
   Timer.onChange = arm;
-  // Alarms: ONE timeout, for the next fire time only (recomputed from Date: midnight and DST safe).
-  // Re-armed after firing, a settings save and a visibility change (a wake from sleep shows up as one).
-  // A pending alarm is kept across re-arms; only a changed fire time (or settings) replaces the timeout.
-  let pending: ReturnType<typeof nextAlarm> = null;
-  const fire = (p: NonNullable<typeof pending>) => {
-    const late = Date.now() - p.at, text = alarmText(p.alarms);
-    if (late < ALARM_GRACE_MS) {
-      api.sound.play("alert");
-      api.island.notice({ text: `Alarme ${text}`, priority: BAND.URGENT, key: "alarm", ms: 8000, peek: true });
-    } else api.island.notice({ text: `Alarme perdido ${text}`, priority: BAND.NOTICE, key: "alarm", ms: 8000 });
-  };
-  const armAlarm = (force = false) => {
-    // The machine slept past it: ring (or report it as missed) now, before choosing the next one.
-    if (pending && pending.at <= Date.now()) { const p = pending; pending = null; alarmT?.(); alarmT = null; fire(p); }
-    const next = nextAlarm(parseAlarms(readCfg().timerAlarms), new Date());
-    if (!force && alarmT && next && pending && next.at === pending.at) return;
-    alarmT?.(); alarmT = null; pending = next;
-    if (!next) return;
-    // 2^31-1 is setTimeout's ceiling; waking early only re-arms.
-    alarmT = api.timeout(() => {
-      alarmT = null;
-      if (Date.now() >= next.at) { pending = null; fire(next); }
-      armAlarm();
-    }, Math.min(Math.max(0, next.at - Date.now()), 2 ** 31 - 1));
-  };
-  armAlarm();
-  // Deferred: the settings snapshot may not have the saved keys yet when the event arrives.
-  const offSettings = api.listen("settings-changed", () => void api.timeout(() => armAlarm(true), 0));
   const offKeep = api.island.keepAwake(() => Timer.active);
   // Alt+F / palette: a focus phase (pomodoro when "Iniciar foco usa Pomodoro" is on, else a 25 min countdown), only while nothing is running.
   const offAction = api.actions.add({
@@ -115,11 +85,9 @@ function start(api: IslandApi): Disposer {
     },
   });
   // The interval is off while hidden: catch the readout up when the island comes back.
-  const offVis = api.onVisibility((mode) => { armAlarm(); if (mode !== "hidden" && Timer.status === "running") refresh(); });
+  const offVis = api.onVisibility((mode) => { if (mode !== "hidden" && Timer.status === "running") refresh(); });
   return () => {
     disarm();
-    alarmT?.();
-    offSettings();
     hold?.();
     offKeep();
     offAction();
