@@ -178,7 +178,9 @@ describe("timer pomodoro", () => {
     put({ timerPomodoro: { work: 5, short: 5, long: 15, every: 4 } });
     api().island.open("timer"); tick(10);
     click("button", "Pomodoro"); tick(1100);
-    expect(document.querySelector(".timer-label")!.textContent).toContain("Foco · ciclo 1/4");
+    expect(document.querySelector(".timer-label")!.textContent).toContain("Foco · ciclo 1/4 · pronto");
+    click("button", "Iniciar"); tick(1100);
+    expect(document.querySelector(".timer-label")!.textContent).not.toContain("pronto");
     api().island.open("dummy-a"); tick(10); folded();
     tick(5 * 60_000 + 10); // work -> short break, auto-started
     Last.clear();

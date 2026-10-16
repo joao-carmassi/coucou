@@ -57,6 +57,7 @@ export async function startIsland(modules: ModuleDef[], catalog: ModuleInfo[]) {
     if (p.name === "palette" && p.error) island.error(`Atalho da paleta indisponível: ${p.error}`);
   });
 
+  await onEvent<boolean>("island-drag-end", (moved) => island.dragEnded(moved));
   await onEvent<null>("screen-changed", () => void Bridge.reposition());
 
   // A hidden page gets no animation frames: the island would be heard but not seen.

@@ -1,7 +1,6 @@
 // The island: DOM shell, sizing animation, Mochi placement, mouse handling.
 // Mirrors IslandRootView.swift + IslandWindowController.swift. Core only.
 
-import { commitDx } from "./placement";
 import { Tracked, Spring, clamp, mixColor } from "../core/anim";
 import { Bridge, IS_TAURI, type Presence } from "../core/bridge";
 import { wipe } from "../kit/canvas";
@@ -105,7 +104,7 @@ export class Island implements IslandHost {
   /** The view being opened, read by the home transition (forceHome runs it synchronously). */
   private homeTarget: string | null = null;
   /** Last shape handed to Rust for the click-through test. */
-  private pushedRect = { x: -1, y: -1, w: -1, h: -1 };
+  private pushedRect = { x: -1, y: -1, w: -1, h: -1, compact: false };
   private homeCollapseAt: number | null = null;
 
   // Bot hover → love (IslandWindowController.botHoverIn)
@@ -121,27 +120,7 @@ export class Island implements IslandHost {
 
   // Compact island nudged sideways so what's under it can be clicked; glides home.
   private offsetX = new Spring(0, 0.45, 1);
-  private nudge: { x: number; off: number; moved: boolean; alt: boolean; sx: number; dx: number } | null = null;
-  // Alt-drag: the window follows the pointer (screenX, so the moving window can't skew it); IPCs are chained, one per frame.
-  private dragIpc: Promise<unknown> = Promise.resolve();
-  private dragRaf = 0;
-  private onDragMove = (e: MouseEvent) => {
-    const n = this.nudge;
-    if (!n || !n.alt || !(e.buttons & 1)) return;
-    n.dx = e.screenX - n.sx;
-    if (!n.moved && Math.abs(n.dx) <= 5) return;
-    n.moved = true;
-    if (!this.dragRaf) this.dragRaf = requestAnimationFrame(() => {
-      this.dragRaf = 0;
-      const d = this.nudge?.dx;
-      if (d != null) this.dragIpc = this.dragIpc.then(() => Bridge.dragIsland(this.nudge?.dx ?? d)).catch(() => {});
-    });
-  };
-  private endDrag() {
-    window.removeEventListener("mousemove", this.onDragMove);
-    if (this.dragRaf) cancelAnimationFrame(this.dragRaf);
-    this.dragRaf = 0;
-  }
+  private nudge: { x: number; off: number; moved: boolean } | null = null;
   private nudgeTimer: number | null = null;
 
   private confusedRecovery: number | null = null;
@@ -311,7 +290,6 @@ export class Island implements IslandHost {
     State.mode = mode;
     this.tintRequest = null;
     // Any change of mode sends a nudged island home.
-    if (this.nudge?.alt) { this.endDrag(); if (this.nudge.moved) void this.dragIpc.then(() => Bridge.reposition()); }
     this.nudge = null;
     this.clearNudgeTimer();
     this.offsetX.target = 0;
@@ -666,21 +644,19 @@ export class Island implements IslandHost {
       // A Mochi with news to tell takes you to it (a module's avatarClick); any other gets his slap.
       if (!Hooks.some("avatarClick")) this.engine.slap();
     } else if (this.nudge) {
-      const { moved, alt, dx: dragged } = this.nudge;
+      const { moved } = this.nudge;
       this.nudge = null;
-      this.endDrag();
-      // The window follows the pointer, so the only bound is the one the host applies (place_x).
-      const dx = commitDx(alt, moved, alt ? dragged : this.offsetX.value, alt ? Infinity : Math.max(0, (PANEL_W - this.width.value) / 2));
-      if (dx != null) {
-        // Alt-drag: the window itself moves; once it has, the island sits at the window centre again.
-        this.clearNudgeTimer();
-        void this.dragIpc.then(() => Bridge.setIslandOffset(dx)).then(() => {
-          this.offsetX.set(0);
-          this.ensureRunning();
-        }).catch(() => { this.scheduleNudgeReturn(); void Bridge.reposition(); });
-      } else if (moved) this.scheduleNudgeReturn();
+      if (moved) this.scheduleNudgeReturn();
       else this.clickCompact();
     }
+  }
+
+  /** Rust finished an Alt-drag (placement already saved): the island is back at the window centre. */
+  dragEnded(moved: boolean) {
+    this.offsetX.set(0);
+    this.clearNudgeTimer();
+    this.ensureRunning();
+    if (!moved && State.mode === "compact") this.clickCompact();
   }
 
   // ── Geometry ────────────────────────────────────────────────────────────────
@@ -775,9 +751,10 @@ export class Island implements IslandHost {
 
     const rect = { x: (PANEL_W - w) / 2 + off, y: 0, w, h: hh };
     const p = this.pushedRect;
-    if (Math.abs(p.x - rect.x) > 0.5 || Math.abs(p.w - rect.w) > 0.5 || Math.abs(p.h - rect.h) > 0.5) {
-      this.pushedRect = rect;
-      void Bridge.setIslandRect(rect.x, rect.y, rect.w, rect.h);
+    const compact = State.mode === "compact";
+    if (Math.abs(p.x - rect.x) > 0.5 || Math.abs(p.w - rect.w) > 0.5 || Math.abs(p.h - rect.h) > 0.5 || p.compact !== compact) {
+      this.pushedRect = { ...rect, compact };
+      void Bridge.setIslandRect(rect.x, rect.y, rect.w, rect.h, compact);
     }
   }
 
@@ -847,8 +824,9 @@ export class Island implements IslandHost {
       if (State.mode !== "expanded") {
         // Compact opens on the release: a press that travels is a sideways nudge.
         if (State.mode === "compact") {
-          this.nudge = { x: e.clientX, off: this.offset(this.width.value), moved: false, alt: e.altKey, sx: e.screenX, dx: 0 };
-          if (e.altKey) window.addEventListener("mousemove", this.onDragMove);
+          // Alt: Rust owns the whole drag (one system); a plain press is the glide-home nudge.
+          if (e.altKey) void Bridge.beginIslandDrag();
+          else this.nudge = { x: e.clientX, off: this.offset(this.width.value), moved: false };
         } else this.clickCompact();
         return;
       }
@@ -897,7 +875,7 @@ export class Island implements IslandHost {
     const released = this.lastDown && !down;
     const pressed = down && !this.lastDown;
     this.lastDown = down;
-    if (this.nudge && !this.nudge.alt && down && (this.nudge.moved || Math.abs(x - this.nudge.x) > 5)) {
+    if (this.nudge && down && (this.nudge.moved || Math.abs(x - this.nudge.x) > 5)) {
       this.nudge.moved = true;
       const m = Math.max(0, (PANEL_W - this.width.value) / 2);
       this.offsetX.set(clamp(this.nudge.off + x - this.nudge.x, -m, m)); // x only, never y
