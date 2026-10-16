@@ -7,8 +7,10 @@ function btn(label: string, kind: "primary" | "secondary", onClick: () => void):
   return h("button", { class: `btn ${kind}`, onclick: onClick }, h("span", { text: label }));
 }
 
+export interface PomoUi { label(): string | null; start(): void; skip(): void; stop(): void }
+
 /** The Timer tab: pick a time (or stopwatch) -> ready page with Iniciar -> running page with Pausar. */
-export function buildTimerView(Timer: TimerClock, ctx: ViewContext): ViewHost {
+export function buildTimerView(Timer: TimerClock, ctx: ViewContext, pomo: PomoUi): ViewHost {
   const body = h("div", { class: "stack" });
   body.style.padding = "4px 16px 4px 84px";
   const el = view(card(null, body));
@@ -38,11 +40,13 @@ export function buildTimerView(Timer: TimerClock, ctx: ViewContext): ViewHost {
         h("div", { class: "actions timer-row" },
           ...[5, 10, 25].map((m) => btn(`${m} min`, "secondary", () => Timer.prepare("countdown", m))),
           mins, btn("Ok", "secondary", go), h("div", { class: "grow" }),
-          h("button", { class: "link-btn text-link", text: "Cronômetro", onclick: () => Timer.prepare("stopwatch") })),
+          h("button", { class: "link-btn text-link", text: "Cronômetro", onclick: () => Timer.prepare("stopwatch") }),
+          h("button", { class: "link-btn text-link", text: "Pomodoro", onclick: () => pomo.start() })),
       );
     } else {
       const stopwatch = Timer.kind === "stopwatch";
-      label.textContent = (stopwatch ? "Cronômetro" : `Timer · ${Math.round(Timer.total / 60_000)} min`) + (next === "paused" ? " · pausado" : "");
+      const phase = pomo.label();
+      label.textContent = phase ? phase + (next === "ready" ? " · pronto" : next === "paused" ? " · pausado" : "") : (stopwatch ? "Cronômetro" : `Timer · ${Math.round(Timer.total / 60_000)} min`) + (next === "paused" ? " · pausado" : "");
       bar.hidden = stopwatch;
       const main = next === "ready" ? btn("Iniciar", "primary", () => Timer.start())
         : btn(next === "running" ? "Pausar" : "Retomar", "secondary", () => (next === "running" ? Timer.pause() : Timer.resume()));
@@ -50,7 +54,8 @@ export function buildTimerView(Timer: TimerClock, ctx: ViewContext): ViewHost {
         label,
         h("div", { class: "actions timer-row" },
           readout, h("div", { class: "grow" }), main,
-          h("button", { class: "link-btn text-link", text: "Cancelar", onclick: () => Timer.cancel() })),
+          phase ? h("button", { class: "link-btn text-link", text: "Pular", onclick: () => pomo.skip() }) : false,
+          h("button", { class: "link-btn text-link", text: phase ? "Parar" : "Cancelar", onclick: () => (phase ? pomo.stop() : Timer.cancel()) })),
         bar,
       );
     }
@@ -60,8 +65,9 @@ export function buildTimerView(Timer: TimerClock, ctx: ViewContext): ViewHost {
     sync() {
       // Nothing is touched while the tab is hidden.
       if (ctx.api.island.view() !== "timer") return;
-      if (Timer.status !== key) { key = Timer.status; draw(); }
-      if (key === "idle") return;
+      const k = Timer.status + (pomo.label() ?? ""); // a pomodoro phase change keeps the status "running"
+      if (k !== key) { key = k; draw(); }
+      if (Timer.status === "idle") return;
       readout.textContent = Timer.text();
       fill.style.width = `${Math.max(1.5, Timer.fraction() * 100)}%`;
     },

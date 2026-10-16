@@ -6,5 +6,10 @@
     "claude"
   ],
   "group": "Claude",
-  "order": 4
+  "order": 4,
+  "presets": [
+    "dev",
+    "tudo",
+    "vitrine"
+  ]
 }

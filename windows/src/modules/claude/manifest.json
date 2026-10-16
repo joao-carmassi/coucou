@@ -9,5 +9,12 @@
     "claudeConfigDir": "",
     "idleOpen": "",
     "alertHotkey": ""
-  }
+  },
+  "machineKeys": ["hooksInstalled", "wslHooks", "claudeConfigDir"],
+  "presets": [
+    "essencial",
+    "dev",
+    "tudo",
+    "vitrine"
+  ]
 }

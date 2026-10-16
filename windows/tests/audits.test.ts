@@ -14,3 +14,8 @@ const audit = (name: string, summary: RegExp) => {
 
 test("idle-audit: empty allowlist, 0 findings", () => audit("idle-audit", /0 finding\(s\), 0 not allowlisted/));
 test("neutrality-audit: empty allowlist, 0 findings (incl. K3)", () => audit("neutrality-audit", /TOTAL findings 0, warnings 0, allowlisted 0/));
+
+test("palette: field never stretches into free height, and the stack is top-anchored", () => {
+  assert.match(readFileSync("src/style/ui.css", "utf8"), /\.stack > \.island-field \{\s*flex: none;\s*\}/);
+  assert.match(readFileSync("src/views/views.ts", "utf8"), /padding:18px 16px 14px 84px;gap:6px;justify-content:flex-start/);
+});

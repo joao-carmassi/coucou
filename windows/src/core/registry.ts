@@ -1,6 +1,7 @@
 // Starts and stops modules. Gets the module list and catalog injected (src/boot/*): imports no module.
 // Nothing here runs at import time: no timers, no listeners.
 
+import { Actions } from "./actions";
 import { Avatar } from "./avatar";
 import { Bridge, onEvent } from "./bridge";
 import { Compact } from "./compact";
@@ -40,7 +41,7 @@ let opening: string | null = null;
 function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
   const mySettings = moduleSettings(id, MODULE_INFO.find((m) => m.id === id)?.settingsDefaults);
   const timeout = (fn: () => void, ms: number): Disposer => {
-    const d: Disposer = () => window.clearTimeout(t);
+    const d: Disposer = () => { window.clearTimeout(t); scope.remove(d); };
     const t = window.setTimeout(() => { scope.remove(d); fn(); }, ms);
     return scope.add(d);
   };
@@ -120,6 +121,7 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
       gulp: () => host.avatarGulp(),
       tint: (c) => host.avatarTint(c),
       bodyColor: () => host.avatarBodyColor(),
+      level: (v) => host.avatarLevel(v),
       glow: glowOf,
       defineMood(local, def) {
         const name = `${id}.${local}` as const;
@@ -146,6 +148,12 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
         const off: Disposer = () => { cancel?.(); scope.remove(off); r(); };
         return scope.add(off);
       },
+      notice(n) {
+        if (State.paused) return () => {};
+        const r = host.addNotice(id, n);
+        const off: Disposer = () => { scope.remove(off); r(); };
+        return scope.add(off);
+      },
       busy: () => Requests.busy(),
       setView: (v) => host.setView(v),
       close: () => host.collapse(),
@@ -165,6 +173,13 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
       mouseLocal: () => State.mouseInIsland,
       redraw: () => host.redraw(),
       overlay: (o) => scope.add(host.addOverlay(o)),
+    },
+    actions: {
+      add(def) {
+        const r = Actions.add(id, def);
+        const off: Disposer = () => { scope.remove(off); r(); };
+        return scope.add(off);
+      },
     },
     provide: ((key: string, impl: unknown) =>
       scope.add(key.includes(".") ? Services.provide(key, impl) : Hooks.provide(key as keyof IslandHooks, impl as never))) as IslandApi["provide"],

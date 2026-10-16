@@ -30,6 +30,8 @@ fn catalog() {
         );
     }
     out += "];\n";
+    let essential: Vec<String> = all.iter().filter(|m| m["essential"].as_bool() == Some(true)).map(|m| format!("{:?}", m["id"].as_str().unwrap())).collect();
+    out += &format!("/// Manifest `essential: true`: the only modules resolved while safe mode is active.\npub const ESSENTIAL: &[&str] = &[{}];\n", essential.join(", "));
     fs::write(PathBuf::from(env::var("OUT_DIR").unwrap()).join("catalog.rs"), out).unwrap();
 }
 

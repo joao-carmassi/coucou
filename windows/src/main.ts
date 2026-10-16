@@ -1,7 +1,7 @@
 // Boot sequence (entry file: boot/island.ts): boot the bridge, wire the island, start the greeting.
 
 import "./style";
-import { Bridge, IS_TAURI, onEvent } from "./core/bridge";
+import { Bridge, IS_TAURI, onEvent, type Presence } from "./core/bridge";
 import { Sound } from "./core/sound";
 import { State, type Settings } from "./core/state";
 import type { ModuleDef, ModuleInfo } from "./core/moduleApi";
@@ -21,6 +21,7 @@ export async function startIsland(modules: ModuleDef[], catalog: ModuleInfo[]) {
   island.applySettings();
   Registry.init(island, modules, catalog);
   Registry.apply(boot?.modules ?? Registry.defaults(State.settings.modulesEnabled));
+  if (boot?.safeMode) island.note("Modo seguro: o Coucou não fechou bem nas últimas inicializações.");
   await onEvent<Record<string, boolean>>("modules-changed", Registry.apply);
   if (boot && !boot.cursorPoll) island.followPageCursor();
 
@@ -50,6 +51,13 @@ export async function startIsland(modules: ModuleDef[], catalog: ModuleInfo[]) {
     }
   });
 
+  await onEvent<Presence>("presence", (p) => island.applyPresence(p));
+  await onEvent<null>("palette", () => island.openPalette());
+  await onEvent<{ name: string; error: string }>("hotkey-error", (p) => {
+    if (p.name === "palette" && p.error) island.error(`Atalho da paleta indisponível: ${p.error}`);
+  });
+
+  await onEvent<"moved" | "still" | "aborted">("island-drag-end", (end) => island.dragEnded(end));
   await onEvent<null>("screen-changed", () => void Bridge.reposition());
 
   // A hidden page gets no animation frames: the island would be heard but not seen.

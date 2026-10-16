@@ -18,13 +18,33 @@ pub struct Settings {
     pub compact_hide_interval: f64,
     /// Minutes a held task view stays the reopen target. 0 = off.
     pub focus_hold_minutes: f64,
+    /// Hide the island while a full-screen app or a call is in front.
+    pub hide_when_busy: bool,
     /// Module switches by id; a missing id means the module's default.
     pub modules_enabled: BTreeMap<String, bool>,
+    /// Version whose onboarding was finished; empty = first run (the Hub opens on the onboarding).
+    #[serde(default = "legacy_onboarded")]
+    pub onboarded_version: String,
+    /// Body colour per Mochi (pill id, "<prefix>*" or "main" -> #rrggbb).
+    pub mochi_colors: BTreeMap<String, String>,
+    /// Minutes of rest before the main Mochi sleeps. 0 = never.
+    pub mochi_sleep_minutes: f64,
+    /// Global hotkey that opens the command palette; "" = none.
+    pub palette_hotkey: String,
+    /// Island offset from the centre of each display (key = `island::monitor_key`, value = logical px).
+    pub island_placement: BTreeMap<String, f64>,
     /// Keys this build no longer knows (the removed chat's `model`, `chatBackend`…):
     /// kept so saving never drops them from an installed settings.json.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
+
+/// A file without the key predates the Hub: counted as onboarded (only a fresh install, `Default`, is "").
+fn legacy_onboarded() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+pub const DEFAULT_PALETTE_HOTKEY: &str = "Ctrl+Alt+K";
 
 fn default_compact_hide() -> f64 {
     60.0
@@ -40,7 +60,13 @@ impl Default for Settings {
             autostart: false,
             compact_hide_interval: default_compact_hide(),
             focus_hold_minutes: 1.0,
+            hide_when_busy: true,
             modules_enabled: Default::default(),
+            onboarded_version: String::new(),
+            mochi_colors: Default::default(),
+            mochi_sleep_minutes: 10.0,
+            palette_hotkey: DEFAULT_PALETTE_HOTKEY.into(),
+            island_placement: Default::default(),
             extra: Default::default(),
         }
     }
@@ -61,7 +87,7 @@ fn settings_path() -> PathBuf {
 /// The bool is false when the file exists but could not be read or parsed: the caller must not save over it.
 pub fn load() -> (Settings, bool) {
     match std::fs::read(settings_path()) {
-        Ok(bytes) => match serde_json::from_slice(&bytes) {
+        Ok(bytes) => match serde_json::from_slice(bytes.strip_prefix(&[0xEF, 0xBB, 0xBF][..]).unwrap_or(&bytes)) {
             Ok(s) => (s, true),
             Err(_) => {
                 // Keep the unreadable file for the user; the original is not touched here.
@@ -91,6 +117,34 @@ pub fn fill_defaults(catalog: &[crate::core::host::ModuleInfo], s: &mut Settings
     added
 }
 
+/// Keys that may hold credentials: /token|secret|password|api_?key|cookie/i, same as the Hub's import filter.
+fn secret_key(k: &str) -> bool {
+    let k = k.to_ascii_lowercase();
+    ["token", "secret", "password", "api_key", "apikey", "cookie"].iter().any(|s| k.contains(s))
+}
+
+/// Removes secret-looking keys at every depth.
+pub fn strip_secrets(v: &mut serde_json::Value) {
+    match v {
+        serde_json::Value::Object(m) => {
+            m.retain(|k, _| !secret_key(k));
+            m.values_mut().for_each(strip_secrets);
+        }
+        serde_json::Value::Array(a) => a.iter_mut().for_each(strip_secrets),
+        _ => {}
+    }
+}
+
+/// Pretty JSON of the settings for backup: no secret-looking keys, plus the app `version`.
+pub fn export_json(settings: &Settings, version: &str) -> String {
+    let mut v = serde_json::to_value(for_disk(settings, crate::core::safe_mode::real_modules().as_ref())).unwrap_or_default();
+    strip_secrets(&mut v);
+    if let Some(o) = v.as_object_mut() {
+        o.insert("version".into(), version.into());
+    }
+    serde_json::to_string_pretty(&v).unwrap_or_default()
+}
+
 /// `current` with the patch's top-level keys replaced; the rest (known fields and `extra`) is untouched.
 /// Err when a value has the wrong type for a known field: nothing is applied then.
 pub fn merge_patch(current: &Settings, patch: serde_json::Map<String, serde_json::Value>) -> Result<Settings, String> {
@@ -100,11 +154,36 @@ pub fn merge_patch(current: &Settings, patch: serde_json::Map<String, serde_json
 }
 
 pub fn save(settings: &Settings) -> std::io::Result<()> {
+    save_to(&for_disk(settings, crate::core::safe_mode::real_modules().as_ref()))
+}
+
+/// Safe mode runs with a reduced switch map in memory; the stored one is what reaches the disk.
+fn for_disk(settings: &Settings, real: Option<&BTreeMap<String, bool>>) -> Settings {
+    let mut s = settings.clone();
+    if let Some(r) = real {
+        s.modules_enabled = r.clone();
+    }
+    s
+}
+
+fn save_to(settings: &Settings) -> std::io::Result<()> {
     let dir = config_dir();
     crate::core::platform::ensure_private_dir(&dir)?;
     let json = serde_json::to_vec_pretty(settings)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-    std::fs::write(settings_path(), json)
+    write_atomic(&settings_path(), &json)
+}
+
+static SAVE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Temp file in the same dir, then rename over the target (replaces on Windows): a crash never leaves a half file.
+fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    let _g = SAVE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(&tmp, path).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })
 }
 
 #[cfg(test)]
@@ -122,6 +201,53 @@ mod tests {
     }
 
     #[test]
+    fn atomic_write_keeps_last_and_no_tmp() {
+        let dir = std::env::temp_dir().join(format!("coucou-atomic-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("settings.json");
+        write_atomic(&f, b"one").unwrap();
+        write_atomic(&f, b"two").unwrap();
+        assert_eq!(std::fs::read_to_string(&f).unwrap(), "two");
+        assert!(!dir.join("settings.json.tmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn safe_mode_never_reaches_the_disk() {
+        let mut s = Settings::default();
+        s.modules_enabled.insert("x".into(), false);
+        let real: BTreeMap<String, bool> = [("x".to_string(), true), ("y".to_string(), true)].into();
+        assert_eq!(for_disk(&s, Some(&real)).modules_enabled, real);
+        assert_eq!(for_disk(&s, None).modules_enabled, s.modules_enabled);
+    }
+
+    #[test]
+    fn onboarding_only_for_fresh_installs() {
+        assert_eq!(Settings::default().onboarded_version, "", "fresh install");
+        let old: Settings = serde_json::from_str(r#"{"soundVolume":0.3}"#).unwrap();
+        assert!(!old.onboarded_version.is_empty(), "upgrading user is not onboarded again");
+        let set: Settings = serde_json::from_str(r#"{"onboardedVersion":"0.1.0"}"#).unwrap();
+        assert_eq!(set.onboarded_version, "0.1.0");
+    }
+
+    #[test]
+    fn export_drops_secret_keys_at_any_depth() {
+        let mut s = Settings::default();
+        s.extra.insert("githubToken".into(), "ghp_LEAK".into());
+        s.extra.insert("nested".into(), serde_json::json!({"apiKey": "k_LEAK", "API_KEY2": "x", "keep": 1, "list": [{"Cookie": "c_LEAK", "ok": true}]}));
+        s.extra.insert("clientSecret".into(), "s_LEAK".into());
+        s.extra.insert("idleOpen".into(), "vscode".into());
+        let out = export_json(&s, "9.9.9");
+        assert!(!out.contains("LEAK"), "{out}");
+        assert!(!out.contains("API_KEY2"));
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["version"], "9.9.9");
+        assert_eq!(v["idleOpen"], "vscode");
+        assert_eq!(v["nested"]["keep"], 1);
+        assert_eq!(v["nested"]["list"][0]["ok"], true);
+    }
+
+    #[test]
     fn load_invalid_json_flags_and_keeps_file() {
         let dir = std::env::temp_dir().join(format!("coucou-settings-test-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("Coucou")).unwrap();
@@ -133,6 +259,11 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&file).unwrap(), "{ not json");
         std::fs::remove_file(&file).unwrap();
         assert!(load().1, "missing file is a normal first run");
+        // Notepad and PowerShell 5 write a BOM: that file is fine.
+        std::fs::write(&file, [&[0xEF, 0xBB, 0xBF][..], br#"{"soundVolume":0.5}"#].concat()).unwrap();
+        let (s, ok) = load();
+        assert!(ok && s.sound_volume == 0.5, "BOM is stripped");
+        std::fs::remove_file(&file).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
     }
 

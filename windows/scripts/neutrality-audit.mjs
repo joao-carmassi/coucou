@@ -23,7 +23,7 @@
 //
 // Rules:
 //   1. TS import path containing `/modules/` (core/registry.ts and settings/main.ts may import modules/settings + catalog).
-//   2. Module id / label / group (derived from src/modules/* folders and their manifest.json) as a whole word in code
+//   2. Module id / label / group / machineKeys / non-generic preset ids (derived from src/modules/* folders and their manifest.json) as a whole word in code
 //      (comment hits carry the rule suffix "(comment)" and fail too).
 //   3. Concept denylist (approval, session, overview, ...) in code or comments.
 //   4. CSS: a selector of a core sheet (src/style, src/settings) must not use a module's class prefix (gh-, sess-, int-, ...).
@@ -45,7 +45,8 @@ const fail = !process.argv.includes("--warn");
 const failLints = !process.argv.includes("--warn-lints") && !process.argv.includes("--warn");
 
 const ALLOWLIST = []; // must stay empty (tests/audits.test.ts); a stale entry would fail below
-const CORE_EVENTS = ["cursor", "tray", "screen-changed", "settings-changed", "settings-shown", "modules-changed", "file-drag", "hotkey-error", "inbox-added"];
+const CORE_EVENTS = ["cursor", "tray", "screen-changed", "settings-changed", "settings-shown", "modules-changed", "file-drag", "hotkey-error", "inbox-added", "presence", "palette"];
+const GENERIC_PRESETS = ["essencial", "dev", "tudo"]; // the Hub labels these itself; any other preset id is a module's name
 const CONCEPTS = ["approval", "session", "overview", "github", "wsl", "transcript", "claude", "voice", "media"];
 
 const files = (dir, ext) => {
@@ -68,7 +69,12 @@ const names = new Set(readdirSync(join(root, "src/modules")).filter((n) => statS
 for (const n of [...names]) {
   const f = join(root, "src/modules", n, "manifest.json");
   if (!existsSync(f)) continue;
-  for (const m of [JSON.parse(readFileSync(f, "utf8"))].flat()) for (const k of ["id", "label", "group"]) if (m[k]) names.add(m[k]);
+  for (const m of [JSON.parse(readFileSync(f, "utf8"))].flat()) {
+    for (const k of ["id", "label", "group"]) if (m[k]) names.add(m[k]);
+    // Keys a module declares as per-machine, and preset ids beyond the generic ones, are as much its names as its id.
+    for (const k of m.machineKeys ?? []) names.add(k);
+    for (const p of m.presets ?? []) if (!GENERIC_PRESETS.includes(p)) names.add(p);
+  }
 }
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const wordRe = (list) => new RegExp(`(?<![\\p{L}\\p{N}_])(${[...list].map(esc).join("|")})(?![\\p{L}\\p{N}_])`, "iu");

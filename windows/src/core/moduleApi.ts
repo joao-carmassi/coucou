@@ -67,6 +67,33 @@ export interface Overlay {
   leaving?(nextView: string): void;
 }
 export type { RequestSpec };
+/** A short line on the compact island (api.island.notice). */
+export interface Notice {
+  text: string;
+  /** BAND scale; >= BAND.URGENT ignores presence quiet. Default BAND.NOTICE. */
+  priority?: number;
+  /** On-screen time once shown; default 4000, clamped to 1500..15000. */
+  ms?: number;
+  /** The same owner + key replaces in place (the on-screen time restarts). */
+  key?: string;
+  /** A click on the compact island while this is shown opens this view. */
+  view?: string;
+  /** May reveal a hidden island to compact (never while presence is quiet, unless urgent). */
+  peek?: boolean;
+}
+/** A command for the palette (api.actions.add) and, with `key`, for Alt+<key>. */
+export interface ActionDef {
+  /** Local id; the core stamps "<moduleId>.<id>". */
+  id: string;
+  title: string;
+  keywords?: readonly string[];
+  /** One [a-z0-9]: Alt+<key> while the island has the keyboard. The first to claim it keeps it; duplicates warn. */
+  key?: string;
+  /** Not offered (palette, shortcut) while this says false. */
+  when?(): boolean;
+  /** A throw or rejection goes to api.island.error. */
+  run(): void | Promise<void>;
+}
 /** Where home is (hover / click on the compact island); to hold the island open on a card use api.island.request. */
 export interface HomeRequest { view: string; priority: number }
 export interface IslandHooks {
@@ -86,6 +113,8 @@ export interface IslandHost {
   open(view: string): void;
   /** The core queue: see api.island.request. `owner` is the module id. */
   addRequest(owner: string, spec: RequestSpec): Disposer;
+  /** The core notice queue: see api.island.notice. `owner` is the module id. */
+  addNotice(owner: string, n: Notice): Disposer;
   hide(): void;
   collapse(): void;
   reveal(): void;
@@ -105,6 +134,7 @@ export interface IslandHost {
   avatarGulp(): void;
   avatarTint(color: string | null): void;
   avatarBodyColor(): string | null;
+  avatarLevel(v: number): void;
 }
 
 export interface IslandApi {
@@ -130,6 +160,8 @@ export interface IslandApi {
   avatar: { publish(sig: AvatarSignal | null): void;
     /** The glow behind Mochi for a mood (colour and opacity); idle's for an unknown name. */
     glow(mood: string): { color: string; opacity: number }; emote(e: BotEmoteName): void; morph(v: number): void; gulp(): void; tint(color: string | null): void; bodyColor(): string | null;
+    /** Loudness 0..1 (squash <= 6 %); calls under 33 ms apart are dropped, it decays to 0 in 300 ms. 0 / never = inert. */
+    level(v: number): void;
     /**
      * Defines a Mochi mood of this module and returns its name, "<moduleId>.<local>": use that name in avatar.publish,
      * pills.set and mochi.free/sprite. Removed when the module stops (anything still wearing it draws as idle).
@@ -184,6 +216,14 @@ export interface IslandApi {
      * `pin` holds the island open (no auto-close, Esc or click-outside) while it is in front. `ms` disposes it by itself.
      */
     request(spec: RequestSpec): Disposer;
+    /**
+     * A short line on the compact island, queued with the other modules' (highest priority first, then oldest; 12 at most).
+     * It shows only while the island is compact and no stronger status line or request is up; its on-screen time starts when it shows.
+     * Hidden or open island: it waits (60 s at most) unless `peek` reveals the compact island. Not shown while the user is in a
+     * full-screen app or a call (setting "Ocultar durante tela cheia e chamadas"), except `priority >= BAND.URGENT`.
+     * Dropped by the disposer, by this module stopping and by Pause (while paused the call is a no-op).
+     */
+    notice(n: Notice): Disposer;
     /** True while any pinned request exists (a note over it would be rude). */
     busy(): boolean;
     setView(view: string): void; close(): void; wake(): void; hide(): void;
@@ -202,6 +242,10 @@ export interface IslandApi {
     /** Asks for a redraw on the next frame. */
     redraw(): void;
   };
+  actions: {
+    /** Adds a command to the palette (and Alt+<key>); removed by the disposer or when this module stops. */
+    add(def: ActionDef): Disposer;
+  };
   provide<K extends keyof IslandHooks>(hook: K, fn: IslandHooks[K]): Disposer;
   /** Offers a service under a namespaced key ("<module>.<name>"; the types live in that module's api.ts). Removed when this module stops. */
   provide<T>(service: `${string}.${string}`, impl: T): Disposer;
@@ -219,6 +263,10 @@ export interface ModuleInfo {
   group?: string;
   /** The module's keys in the flat settings.json, with their defaults (manifest.json). New keys start with the module id. */
   settingsDefaults?: Record<string, unknown>;
+  /** Preset ids that switch the module on (manifest.json). */
+  presets?: string[];
+  /** Settings keys that belong to this machine (paths, install state): Hub import never applies them. */
+  machineKeys?: string[];
 }
 /** Behaviour only: label, default, requirements and group live in the module's manifest.json. */
 export interface ModuleDef {

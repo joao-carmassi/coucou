@@ -68,3 +68,20 @@ test("timer module is off by default, on when enabled", async () => {
   assert.equal(resolveEnabled(MODULE_INFO, {}).timer, false);
   assert.equal(resolveEnabled(MODULE_INFO, { timer: true }).timer, true);
 });
+
+import { pomoNext, pomoStart, pomoCfg, pomoMinutes, POMO_DEFAULTS, type PomoState } from "../src/modules/timer/pomodoro.ts";
+
+test("pomodoro: 4 cycles, long break on the 4th, then back to cycle 1", () => {
+  const seq: string[] = [];
+  let s: PomoState = pomoStart();
+  for (let i = 0; i < 9; i++) { seq.push(`${s.phase}${s.cycle}`); s = pomoNext(s, POMO_DEFAULTS); }
+  assert.deepEqual(seq, ["work1", "short1", "work2", "short2", "work3", "short3", "work4", "long4", "work1"]);
+  assert.equal(pomoMinutes({ phase: "long", cycle: 4 }, POMO_DEFAULTS), 15);
+  assert.equal(pomoNext({ phase: "work", cycle: 2 }, { ...POMO_DEFAULTS, every: 2 }).phase, "long");
+});
+
+test("pomodoro: bad settings fall back to defaults", () => {
+  assert.deepEqual(pomoCfg({ work: 0, short: "x", long: 30, every: 99 }), { ...POMO_DEFAULTS, long: 30 });
+  assert.deepEqual(pomoCfg(null), POMO_DEFAULTS);
+});
+

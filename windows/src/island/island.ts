@@ -2,7 +2,7 @@
 // Mirrors IslandRootView.swift + IslandWindowController.swift. Core only.
 
 import { Tracked, Spring, clamp, mixColor } from "../core/anim";
-import { Bridge, IS_TAURI } from "../core/bridge";
+import { Bridge, IS_TAURI, type Presence } from "../core/bridge";
 import { wipe } from "../kit/canvas";
 import {
   COMPACT_BOT_CX, COMPACT_CONTENT_X, COMPACT_PAD, EXPANDED_CORNER, PANEL_W,
@@ -13,16 +13,20 @@ import type { BotEmoteName, IslandMode, IslandViewName } from "../core/layout";
 import { Avatar } from "../core/avatar";
 import { Hooks, emitMode } from "../core/hooks";
 import { glowOf } from "../mochi/moods";
-import { EXPANDED_W, PANEL_H } from "../core/moduleApi";
-import type { Disposer, IslandHost, Overlay, TabDef, ViewContext, ViewDef } from "../core/moduleApi";
+import { BAND, EXPANDED_W, PANEL_H } from "../core/moduleApi";
+import type { Disposer, IslandHost, Notice, Overlay, StatusLine, TabDef, ViewContext, ViewDef } from "../core/moduleApi";
 import { Holds, Last } from "../core/holds";
 import { Requests, type Req, type RequestSpec } from "../core/requests";
+import { Compact } from "../core/compact";
+import { NoticeQueue, type NoticeEntry } from "../core/notices";
 import { Sound } from "../core/sound";
+import { Actions, type Entry } from "../core/actions";
+import { colorFor } from "../core/pills";
 import { State } from "../core/state";
-import { BotEngine, hexToRGB, type RGB } from "../mochi/engine";
+import { BotEngine, hexToRGB, sleepDue, type RGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
 import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
-import { buildHeader, buildViews, type Header, type ViewActions, type ViewHost } from "../views/views";
+import { buildHeader, buildViews, type Header, type PaletteView, type ViewActions, type ViewHost } from "../views/views";
 import { h } from "../kit/dom";
 import { IslandStateMachine, type FsmState } from "./fsm";
 
@@ -63,6 +67,8 @@ export class Island implements IslandHost {
   private viewDefs = new Map<string, ViewDef>();
   private overlays = new Set<Overlay>();
   private kbFocus = false;
+  /** Where the palette came from: Esc and a pick return there (never read while another view is up). */
+  private palettePrev: { mode: IslandMode; view: string } | null = null;
 
   private width = new Tracked(compactWidth(0, 0));
   private widthTarget = -1;
@@ -98,7 +104,7 @@ export class Island implements IslandHost {
   /** The view being opened, read by the home transition (forceHome runs it synchronously). */
   private homeTarget: string | null = null;
   /** Last shape handed to Rust for the click-through test. */
-  private pushedRect = { x: -1, y: -1, w: -1, h: -1 };
+  private pushedRect = { x: -1, y: -1, w: -1, h: -1, compact: false };
   private homeCollapseAt: number | null = null;
 
   // Bot hover → love (IslandWindowController.botHoverIn)
@@ -122,6 +128,19 @@ export class Island implements IslandHost {
 
   private noteTimer: number | null = null;
 
+  // Notices (api.island.notice): the queue, the one entry on the compact line, and the single timeout.
+  private notices = new NoticeQueue();
+  private noticeEntry: NoticeEntry | null = null;
+  private noticeLine: StatusLine | null = null;
+  private noticeTimer: number | null = null;
+  /** Presence: a full-screen app, presentation, quiet hours or a call is in front (only known while watching). */
+  private quiet = false;
+  private watching = false;
+  /** The watch was just turned on and has not answered yet: hold the non-urgent ones meanwhile. */
+  private presencePending = false;
+  /** Inside clickCompact: only a click consumes the notice on show. */
+  private clicked = false;
+
   constructor(root: HTMLElement) {
     this.root = root;
     this.actions = this.makeActions();
@@ -130,6 +149,11 @@ export class Island implements IslandHost {
     this.wireInput();
     this.engine.onDizzy = () => this.handleDizzy();
     this.greeting.onComplete = () => this.fsm.greetComplete();
+    State.onPause((paused) => {
+      if (!paused) return;
+      this.notices.clear();
+      this.syncNotices();
+    });
     State.subscribe(() => {
       this.dirty = true;
       // Hidden draws nothing (h 0, bot opacity 0): keep the flag only; the next
@@ -185,7 +209,7 @@ export class Island implements IslandHost {
       const d = this.viewDefs.get(v);
       return d?.tabOf ?? (d?.lightsHome ? State.tabs.find((t) => t.home)?.view : undefined);
     });
-    this.views = buildViews(this.actions);
+    this.views = buildViews(this.actions, (e) => this.pickPalette(e));
     this.viewsEl = h("div", { id: "views" });
     for (const v of this.views.values()) this.viewsEl.append(v.el);
     this.contentEl = h("div", { id: "content" }, this.header.el, this.viewsEl);
@@ -235,11 +259,13 @@ export class Island implements IslandHost {
           const r = Requests.front();
           const target = this.homeTarget;
           this.homeTarget = null;
+          // A click on the compact island consumes the notice it shows; its view comes after a waiting request.
+          const noticed = target === null && this.clicked ? this.consumeNotice() : null;
           // Reopened on the waiting request (hover, or opened on its own view): it holds the island again.
           // Opened on some other view, the parked request stays parked.
           if (r && (target === null || target === r.view)) Requests.parked = false;
           this.syncPin();
-          this.expand(target ?? r?.view ?? this.resting() ?? State.defaultView());
+          this.expand(target ?? r?.view ?? noticed ?? this.resting() ?? State.defaultView());
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
         }
@@ -276,6 +302,7 @@ export class Island implements IslandHost {
       void Bridge.focusWindow(false);
     }
     if (mode !== "expanded") this.engine.resetMorph();
+    this.syncWatch();
     emitMode(mode, prev);
     this.updateWindowCollapsed();
     this.animateGeometry(modeOrder(mode) < modeOrder(prev));
@@ -360,6 +387,83 @@ export class Island implements IslandHost {
     if (this.fsm.state === "home" && !this.wasInIsland) this.fsm.mouseLeft();
   }
 
+  // ── Palette + keys ──────────────────────────────────────────────────────────
+
+  /** Opens the palette; over a waiting pinned request it only brings that request back. */
+  openPalette() {
+    if (Requests.front()?.pin) { void Bridge.forgetForeground(); return this.reopen(); }
+    if (State.mode === "expanded" && State.view === "palette") return;
+    this.palettePrev = { mode: State.mode, view: State.view };
+    (this.views.get("palette") as PaletteView).reset();
+    this.open("palette");
+  }
+
+  /** Back to where the palette came from, or folded. */
+  private closePalette() {
+    const p = this.palettePrev;
+    this.palettePrev = null;
+    if (p?.mode === "expanded" && p.view !== "palette") this.setView(p.view);
+    else this.collapse();
+  }
+
+  private pickPalette(e: Entry) {
+    this.closePalette();
+    Actions.exec(e.run, (err) => this.error(err));
+  }
+
+  /** The central key handler, before the Esc line: palette keys, Ctrl+K, Ctrl+Tab, Alt+<key>. True when it took the key. */
+  private onPaletteKey(e: KeyboardEvent): boolean {
+    const expanded = State.mode === "expanded";
+    if (expanded && State.view === "palette") {
+      const p = this.views.get("palette") as PaletteView;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        p.move(e.key === "ArrowDown" ? 1 : -1);
+        return true;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const cur = p.current();
+        if (cur) this.pickPalette(cur);
+        return true;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        this.closePalette();
+        return true;
+      }
+    }
+    const k = e.key.toLowerCase();
+    if (e.ctrlKey && !e.altKey && !e.metaKey && k === "k") {
+      const t = e.target as Element | null;
+      const other = t?.closest?.("input, textarea, [contenteditable]") && !t.closest("[data-palette]");
+      if (document.hasFocus() && !other) {
+        e.preventDefault();
+        this.openPalette();
+        return true;
+      }
+    }
+    if (e.ctrlKey && !e.altKey && !e.metaKey && e.key === "Tab" && expanded && !State.isPinned && State.tabs.length) {
+      const own = this.viewDefs.get(State.view)?.tabOf ?? State.view;
+      const at = State.tabs.findIndex((t) => t.view === own || (t.home && State.view === State.defaultView()));
+      const n = State.tabs.length;
+      const next = State.tabs[at < 0 ? (e.shiftKey ? n - 1 : 0) : (at + (e.shiftKey ? -1 : 1) + n) % n];
+      e.preventDefault();
+      this.actions.setView(next.home ? State.defaultView() : next.view);
+      return true;
+    }
+    // !ctrlKey: AltGr is Ctrl+Alt on ABNT2 and types characters.
+    if (e.altKey && !e.ctrlKey && !e.metaKey && !e.repeat && /^[a-z0-9]$/.test(e.key)) {
+      const a = Actions.byKey(e.key);
+      if (a) {
+        e.preventDefault();
+        Actions.run(a.key, (err) => this.error(err));
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** The only write of fsm.pinned: the front request's pin. */
   private syncPin() {
     this.fsm.pinned = Requests.pinned();
@@ -397,6 +501,115 @@ export class Island implements IslandHost {
     this.fsm.forceHidden();
   }
 
+  // ── Notices + presence ──────────────────────────────────────────────────────
+
+  addNotice(owner: string, n: Notice): Disposer {
+    const wasEmpty = this.notices.size === 0;
+    const off = this.notices.add(owner, n, performance.now());
+    // A fullscreen exit may have fired no foreground event: ask again when something starts waiting.
+    if (wasEmpty && this.watching) this.askPresence();
+    this.syncNotices();
+    return () => {
+      off();
+      this.syncNotices();
+    };
+  }
+
+  /** Presence holds non-urgent notices only while the setting is on. */
+  private holdNotices(): boolean {
+    return State.settings.hideWhenBusy && (this.quiet || this.presencePending);
+  }
+
+  /**
+   * Puts the front notice on the compact line (owner "#notice"), reveals a hidden island for a `peek` one, drops finished
+   * ones and re-arms the single timeout: armed only while the queue is not empty.
+   */
+  private syncNotices() {
+    const now = performance.now();
+    this.notices.expired(now);
+    this.syncWatch(); // first: turning it on holds the non-urgent ones until the OS has answered
+    const front = this.notices.front(now, this.holdNotices());
+    const line = this.noticeLine;
+    if (front !== this.noticeEntry || (front && line && (front.text !== line.text || front.priority !== line.priority))) {
+      this.noticeEntry = front;
+      this.noticeLine = front ? { priority: front.priority, text: front.text, overGrid: true } : null;
+      Compact.set("#notice", this.noticeLine);
+      this.redraw();
+    } else if (front && front.shownAt == null) this.redraw(); // re-added on screen: its on-screen time restarts at the next sync
+    if (this.noticeTimer != null) window.clearTimeout(this.noticeTimer);
+    this.noticeTimer = null;
+    const due = this.notices.nextDeadline(now);
+    if (due != null) {
+      this.noticeTimer = window.setTimeout(() => {
+        this.noticeTimer = null;
+        this.syncNotices();
+      }, Math.max(0, due - now) + 5);
+    }
+    if (front?.peek && State.mode === "hidden") this.fsm.reveal();
+  }
+
+  /** The line on show is the notice: from now on its on-screen time runs. */
+  private startNoticeClock() {
+    const e = this.noticeEntry;
+    if (!e || e.shownAt != null || State.mode !== "compact" || State.statusLine !== this.noticeLine) return;
+    this.notices.shown(e, performance.now());
+    this.syncNotices();
+  }
+
+  /** Takes the notice the compact island is showing off the queue; returns its view (if it has a known one). */
+  private consumeNotice(): string | null {
+    const e = this.noticeEntry;
+    if (!e || e.shownAt == null || State.mode !== "compact" || State.statusLine !== this.noticeLine) return null;
+    this.notices.drop(e);
+    this.syncNotices();
+    return e.view && this.known(e.view) ? e.view : null;
+  }
+
+  /**
+   * The OS presence watch (one blocked thread in Rust, zero CPU) runs only while there is something to hide or hold:
+   * the setting is on and the island is visible or a notice waits.
+   */
+  private syncWatch() {
+    const want = State.settings.hideWhenBusy && (State.mode !== "hidden" || this.notices.size > 0);
+    if (want === this.watching) return;
+    this.watching = want;
+    if (!want) {
+      this.quiet = this.presencePending = false;
+      void Bridge.presenceWatch(false);
+      return;
+    }
+    this.askPresence();
+  }
+
+  /** The answer is the current state: taken silently (whoever woke the island meant to see it). */
+  private askPresence() {
+    this.presencePending = true;
+    void Bridge.presenceWatch(true).then((p) => {
+      if (!this.watching) return;
+      this.presencePending = false;
+      this.applyPresence(p ?? { quiet: false, mic: false }, true);
+    });
+  }
+
+  /** The only way a press on the compact island reaches the FSM: a click may consume the notice it shows. */
+  private clickCompact() {
+    this.clicked = true;
+    try { this.fsm.click(); } finally { this.clicked = false; }
+  }
+
+  /** From the `presence` event (and the first answer of the watch). A change into quiet folds a visible island. */
+  applyPresence(p: Presence, silent = false) {
+    const was = this.quiet;
+    this.quiet = p.quiet;
+    if (!silent && !was && p.quiet && State.settings.hideWhenBusy) {
+      // Requests ignore presence: a pinned one, or any at urgent priority, keeps the island up.
+      const front = Requests.front();
+      const keep = Requests.pinned() || (front?.priority ?? 0) >= BAND.URGENT;
+      if (State.mode !== "hidden" && !keep && !(State.mode === "expanded" && this.mouseInside())) this.fsm.forceHidden();
+    }
+    this.syncNotices();
+  }
+
   reveal() {
     this.fsm.reveal();
   }
@@ -431,11 +644,19 @@ export class Island implements IslandHost {
       // A Mochi with news to tell takes you to it (a module's avatarClick); any other gets his slap.
       if (!Hooks.some("avatarClick")) this.engine.slap();
     } else if (this.nudge) {
-      const moved = this.nudge.moved;
+      const { moved } = this.nudge;
       this.nudge = null;
       if (moved) this.scheduleNudgeReturn();
-      else this.fsm.click();
+      else this.clickCompact();
     }
+  }
+
+  /** Rust finished an Alt-drag (placement already saved): the island is back at the window centre. */
+  dragEnded(end: "moved" | "still" | "aborted") {
+    this.offsetX.set(0);
+    this.clearNudgeTimer();
+    this.ensureRunning();
+    if (end === "still" && State.mode === "compact") this.clickCompact();
   }
 
   // ── Geometry ────────────────────────────────────────────────────────────────
@@ -530,9 +751,10 @@ export class Island implements IslandHost {
 
     const rect = { x: (PANEL_W - w) / 2 + off, y: 0, w, h: hh };
     const p = this.pushedRect;
-    if (Math.abs(p.x - rect.x) > 0.5 || Math.abs(p.w - rect.w) > 0.5 || Math.abs(p.h - rect.h) > 0.5) {
-      this.pushedRect = rect;
-      void Bridge.setIslandRect(rect.x, rect.y, rect.w, rect.h);
+    const compact = State.mode === "compact";
+    if (Math.abs(p.x - rect.x) > 0.5 || Math.abs(p.w - rect.w) > 0.5 || Math.abs(p.h - rect.h) > 0.5 || p.compact !== compact) {
+      this.pushedRect = { ...rect, compact };
+      void Bridge.setIslandRect(rect.x, rect.y, rect.w, rect.h, compact);
     }
   }
 
@@ -601,8 +823,11 @@ export class Island implements IslandHost {
       Sound.resume();
       if (State.mode !== "expanded") {
         // Compact opens on the release: a press that travels is a sideways nudge.
-        if (State.mode === "compact") this.nudge = { x: e.clientX, off: this.offset(this.width.value), moved: false };
-        else this.fsm.click();
+        if (State.mode === "compact") {
+          // Alt: Rust owns the whole drag (one system); a plain press is the glide-home nudge.
+          if (e.altKey) void Bridge.beginIslandDrag();
+          else this.nudge = { x: e.clientX, off: this.offset(this.width.value), moved: false };
+        } else this.clickCompact();
         return;
       }
       // The slap (or news) waits for the release: past 7 px this is a drag-out.
@@ -616,6 +841,7 @@ export class Island implements IslandHost {
     });
 
     window.addEventListener("keydown", (e) => {
+      if (this.onPaletteKey(e)) return;
       if (e.key === "Escape" && State.mode === "expanded" && !State.isPinned) this.collapse();
     });
 
@@ -801,6 +1027,7 @@ export class Island implements IslandHost {
       this.syncDom();
     }
 
+    this.tickRest(nowMs);
     this.updateBotTargets();
     this.botCx.step(dt);
     this.botCy.step(dt);
@@ -921,14 +1148,36 @@ export class Island implements IslandHost {
 
   /** What the avatar wears: override > strongest module signal > focused task > idle. */
   private effState() {
+    const s = this.rawState();
+    return s === "idle" && this.asleep ? "sleeping" : s;
+  }
+
+  private rawState() {
     return Avatar.state(State.focusPill?.mood ?? State.avatarState ?? "idle", State.stateOverride);
+  }
+
+  private asleep = false;
+  private restSince = performance.now();
+
+  /** Compact rest: dozes off after mochiSleepMinutes with no mood and no cursor; any activity wakes him. Runs in the frame. */
+  private tickRest(nowMs: number) {
+    const active = State.mode !== "compact" || this.wasInIsland || this.rawState() !== "idle";
+    if (active) {
+      this.restSince = nowMs;
+      if (this.asleep) { this.asleep = false; this.engine.setState(this.effState()); }
+    } else if (!this.asleep && sleepDue(this.restSince, nowMs, State.settings.mochiSleepMinutes ?? 10)) {
+      this.asleep = true;
+      this.engine.setState(this.effState());
+    }
   }
 
   /** The colour Mochi should be: his focused pill colour, else his own cream. */
   private targetBodyColor(): RGB | null {
     if (this.tintRequest) return this.tintRequest;
     const focus = State.focusPill;
-    return focus ? hexToRGB(focus.color) : null;
+    const map = State.settings.mochiColors;
+    if (focus) return hexToRGB(colorFor(map, focus.id, focus.color));
+    return map?.main && /^#[0-9a-f]{6}$/i.test(map.main) ? hexToRGB(map.main) : null;
   }
 
   /**
@@ -996,7 +1245,7 @@ export class Island implements IslandHost {
       view.el.classList.toggle("on", on);
       if (on) view.sync();
     }
-    const kb = expanded && !!this.viewDefs.get(State.view)?.keyboard;
+    const kb = expanded && (State.view === "palette" || !!this.viewDefs.get(State.view)?.keyboard);
     if (kb !== this.kbFocus) {
       this.kbFocus = kb;
       void Bridge.focusWindow(kb);
@@ -1048,6 +1297,7 @@ export class Island implements IslandHost {
     syncMiniBotStates(State.pills);
     pruneMiniBots();
     this.engine.setState(this.effState());
+    this.startNoticeClock();
   }
 
   // ── IslandHost (what the registry gets) ─────────────────────────────────────
@@ -1143,6 +1393,11 @@ export class Island implements IslandHost {
     this.ensureRunning();
   }
 
+  avatarLevel(v: number) {
+    // Hidden: nothing is drawn, so no frame is requested; the value just decays.
+    if (this.engine.setLevel(v) && v > 0.02 && State.mode !== "hidden") this.ensureRunning();
+  }
+
   /** Body color the island Mochi is currently drawn with (#rrggbb), or null for the default. */
   avatarBodyColor(): string | null {
     const c = this.engine.bodyColor;
@@ -1162,6 +1417,8 @@ export class Island implements IslandHost {
     this.fsm.petitToHiddenDelay = State.settings.compactHideInterval;
     // Re-arm with the new delay (or cancel it, for "never") if already minimized.
     if (this.fsm.state === "petit" && !this.wasInIsland) this.fsm.mouseLeft();
+    syncMiniBotStates(State.pills); // a changed colour map reaches the minis now
+    this.syncNotices();
     State.notify();
   }
 

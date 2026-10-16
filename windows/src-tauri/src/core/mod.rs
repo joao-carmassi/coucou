@@ -3,11 +3,16 @@
 
 pub mod b64;
 pub mod drop_target;
+pub mod fswatch;
 pub mod host;
 pub mod inbox;
 pub mod hotkeys;
 pub mod island;
 pub mod log;
 pub mod platform;
+pub mod presence;
+pub mod relay;
+pub mod safe_mode;
+pub mod secrets;
 pub mod settings;
 pub mod tray;

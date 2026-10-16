@@ -7,5 +7,12 @@
     "boardPrimary": "claude",
     "focusHoldMinutes": 1,
     "modulesEnabled": {}
-  }
+  },
+  "presets": [
+    "essencial",
+    "dev",
+    "tudo",
+    "vitrine"
+  ],
+  "essential": true
 }

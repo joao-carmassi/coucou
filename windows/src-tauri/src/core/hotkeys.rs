@@ -192,5 +192,6 @@ mod tests {
         assert_eq!(clean("ctrl + alt+v", "X"), "Ctrl+Alt+V");
         assert_eq!(clean("", "X"), "");
         assert_eq!(clean("nope", "X"), "X");
+        assert_eq!(clean("ctrl+alt+k", "X"), "Ctrl+Alt+K");
     }
 }

@@ -35,6 +35,7 @@ pub struct BootInfo {
     /// the cursor from its own mouse events.
     cursor_poll: bool,
     modules: BTreeMap<String, bool>,
+    safe_mode: bool,
 }
 
 #[tauri::command]
@@ -51,6 +52,7 @@ fn boot(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>) -> BootI
         version: env!("CARGO_PKG_VERSION").to_string(),
         cursor_poll: platform::CURSOR_POLL,
         modules: host.state(),
+        safe_mode: core::safe_mode::active(),
     }
 }
 
@@ -72,14 +74,19 @@ fn save_settings(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>,
             settings.modules_enabled = current.modules_enabled.clone();
         }
         host.on_save(&current, &mut settings);
+        // A changed switch map during safe mode is the user's choice: keep it (and leave safe mode) instead of losing it on exit.
+        core::safe_mode::adopt(&mut settings.modules_enabled, &current.modules_enabled);
+        settings.palette_hotkey = core::hotkeys::clean(&settings.palette_hotkey, settings::DEFAULT_PALETTE_HOTKEY);
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
+        let screen_changed = screen_changed || current.island_placement != settings.island_placement;
         *current = settings.clone();
+        // Saved inside the lock so two saves reach the disk in the order they were merged.
+        if let Err(err) = settings::save(&settings) {
+            eprintln!("[coucou] could not save settings: {err}");
+        }
         (settings, screen_changed, autostart_changed)
     };
-    if let Err(err) = settings::save(&settings) {
-        eprintln!("[coucou] could not save settings: {err}");
-    }
     if autostart_changed {
         let manager = app.autolaunch();
         let result = if settings.autostart { manager.enable() } else { manager.disable() };
@@ -93,9 +100,31 @@ fn save_settings(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>,
     }
     // After the Shared lock is released: a module's start may need it.
     host.sync(&app, &settings);
+    set_palette_hotkey(&app, &settings);
     // Keep the other window in step (island ⇄ settings window).
     let _ = app.emit("settings-changed", settings);
     Ok(())
+}
+
+/// Hub backup: settings as pretty JSON, secret-looking keys removed, with the app version.
+#[tauri::command]
+fn settings_export(shared: State<Shared>) -> String {
+    settings::export_json(&shared.settings.lock().unwrap(), env!("CARGO_PKG_VERSION"))
+}
+
+/// Hub banner button: the stored module switches replace the reduced ones, the marker is cleared and the host syncs.
+#[tauri::command]
+fn safe_mode_exit(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>) -> bool {
+    let settings = {
+        let mut current = shared.settings.lock().unwrap();
+        if !core::safe_mode::exit(&mut current.modules_enabled) {
+            return false;
+        }
+        current.clone()
+    };
+    host.sync(&app, &settings);
+    let _ = app.emit("settings-changed", settings);
+    true
 }
 
 /// Hidden island → shrink the window to the invisible wake strip and park the
@@ -112,8 +141,13 @@ fn set_collapsed(app: AppHandle, shared: State<Shared>, collapsed: bool) {
 
 /// The front end pushes the island shape; Rust decides click-through from it.
 #[tauri::command]
-fn set_island_rect(app: AppHandle, shared: State<Shared>, x: f64, y: f64, width: f64, height: f64) {
+fn set_island_rect(app: AppHandle, shared: State<Shared>, x: f64, y: f64, width: f64, height: f64, compact: bool) {
     shared.gate.set_rect(island::IslandRect { x, y, w: width, h: height });
+    // Only the compact island may hang the window past the display edge: re-place on change.
+    if shared.gate.set_compact(compact) {
+        let pref = shared.settings.lock().unwrap().screen.clone();
+        island::apply_geometry(&app, &pref, shared.gate.collapsed.load(std::sync::atomic::Ordering::Relaxed));
+    }
     // Without the cursor poll the input region is the click-through: it follows the island.
     if !platform::CURSOR_POLL {
         island::refresh_click_through(&app, &shared.gate);
@@ -126,7 +160,26 @@ fn focus_window(app: AppHandle, focused: bool) {
     platform::set_activating(&win, focused);
     if focused {
         let _ = win.set_focus();
+    } else {
+        platform::restore_foreground(&win);
     }
+}
+
+/// The palette hotkey remembered the focused window but the palette did not take the focus: forget it.
+#[tauri::command]
+fn forget_foreground() {
+    platform::forget_foreground();
+}
+
+/// The palette's global hotkey ("" = off). Remembers the window that had the focus so closing the palette gives it back.
+fn set_palette_hotkey(app: &AppHandle, s: &Settings) {
+    let combo = core::hotkeys::clean(&s.palette_hotkey, settings::DEFAULT_PALETTE_HOTKEY);
+    core::hotkeys::set(app, "palette", "Paleta", &combo, |a| {
+        if let Some(win) = island::window(a) {
+            platform::remember_foreground(&win);
+        }
+        let _ = a.emit_to(island::WINDOW_LABEL, "palette", ());
+    });
 }
 
 #[tauri::command]
@@ -136,6 +189,17 @@ fn reposition(app: AppHandle, shared: State<Shared>) {
     island::apply_geometry(&app, &pref, collapsed);
     // The cursor poll skips idle ticks: tell it the window moved under a still cursor.
     island::refresh_click_through(&app, &shared.gate);
+}
+
+/// Alt+press on the compact island: Rust follows the cursor until the button comes up.
+#[tauri::command]
+fn begin_island_drag(app: AppHandle) {
+    island::begin_drag(&app);
+}
+
+#[tauri::command]
+fn center_island(app: AppHandle, shared: State<Shared>) {
+    island::adjust_placement(&app, &shared, None);
 }
 
 #[tauri::command]
@@ -148,6 +212,7 @@ fn open_url(url: String) {
 
 #[tauri::command]
 fn quit_app(app: AppHandle) {
+    core::safe_mode::clean_exit();
     app.exit(0);
 }
 
@@ -221,8 +286,8 @@ fn create_settings_window(app: &AppHandle) {
     match WebviewWindowBuilder::new(app, "settings", url)
         .additional_browser_args(BROWSER_ARGS)
         .title("Configurações — Coucou")
-        .inner_size(560.0, 680.0)
-        .min_inner_size(460.0, 480.0)
+        .inner_size(780.0, 680.0)
+        .min_inner_size(620.0, 480.0)
         .resizable(true)
         .visible(false)
         .center()
@@ -287,10 +352,15 @@ pub fn run() {
     let core = host::handler(tauri::generate_handler![
         boot,
         save_settings,
+        settings_export,
+        safe_mode_exit,
         set_collapsed,
         set_island_rect,
         focus_window,
+        forget_foreground,
         reposition,
+        begin_island_drag,
+        center_island,
         open_url,
         quit_app,
         log_line,
@@ -298,6 +368,8 @@ pub fn run() {
         take_settings_section,
         set_paused,
         crate::core::inbox::inbox_ingest,
+        crate::core::presence::presence_now,
+        crate::core::presence::presence_watch,
     ]);
     let mods = modules::handlers();
 
@@ -321,7 +393,16 @@ pub fn run() {
             }
         })
         .setup(move |app| {
+            let mut loaded = loaded;
             let handle = app.handle().clone();
+            // Here, not earlier: a second launch has already exited in the single-instance plugin.
+            if core::safe_mode::begin(&loaded.modules_enabled) {
+                log::line("[safe-mode] repeated unclean starts: only the safe set is on this run".to_string());
+                let reduced: BTreeMap<String, bool> =
+                    modules::CATALOG.iter().map(|m| (m.id.to_string(), modules::ESSENTIAL.contains(&m.id))).collect();
+                loaded.modules_enabled = reduced.clone();
+                handle.state::<Shared>().settings.lock().unwrap().modules_enabled = reduced;
+            }
             handle.state::<ModuleHost>().setup(&handle);
             tray::build(&handle)?;
             // Before the island: see create_settings_window.
@@ -341,10 +422,21 @@ pub fn run() {
             gate.set_active(true);
             island::spawn_cursor_poll(handle.clone(), gate.clone());
 
+            // First run: the Hub opens on its onboarding (shown while onboardedVersion is empty).
+            if loaded.onboarded_version.is_empty() {
+                show_settings_window(&handle);
+            }
+
             log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
             handle.state::<ModuleHost>().sync(&handle, &loaded);
+            set_palette_hotkey(&handle, &loaded);
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Coucou");
+        .build(tauri::generate_context!())
+        .expect("error while building Coucou")
+        .run(|_, event| {
+            if let tauri::RunEvent::Exit = event {
+                core::safe_mode::clean_exit();
+            }
+        });
 }

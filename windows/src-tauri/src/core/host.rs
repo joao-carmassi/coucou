@@ -53,6 +53,7 @@ pub trait Module: Send + Sync {
 
 enum Task {
     Thread(std::thread::JoinHandle<()>),
+    #[allow(dead_code)]
     Async(tauri::async_runtime::JoinHandle<()>),
 }
 
@@ -81,6 +82,12 @@ impl TaskSet {
         }
         g.1.retain(|x| !x.finished());
         g.1.push(t);
+    }
+
+    /// Tasks still running (tests).
+    #[cfg(test)]
+    pub fn live(&self) -> usize {
+        self.0.lock().unwrap().1.iter().filter(|t| !t.finished()).count()
     }
 
     #[cfg(test)]
@@ -134,7 +141,13 @@ impl Spawner {
         }
     }
 
+    #[cfg(test)]
+    pub fn for_test(tasks: &Arc<TaskSet>) -> Self {
+        Spawner { id: "test", stop: Arc::new(AtomicBool::new(false)), tasks: tasks.clone() }
+    }
+
     /// An async task the host aborts on stop.
+    #[allow(dead_code)] // the relay owns its loop; no module spawns async now
     pub fn spawn_async<F: Future<Output = ()> + Send + 'static>(&self, f: F) {
         self.tasks.push(Task::Async(tauri::async_runtime::spawn(f)));
     }
@@ -169,9 +182,30 @@ pub struct ModuleCtx {
     pub stop: Arc<AtomicBool>,
     pub tasks: Arc<TaskSet>,
     listeners: Mutex<Vec<EventId>>,
+    stoppers: Mutex<Vec<Stopper>>,
+}
+
+type Stopper = Box<dyn FnOnce() + Send>;
+
+/// Drains `list` and runs each stopper once, newest first. A panicking stopper does not block the rest.
+fn run_stoppers(list: &Mutex<Vec<Stopper>>) {
+    let all = std::mem::take(&mut *list.lock().unwrap());
+    for f in all.into_iter().rev() {
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+    }
 }
 
 impl ModuleCtx {
+    /// Runs `f` once when the module stops (after `Module::stop`, newest registration first, before unlisten).
+    /// Registered after the stop began: runs immediately, so a late subscriber never leaks.
+    pub fn on_stop<F: FnOnce() + Send + 'static>(&self, f: F) {
+        if self.stop.load(Ordering::SeqCst) {
+            f();
+        } else {
+            self.stoppers.lock().unwrap().push(Box::new(f));
+        }
+    }
+
     #[allow(dead_code)] // no module needs it since the scheduler became a shared service
     pub fn stopping(&self) -> bool {
         self.stop.load(Ordering::SeqCst)
@@ -186,6 +220,7 @@ impl ModuleCtx {
         self.spawner().spawn(f);
     }
 
+    #[allow(dead_code)]
     pub fn spawn_async<F: Future<Output = ()> + Send + 'static>(&self, f: F) {
         self.spawner().spawn_async(f);
     }
@@ -270,6 +305,7 @@ impl ModuleHost {
                     stop: Arc::new(AtomicBool::new(false)),
                     tasks: Arc::default(),
                     listeners: Mutex::default(),
+                    stoppers: Mutex::default(),
                 });
                 m.start(&ctx, s);
                 running.insert(m.id(), ctx);
@@ -280,6 +316,7 @@ impl ModuleHost {
                 drop(running); // stop/unlisten/end may block or call back into the host
                 ctx.stop.store(true, Ordering::SeqCst);
                 m.stop(&ctx);
+                run_stoppers(&ctx.stoppers);
                 for l in std::mem::take(&mut *ctx.listeners.lock().unwrap()) {
                     app.unlisten(l);
                 }
@@ -406,6 +443,24 @@ mod tests {
         std::thread::sleep(Duration::from_millis(100));
         assert_eq!(STARTS.load(Ordering::SeqCst), 2);
         t.end();
+    }
+
+    #[test]
+    fn stoppers_run_in_reverse_once_and_survive_panics() {
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let list: Mutex<Vec<Stopper>> = Mutex::default();
+        for i in 0..3 {
+            let o = order.clone();
+            list.lock().unwrap().push(Box::new(move || {
+                o.lock().unwrap().push(i);
+                if i == 1 {
+                    panic!("stopper panic (expected in test)");
+                }
+            }));
+        }
+        run_stoppers(&list);
+        run_stoppers(&list);
+        assert_eq!(*order.lock().unwrap(), vec![2, 1, 0]);
     }
 
     #[test]

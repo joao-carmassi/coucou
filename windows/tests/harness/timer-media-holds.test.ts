@@ -16,7 +16,7 @@ const loadCatalog = async () => {
   return {
     MODULE_INFO: buildCatalog([
       { id: "dummy", label: "Dummy", default: true, order: 200 },
-      { id: "timer", label: "Timer", default: true, order: 210 },
+      { id: "timer", label: "Timer", default: true, order: 210, settingsDefaults: { timerPomodoro: { work: 25, short: 5, long: 15, every: 4 }, timerPomodoroAuto: true } },
       { id: "media", label: "Mídia", default: true, order: 220 },
     ], true),
   };
@@ -26,6 +26,7 @@ import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
 import { State } from "../../src/core/state";
 import { Holds, Last } from "../../src/core/holds";
+import { Sound } from "../../src/core/sound";
 
 let island: Island;
 const tick = (ms: number) => vi.advanceTimersByTime(ms);
@@ -164,4 +165,34 @@ describe("media: implicit focus only", () => {
     folded();
     goHome();
   });
+});
+
+describe("timer pomodoro", () => {
+  const saved = () => ({ p: (State.settings as any).timerPomodoro });
+  const put = (o: Record<string, unknown>) => { State.settings = { ...State.settings, ...o } as typeof State.settings; };
+  let orig: ReturnType<typeof saved>;
+  beforeAll(() => { orig = saved(); });
+  afterAll(() => put({ timerPomodoro: orig.p }));
+
+  it("pomodoro crosses a phase keeping the hold; Parar releases it", () => {
+    put({ timerPomodoro: { work: 5, short: 5, long: 15, every: 4 } });
+    api().island.open("timer"); tick(10);
+    click("button", "Pomodoro"); tick(1100);
+    expect(document.querySelector(".timer-label")!.textContent).toContain("Foco · ciclo 1/4 · pronto");
+    click("button", "Iniciar"); tick(1100);
+    expect(document.querySelector(".timer-label")!.textContent).not.toContain("pronto");
+    api().island.open("dummy-a"); tick(10); folded();
+    tick(5 * 60_000 + 10); // work -> short break, auto-started
+    Last.clear();
+    reopen();
+    expect(State.view).toBe("timer");
+    folded();
+    api().island.open("timer"); tick(1100);
+    expect(document.querySelector(".timer-label")!.textContent).toContain("Pausa curta");
+    click("button", "Parar");
+    folded(); goHome(); reopen();
+    expect(State.view).toBe(State.defaultView());
+    folded();
+  });
+
 });

@@ -8,6 +8,9 @@ import type { Settings } from "./state";
 
 export { IS_TAURI, command, commandOrThrow, onEvent };
 
+/** `quiet` already includes `mic`: a full-screen app, presentation, quiet hours or a call. */
+export interface Presence { quiet: boolean; mic: boolean }
+
 export interface BootInfo {
   settings: Settings;
   /** Logical screen rect of the monitor the island lives on. */
@@ -17,6 +20,8 @@ export interface BootInfo {
   cursorPoll: boolean;
   /** Which modules are on (resolved by Rust). */
   modules: Record<string, boolean>;
+  /** True when repeated unclean starts put this run in safe mode (only the safe module set is on, in memory). */
+  safeMode: boolean;
 }
 
 export const Bridge = {
@@ -34,16 +39,32 @@ export const Bridge = {
    * Pushes the island shape in window coordinates. Rust flips click-through from
    * its own cursor poll, so the flag is never a frame behind a click.
    */
-  setIslandRect: (x: number, y: number, width: number, height: number) =>
-    command<void>("set_island_rect", { x, y, width, height }),
+  setIslandRect: (x: number, y: number, width: number, height: number, compact: boolean) =>
+    command<void>("set_island_rect", { x, y, width, height, compact }),
+
+  /** Alt+press on the compact island: Rust follows the cursor, saves on release and emits "island-drag-end". */
+  beginIslandDrag: () => command<void>("begin_island_drag"),
+
+  centerIsland: () => command<void>("center_island"),
 
   reposition: () => command<void>("reposition"),
+  /** The palette hotkey remembered the focused window but the palette did not open: drop it. */
+  forgetForeground: () => command<void>("forget_foreground"),
 
 
   /** The section the settings window was opened for, once ("" for none). */
   takeSettingsSection: () => command<string>("take_settings_section"),
 
+  /** Turns the OS presence watch on or off (one subscriber); on, it answers with the current state. */
+  presenceWatch: (on: boolean) => command<Presence>("presence_watch", { on }),
+
+  /** Pretty JSON of the settings without secret-looking keys. */
+  exportSettings: () => command<string>("settings_export"),
+
+  /** Leaves safe mode: true when the stored module switches are back in effect. */
+  safeModeExit: () => command<boolean>("safe_mode_exit"),
+
   /** Tray → Pause. */
   setPaused: (paused: boolean) => command<void>("set_paused", { paused }),
 };
-
+

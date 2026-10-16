@@ -39,9 +39,21 @@ export interface Settings {
   /** Minutes a held task view stays the place the island reopens on; 0 = off. */
   focusHoldMinutes: number;
   screen: "primary" | "cursor";
+  /** Hide the island (and hold non-urgent notices) while a full-screen app or a call is in front. */
+  hideWhenBusy: boolean;
   autostart: boolean;
   /** Per-module switches; a missing key means the module default. */
   modulesEnabled: Record<string, boolean>;
+  /** Version whose onboarding was finished; "" = first run. */
+  onboardedVersion: string;
+  /** Body colour per Mochi: key = pill id | "<prefix>*" | "main", value #rrggbb (core/pills.ts colorFor). */
+  mochiColors: Record<string, string>;
+  /** Minutes of rest before the main Mochi dozes off; 0 = never. */
+  mochiSleepMinutes: number;
+  /** Global hotkey that opens the command palette; "" = none. */
+  paletteHotkey: string;
+  /** Island offset from the display centre, logical px, by display key (Rust island::monitor_key). */
+  islandPlacement: Record<string, number>;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -51,8 +63,14 @@ export const DEFAULT_SETTINGS: Settings = {
   compactHideInterval: 60,
   focusHoldMinutes: 1,
   screen: "primary",
+  hideWhenBusy: true,
   autostart: false,
   modulesEnabled: {},
+  onboardedVersion: "",
+  mochiColors: {},
+  mochiSleepMinutes: 10,
+  paletteHotkey: "Ctrl+Alt+K",
+  islandPlacement: {},
 };
 
 type Listener = () => void;

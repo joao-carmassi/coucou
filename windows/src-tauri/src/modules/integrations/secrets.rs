@@ -1,9 +1,7 @@
 // API keys live in the Windows Credential Manager — never on disk and never in
 // the front end — the island can only ask whether a key is present.
 
-use keyring::Entry;
-
-const SERVICE: &str = "fr.louisraille.coucou";
+use crate::core::secrets as store;
 
 /// Every key Coucou may store. Anything outside this list is refused.
 pub const KNOWN_KEYS: &[&str] = &[
@@ -17,32 +15,31 @@ pub const KNOWN_KEYS: &[&str] = &[
     "calcom-api-key",
 ];
 
-fn entry(key: &str) -> Option<Entry> {
+/// Stored entry is `<owner>-<key>`, which is exactly the allowlisted name: split at the first dash.
+fn parts(key: &str) -> Option<(&str, &str)> {
     if !KNOWN_KEYS.contains(&key) {
         return None;
     }
-    Entry::new(SERVICE, key).ok()
+    key.split_once('-')
 }
 
 pub fn get(key: &str) -> Option<String> {
-    entry(key)?.get_password().ok().filter(|v| !v.is_empty())
+    let (o, k) = parts(key)?;
+    store::get(o, k)
 }
 
 pub fn set(key: &str, value: &str) -> Result<(), String> {
-    let entry = entry(key).ok_or_else(|| format!("chave desconhecida: {key}"))?;
+    let (o, k) = parts(key).ok_or_else(|| format!("chave desconhecida: {key}"))?;
     if value.is_empty() {
-        let _ = entry.delete_credential();
+        let _ = store::delete(o, k);
         return Ok(());
     }
-    entry.set_password(value).map_err(|e| e.to_string())
+    store::set(o, k, value)
 }
 
 pub fn clear(key: &str) -> Result<(), String> {
-    let entry = entry(key).ok_or_else(|| format!("chave desconhecida: {key}"))?;
-    match entry.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(e.to_string()),
-    }
+    let (o, k) = parts(key).ok_or_else(|| format!("chave desconhecida: {key}"))?;
+    store::delete(o, k)
 }
 
 pub fn present(key: &str) -> bool {
