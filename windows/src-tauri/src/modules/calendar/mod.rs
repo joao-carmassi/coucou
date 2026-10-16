@@ -124,6 +124,7 @@ async fn download(url: &str, prev: Option<Validators>) -> Result<(Fetched, Valid
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(20))
         .redirect(Policy::custom(|a| if a.previous().len() < 5 && a.url().scheme() == "https" { a.follow() } else { a.stop() }))
+        .referer(false) // a Referer would carry the secret path and query to the next host
         .user_agent("Coucou")
         .build()
         .map_err(|_| "Falha ao preparar a conexão.".to_string())?;
@@ -136,7 +137,7 @@ async fn download(url: &str, prev: Option<Validators>) -> Result<(Fetched, Valid
             req = req.header(IF_MODIFIED_SINCE, m);
         }
     }
-    let resp = req.send().await.map_err(|e| if e.is_timeout() { "Tempo esgotado.".to_string() } else { "Sem conexão com o calendário.".to_string() })?;
+    let mut resp = req.send().await.map_err(|e| if e.is_timeout() { "Tempo esgotado.".to_string() } else { "Sem conexão com o calendário.".to_string() })?;
     let status = resp.status();
     if status.as_u16() == 304 {
         return Ok((Fetched { not_modified: true, body: String::new() }, prev.unwrap_or_default()));
@@ -149,11 +150,14 @@ async fn download(url: &str, prev: Option<Validators>) -> Result<(Fetched, Valid
     }
     let header = |h| resp.headers().get(h).and_then(|v| v.to_str().ok()).map(str::to_string);
     let v = Validators { etag: header(ETAG), modified: header(LAST_MODIFIED) };
-    // shortcut: the whole body is read before the size check when the server sends no length; 20 s timeout bounds it.
-    let body = resp.text().await.map_err(|_| "Falha ao ler o calendário.".to_string())?;
-    if body.len() > MAX_BODY {
-        return Err("O calendário é grande demais.".into());
+    let mut bytes: Vec<u8> = Vec::new();
+    while let Some(chunk) = resp.chunk().await.map_err(|_| "Falha ao ler o calendário.".to_string())? {
+        if bytes.len() + chunk.len() > MAX_BODY {
+            return Err("O calendário é grande demais.".into());
+        }
+        bytes.extend_from_slice(&chunk);
     }
+    let body = String::from_utf8_lossy(&bytes).into_owned();
     Ok((Fetched { not_modified: false, body }, v))
 }
 

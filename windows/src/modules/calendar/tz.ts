@@ -64,7 +64,14 @@ export function wallOf(utcMs: number, zone: Zone): Wall {
   return { y: t.getUTCFullYear(), mo: t.getUTCMonth() + 1, d: t.getUTCDate(), h: t.getUTCHours(), mi: t.getUTCMinutes(), s: t.getUTCSeconds() };
 }
 
-export const wallAsUtc = (w: Wall) => Date.UTC(w.y, w.mo - 1, w.d, w.h, w.mi, w.s);
+/** Date.UTC maps years 0..99 to 19xx; this does not. */
+export function utcMs(y: number, mo: number, d: number, h = 0, mi = 0, s = 0): number {
+  const t = new Date(0);
+  t.setUTCFullYear(y, mo - 1, d);
+  t.setUTCHours(h, mi, s, 0);
+  return t.getTime();
+}
+export const wallAsUtc = (w: Wall) => utcMs(w.y, w.mo, w.d, w.h, w.mi, w.s);
 
 /** The instant of a wall clock. Overlap (clocks go back): the first one. Gap (clocks jump): the offset before the jump, as RFC 5545 says. */
 export function wallToMs(w: Wall, zone: Zone): number {
@@ -77,14 +84,14 @@ export function wallToMs(w: Wall, zone: Zone): number {
 }
 
 export const midnight = (d: Day): Wall => ({ y: d.y, mo: d.mo, d: d.d, h: 0, mi: 0, s: 0 });
-export const dim = (y: number, mo: number) => new Date(Date.UTC(y, mo, 0)).getUTCDate();
+export const dim = (y: number, mo: number) => new Date(utcMs(y, mo + 1, 0)).getUTCDate();
 /** 0 = Sunday. */
-export const weekday = (d: Day) => new Date(Date.UTC(d.y, d.mo - 1, d.d)).getUTCDay();
+export const weekday = (d: Day) => new Date(utcMs(d.y, d.mo, d.d)).getUTCDay();
 export function addDays(d: Day, n: number): Day {
-  const t = new Date(Date.UTC(d.y, d.mo - 1, d.d + n));
+  const t = new Date(utcMs(d.y, d.mo, d.d + n));
   return { y: t.getUTCFullYear(), mo: t.getUTCMonth() + 1, d: t.getUTCDate() };
 }
-export const daysBetween = (a: Day, b: Day) => Math.round((Date.UTC(b.y, b.mo - 1, b.d) - Date.UTC(a.y, a.mo - 1, a.d)) / DAY);
+export const daysBetween = (a: Day, b: Day) => Math.round((utcMs(b.y, b.mo, b.d) - utcMs(a.y, a.mo, a.d)) / DAY);
 /** The n-th (n > 0) or n-th from the end (n < 0) weekday `wd` of a month; null when the month has none. */
 export function nthWeekday(y: number, mo: number, wd: number, n: number): number | null {
   const last = dim(y, mo);

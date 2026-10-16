@@ -119,11 +119,17 @@ function start(api: IslandApi): Disposer {
   });
   const offSlow = api.interval(() => void refresh(false), MIN_REFRESH_MS, { whenVisible: true });
   const offChanged = api.listen("calendar-changed", () => void refresh(true));
+  // Reminder lead / days changed: re-arm and repaint. Deferred so api.settings() already holds the new values.
+  let later: Disposer | null = null;
+  const offSettings = api.listen("settings-changed", () => {
+    later?.();
+    later = api.timeout(() => { later = null; rearm(); api.island.redraw(); paintNow?.(); }, 0);
+  });
   if (api.island.mode() !== "hidden") void refresh(false);
 
   return () => {
     dead = true;
-    reminder?.(); tick?.(); offVis(); offSlow(); offChanged();
+    reminder?.(); tick?.(); offVis(); offSlow(); offChanged(); offSettings(); later?.();
     store.clear();
     done.clear();
     live = null;

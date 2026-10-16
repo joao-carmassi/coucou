@@ -2,7 +2,7 @@
 // Pure: no DOM, no State, no clock. The text is a secret feed's body; nothing here logs it.
 import { occurrences, parseRule, parseStamp, type Rule } from "./recur.ts";
 import {
-  UTC, addDays, daysBetween, midnight, nthWeekday, wallAsUtc, wallOf, wallToMs, zoneOf, ianaZone,
+  UTC, addDays, dayKey, daysBetween, midnight, nthWeekday, wallAsUtc, wallOf, wallToMs, zoneOf, ianaZone,
   type Wall, type Zone,
 } from "./tz.ts";
 
@@ -19,7 +19,9 @@ export interface RawEvent {
   durationMs: number;
   days: number;
   rule: Rule | null;
-  exdates: number[];
+  exdates: Set<number>;
+  /** Date-only EXDATEs: they remove every instance on that local date (dayKey). */
+  exdays: Set<string>;
   /** Set on an override of one instance of a recurring event (the instance's original start). */
   recurrenceId: number | null;
   cancelled: boolean;
@@ -129,11 +131,14 @@ export function parseIcs(text: string, localTz: string): RawEvent[] {
   const events: RawEvent[] = [];
   let ev: Line[] | null = null;
   let tz: { id: string; obs: { from: number; to: number; start: Wall; rule: Rule | null }[] } | null = null;
+  let sub = 0; // depth of sub-components (VALARM...) inside the current VEVENT
   let ob: { from: number; to: number; start: Wall; rule: Rule | null } | null = null;
   const pending: Line[][] = []; // events wait for the whole file: a VTIMEZONE may come after them
   for (const raw of lines) {
     const l = parseLine(raw);
     if (!l) continue;
+    if (ev && l.name === "BEGIN") { sub++; continue; }
+    if (ev && sub > 0) { if (l.name === "END") sub--; continue; }
     if (l.name === "BEGIN") {
       if (l.value === "VEVENT") ev = [];
       else if (l.value === "VTIMEZONE") tz = { id: "", obs: [] };
@@ -177,6 +182,10 @@ export function parseIcs(text: string, localTz: string): RawEvent[] {
       days = en?.dateOnly ? Math.max(1, daysBetween(st.wall, en.wall)) : 1;
     } else if (en) durationMs = Math.max(0, wallToMs(en.wall, en.zone) - wallToMs(st.wall, st.zone));
     else if (dur !== null) durationMs = Math.max(0, dur);
+    const exStamps = props.filter((p) => p.name === "EXDATE").flatMap((p) => p.value.split(",").flatMap((v) => {
+      const x = parseStamp(v);
+      return x ? [{ ...x, line: { ...p, value: v } }] : [];
+    }));
     const rid = when(get("RECURRENCE-ID"));
     const text = (n: string) => unescapeText(get(n)?.value ?? "");
     const status = get("STATUS")?.value.toUpperCase();
@@ -191,10 +200,8 @@ export function parseIcs(text: string, localTz: string): RawEvent[] {
       durationMs,
       days,
       rule: get("RRULE") ? parseRule(get("RRULE")!.value) : null,
-      exdates: props.filter((p) => p.name === "EXDATE").flatMap((p) => p.value.split(",").flatMap((v) => {
-        const x = parseStamp(v);
-        return x ? [wallToMs(x.wall, x.utc ? UTC : x.dateOnly ? st.zone : zoneFor({ ...p, value: v }))] : [];
-      })),
+      exdates: new Set(exStamps.filter((x) => !x.dateOnly).map((x) => wallToMs(x.wall, x.utc ? UTC : zoneFor(x.line)))),
+      exdays: new Set(exStamps.filter((x) => x.dateOnly).map((x) => dayKey(x.wall))),
       recurrenceId: rid ? wallToMs(rid.wall, rid.zone) : null,
       cancelled: status === "CANCELLED",
     });
@@ -223,7 +230,7 @@ export function expand(events: RawEvent[], from: number, to: number, localTz: st
     // An all-day event is a local date: read it in the viewer's zone whatever the feed said.
     const zone = e.allDay ? local : e.zone;
     const starts = e.rule && e.recurrenceId === null
-      ? occurrences(e.rule, e.start, zone, to).filter((s) => !e.exdates.includes(s) && !overridden.has(`${e.uid}|${s}`))
+      ? occurrences(e.rule, e.start, zone, from, to).filter((s) => !e.exdates.has(s) && !e.exdays.has(dayKey(wallOf(s, zone))) && !overridden.has(`${e.uid}|${s}`))
       : [wallToMs(e.start, zone)];
     for (const s of starts) {
       const o = toOccurrence(e, s, local);

@@ -75,7 +75,7 @@ test("RRULE: interval, byday list, until, count with exdate, monthly, yearly", (
   assert.deepEqual(r("FREQ=DAILY;INTERVAL=2;COUNT=3"), ["2026-03-01", "2026-03-03", "2026-03-05"]);
   assert.deepEqual(r("FREQ=DAILY;UNTIL=20260303T100000Z"), ["2026-03-01", "2026-03-02", "2026-03-03"]);
   assert.deepEqual(r("FREQ=DAILY;UNTIL=20260302"), ["2026-03-01", "2026-03-02"]); // a date UNTIL is the whole day
-  assert.deepEqual(r("FREQ=WEEKLY;BYDAY=TU,TH;COUNT=4"), ["2026-03-03", "2026-03-05", "2026-03-10", "2026-03-12"]); // Mar 1 is a Sunday
+  assert.deepEqual(r("FREQ=WEEKLY;BYDAY=TU,TH;COUNT=4"), ["2026-03-01", "2026-03-03", "2026-03-05", "2026-03-10"]); // Mar 1 is a Sunday: DTSTART counts as the first one
   assert.deepEqual(r("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;COUNT=3", "20260302T100000Z"), ["2026-03-02", "2026-03-16", "2026-03-30"]);
   assert.deepEqual(r("FREQ=DAILY;COUNT=3", "20260301T100000Z", "EXDATE:20260302T100000Z\n"), ["2026-03-01", "2026-03-03"]); // COUNT counts the excluded one
   assert.deepEqual(r("FREQ=MONTHLY;BYDAY=-1FR;COUNT=3", "20260130T100000Z"), ["2026-01-30", "2026-02-27", "2026-03-27"]);
@@ -84,8 +84,8 @@ test("RRULE: interval, byday list, until, count with exdate, monthly, yearly", (
   assert.deepEqual(r("FREQ=YEARLY;COUNT=3", "20240229T100000Z"), ["2024-02-29", "2028-02-29", "2032-02-29"]);
   assert.deepEqual(r("FREQ=YEARLY;BYMONTH=3;BYDAY=2SU;COUNT=2", "20260308T100000Z"), ["2026-03-08", "2027-03-14"]);
   assert.equal(parseRule("FREQ=HOURLY"), null);
-  assert.deepEqual(r("FREQ=DAILY;BYMONTH=2;COUNT=1"), ["2027-02-01"]);
-  assert.deepEqual(r("FREQ=MONTHLY;BYMONTH=2;BYMONTHDAY=30"), []); // never matches: ends, does not loop
+  assert.deepEqual(r("FREQ=DAILY;BYMONTH=2;COUNT=1"), ["2026-03-01"]);
+  assert.deepEqual(r("FREQ=MONTHLY;BYMONTH=2;BYMONTHDAY=30"), ["2026-03-01"]); // never matches: only DTSTART, and it ends
 });
 
 test("EXDATE with TZID and an all-day exdate", () => {
@@ -184,4 +184,28 @@ test("store: feeds, external events, memo, keep", () => {
   assert.deepEqual(s.occs(now, "UTC", 2).map((o) => o.summary), ["reserva"]);
   s.clear();
   assert.equal(s.occs(now, "UTC", 2).length, 0);
+});
+
+test("old DTSTART is cheap: 300 M/W/F events since 2000, and daily since 1900, expand fast", () => {
+  const ev = Array.from({ length: 300 }, (_, i) => `e${i}\nDTSTART;TZID=America/New_York:20000103T090000\nRRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR\nSUMMARY:s${i}`);
+  const t0 = performance.now();
+  const got = run(cal(...ev), U(2026, 3, 9), U(2026, 3, 16), NY);
+  assert.equal(got.length, 900);
+  const old = run(cal(...Array.from({ length: 50 }, (_, i) => `d${i}\nDTSTART:19000101T100000Z\nRRULE:FREQ=DAILY\nSUMMARY:x`)), U(2026, 3, 9), U(2026, 3, 10));
+  assert.equal(old.length, 50);
+  const counted = run(cal("c\nDTSTART:20000103T090000Z\nRRULE:FREQ=DAILY;COUNT=20000\nSUMMARY:x"), U(2026, 3, 9), U(2026, 3, 12));
+  assert.equal(counted.length, 3);
+  assert.ok(performance.now() - t0 < 300, `took ${performance.now() - t0} ms`);
+});
+
+test("DTSTART counts even off-rule; VALARM stays out; date EXDATE on timed series; years < 100", () => {
+  // 2026-03-01 is a Sunday but the rule says Mondays: DTSTART is still the first occurrence
+  assert.deepEqual(starts(run(cal("a\nDTSTART:20260301T100000Z\nRRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=2\nSUMMARY:s"), 0, U(2027, 1, 1))), ["2026-03-01T10:00", "2026-03-02T10:00"]);
+  const alarm = "a\nDTSTART:20260301T100000Z\nDTEND:20260301T110000Z\nSUMMARY:real\nBEGIN:VALARM\nTRIGGER:-PT15M\nDURATION:PT5M\nSUMMARY:alarm\nDESCRIPTION:https://zoom.us/j/1\nEND:VALARM\nLOCATION:Sala";
+  const [o] = run(cal(alarm), 0, U(2027, 1, 1));
+  assert.equal([o.summary, o.location, o.link, o.end - o.start].join("|"), "real|Sala||3600000");
+  const ex = cal("a\nDTSTART:20260302T100000Z\nRRULE:FREQ=DAILY;COUNT=3\nEXDATE;VALUE=DATE:20260303\nSUMMARY:s");
+  assert.equal(run(ex, U(2026, 3, 1), U(2026, 4, 1)).length, 2);
+  const [old] = run(cal("a\nDTSTART:00500101T100000Z\nSUMMARY:s"), -1e14, 0);
+  assert.equal(new Date(old.start).getUTCFullYear(), 50);
 });

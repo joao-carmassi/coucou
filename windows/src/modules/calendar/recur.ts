@@ -100,26 +100,41 @@ function period(r: Rule, start: Day, k: number): { days: Day[]; first: Day } {
   }
 }
 
-const cmp = (a: Day, b: Wall) => wallAsUtc({ ...a, h: b.h, mi: b.mi, s: b.s }) - wallAsUtc(b);
+/** First period index worth visiting for a window starting at pseudo-time lo (a safe underestimate). */
+function skipTo(r: Rule, start: Wall, lo: number): number {
+  const d = (lo - wallAsUtc({ ...start, h: 0, mi: 0, s: 0 })) / DAY;
+  if (d <= 0) return 0;
+  const per = r.freq === "DAILY" ? d / r.interval : r.freq === "WEEKLY" ? d / 7 / r.interval : r.freq === "MONTHLY" ? d / 31 / r.interval : d / 366 / r.interval;
+  return Math.max(0, Math.floor(per) - 2);
+}
 
 /**
- * Start instants of the occurrences that begin before `to`, in order. COUNT counts from the first one (so excluded dates
- * still count). At most `cap` candidate periods are visited, a bound against a rule that never matches.
+ * Start instants of the occurrences from about `from` (2 days of slack; callers filter exactly) up to `to`, in order.
+ * DTSTART is always the first occurrence (RFC 5545). COUNT counts every one from the start with plain arithmetic: the zone
+ * is consulted (wallToMs) only near the window. Without COUNT the walk jumps to the period before `from`.
+ * `cap` bounds a rule that never matches.
  */
-export function occurrences(r: Rule, start: Wall, zone: Zone, to: number, cap = 60_000): number[] {
+export function occurrences(r: Rule, start: Wall, zone: Zone, from: number, to: number, cap = 120_000): number[] {
   const out: number[] = [];
+  const lo = from - 2 * DAY, hi = to + 2 * DAY; // wall clocks differ from UTC by under a day
   const untilMs = r.until
     ? r.until.utc ? wallAsUtc(r.until.wall) : wallToMs(r.until.dateOnly ? { ...r.until.wall, h: 23, mi: 59, s: 59 } : r.until.wall, zone)
     : Infinity;
+  const clockOf = { h: start.h, mi: start.mi, s: start.s };
+  const startPseudo = wallAsUtc(start);
   let n = 0;
-  for (let k = 0; k < cap; k++) {
+  for (let k = r.count === null ? skipTo(r, start, lo) : 0, steps = 0; steps < cap; k++, steps++) {
     const { days, first } = period(r, start, k);
-    if (wallAsUtc({ ...first, h: 0, mi: 0, s: 0 }) - 2 * DAY > to + 2 * DAY) break; // wall clocks differ from UTC by under a day
+    if (wallAsUtc({ ...first, h: 0, mi: 0, s: 0 }) > hi) break;
+    if (k === 0 && !days.some((d) => d.y === start.y && d.mo === start.mo && d.d === start.d)) days.unshift({ y: start.y, mo: start.mo, d: start.d });
     for (const day of days) {
-      if (cmp(day, start) < 0) continue;
-      const ms = wallToMs({ ...day, h: start.h, mi: start.mi, s: start.s }, zone);
-      if (ms > untilMs || ms >= to) return out;
+      const pseudo = wallAsUtc({ ...day, ...clockOf });
+      if (pseudo < startPseudo) continue;
       if (r.count !== null && ++n > r.count) return out;
+      if (pseudo > hi || pseudo - 2 * DAY > untilMs) return out;
+      if (pseudo < lo) continue;
+      const ms = wallToMs({ ...day, ...clockOf }, zone);
+      if (ms > untilMs || ms >= to) return out;
       out.push(ms);
     }
   }
