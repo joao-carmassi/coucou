@@ -1,6 +1,7 @@
 // The Pausas section of the settings window. Must not import index.ts.
 import type { ModuleSettings } from "../../core/moduleSettings";
 import { h } from "../../kit/dom";
+import { command } from "../../kit/tauri";
 import { BREAKS, KIND_ORDER, enabledKinds, intervalMin, parseExcluded, type BreakKind } from "./logic";
 
 type Cfg = { eyecareInterval: unknown; eyecareKinds: unknown; eyecareExcluded: unknown; eyecareKeepDays: unknown };
@@ -33,6 +34,15 @@ function eyecareSettingsSection(ms: ModuleSettings): { el: HTMLElement } {
   });
   const excluded = h("input", { type: "text", placeholder: "app.exe, outro.exe", value: (Array.isArray(cfg.eyecareExcluded) ? cfg.eyecareExcluded : []).join(", ") }) as HTMLInputElement;
   excluded.addEventListener("change", () => void ms.save({ eyecareExcluded: parseExcluded(excluded.value) }));
+  const wipe = h("button", { class: "btn secondary", text: "Apagar dados" });
+  let armed = false;
+  wipe.addEventListener("click", () => {
+    if (!armed) { armed = true; wipe.textContent = "Clique de novo para apagar"; return; }
+    armed = false;
+    wipe.textContent = "Apagar dados";
+    void command("eyecare_clear");
+  });
+  wipe.addEventListener("blur", () => { armed = false; wipe.textContent = "Apagar dados"; });
   return {
     el: h("section", { id: "eyecare" },
       h("h2", {}, h("span", { text: "Pausas" })),
@@ -40,6 +50,7 @@ function eyecareSettingsSection(ms: ModuleSettings): { el: HTMLElement } {
       ...KIND_ORDER.map(toggle),
       row("Não contar tempo de tela destes apps", excluded),
       row("Guardar tempo de tela por (dias)", keep),
+      row("Tempo de tela guardado", wipe),
       h("p", { class: "hint", text: "Só o nome do programa e os segundos ficam guardados, neste computador. Nada é enviado." })),
   };
 }

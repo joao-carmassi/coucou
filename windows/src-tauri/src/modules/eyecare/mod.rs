@@ -159,10 +159,13 @@ fn on_fg(_app: &AppHandle, fg: &Foreground) {
     }
 }
 
+/// Erases the counters of excluded apps; marks the data dirty when something went.
 fn forget_excluded(acc: &mut Acc) {
     let ex = acc.cfg.excluded.clone();
     for d in acc.days.values_mut() {
+        let n = d.len();
         d.retain(|exe, _| !is_excluded(exe, &ex));
+        acc.dirty |= d.len() != n;
     }
 }
 
@@ -177,6 +180,7 @@ impl Module for EyecareModule {
         prune(&mut days, today_key().1, cfg.keep_days);
         let mut acc = Acc { days, cur: None, cfg, dirty: false, written: Instant::now() };
         forget_excluded(&mut acc);
+        acc.flush();
         acc.switch(Instant::now(), 0, Some(presence::foreground_now().exe));
         *lock() = Some(acc);
         presence::on_foreground(ctx, on_fg);
@@ -197,7 +201,7 @@ impl Module for EyecareModule {
             forget_excluded(acc);
             let cur = acc.cur.take().map(|c| c.0);
             acc.cur = cur.filter(|e| !is_excluded(e, &acc.cfg.excluded)).map(|e| (e, Instant::now()));
-            acc.dirty = true;
+            acc.flush();
         }
     }
 }

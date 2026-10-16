@@ -14,6 +14,7 @@ function start(api: IslandApi): Disposer {
   let timer: Disposer | null = null;
   let n = 0;
   let alive = true;
+  let checking = false; // a checkpoint is in flight: fire() re-arms by itself
   // Reads the settings each time, so a change applies from the next wait on.
   const arm = () => {
     timer?.();
@@ -23,9 +24,12 @@ function start(api: IslandApi): Disposer {
   };
   const fire = async () => {
     timer = null;
+    checking = true;
     // The checkpoint also cuts the screen-time segment, so a long away stretch is not counted.
     const idle = await EyecareBridge.checkpoint();
+    checking = false;
     if (!alive) return;
+    if (!intervalMin(api.settings<Cfg>().eyecareInterval)) { arm(); return; } // switched off while waiting
     const kind = pickKind(enabledKinds(api.settings<Cfg>().eyecareKinds), n);
     if (kind && shouldNotify(idle) && !api.paused()) {
       n++;
@@ -36,7 +40,9 @@ function start(api: IslandApi): Disposer {
     arm();
   };
   arm();
-  return () => { alive = false; timer?.(); };
+  // Re-arm on a settings change (deferred: the stored settings are replaced by a listener that runs after ours).
+  const off = api.listen("settings-changed", () => void api.timeout(() => { if (alive && !checking) arm(); }, 0));
+  return () => { alive = false; timer?.(); off(); };
 }
 
 export const eyecareModule: ModuleDef = {

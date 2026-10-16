@@ -16,6 +16,14 @@ vi.mock("@tauri-apps/api/core", () => ({
   },
 }));
 
+const handlers = vi.hoisted(() => ({ list: [] as (() => void)[] }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: async (name: string, fn: () => void) => {
+    if (name === "settings-changed") handlers.list.push(fn);
+    return () => { handlers.list = handlers.list.filter((h) => h !== fn); };
+  },
+}));
+const changed = async () => { handlers.list.slice().forEach((f) => (f as (e: unknown) => void)({ payload: {} })); await tick(1); };
 const tick = (ms: number) => vi.advanceTimersByTimeAsync(ms);
 const eye = () => calls.invoke.filter((c) => c.cmd.startsWith("eyecare_")).length;
 const notice = () => document.body.textContent ?? "";
@@ -71,6 +79,25 @@ describe("eyecare module", () => {
     await tick(3 * 3600_000);
     expect(eye()).toBe(e);
     expect(vi.getTimerCount()).toBe(t);
+    Registry.apply({ eyecare: false });
+  });
+
+  it("0 -> 20 arms a timer; 20 -> 0 stops the next reminder", async () => {
+    State.settings.eyecareInterval = 0;
+    State.settings.eyecareKinds = ["eyes"];
+    os.idle = 1000;
+    Registry.apply({ eyecare: true });
+    await tick(5);
+    State.settings.eyecareInterval = 20;
+    await changed();
+    const n = calls.invoke.filter((c) => c.cmd === "eyecare_checkpoint").length;
+    await tick(20 * 60_000 + 100);
+    expect(calls.invoke.filter((c) => c.cmd === "eyecare_checkpoint").length).toBe(n + 1);
+    State.settings.eyecareInterval = 0;
+    await changed();
+    await tick(3 * 3600_000);
+    expect(calls.invoke.filter((c) => c.cmd === "eyecare_checkpoint").length).toBe(n + 1);
+    expect(vi.getTimerCount()).toBe(0);
     Registry.apply({ eyecare: false });
   });
 });
