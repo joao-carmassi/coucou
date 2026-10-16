@@ -1,17 +1,13 @@
-// The Timer section of the settings window: pomodoro lengths and alarms. Must not import index.ts.
+// The Timer section of the settings window: pomodoro lengths. Must not import index.ts.
 import type { ModuleSettings } from "../../core/moduleSettings";
 import { h } from "../../kit/dom";
-import { parseAlarms, type Alarm } from "./alarms";
 import { pomoCfg, type PomoCfg } from "./pomodoro";
 
-const DAYS = ["D", "S", "T", "Q", "Q", "S", "S"];
-const DAY_NAMES = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
-type Cfg = { timerPomodoro: unknown; timerPomodoroAuto: boolean; timerFocusPomodoro: boolean; timerAlarms: unknown };
+type Cfg = { timerPomodoro: unknown; timerPomodoroAuto: boolean; timerFocusPomodoro: boolean };
 
 function timerSettingsSection(ms: ModuleSettings): { el: HTMLElement } {
   const cfg = ms.get<Cfg>();
   const pomo: PomoCfg = pomoCfg(cfg.timerPomodoro);
-  let alarms: Alarm[] = parseAlarms(cfg.timerAlarms);
   const toggle = (on: boolean, change: (v: boolean) => void, name = "") => {
     const el = h("button", { class: on ? "switch on" : "switch", "aria-pressed": on, "aria-label": name || undefined });
     el.addEventListener("click", () => { on = !on; el.classList.toggle("on", on); el.setAttribute("aria-pressed", String(on)); change(on); });
@@ -25,35 +21,6 @@ function timerSettingsSection(ms: ModuleSettings): { el: HTMLElement } {
     });
     return h("div", { class: "row" }, h("label", { text: label }), i);
   };
-  const saveAlarms = () => void ms.save({ timerAlarms: alarms.map((a) => ({ ...a })) });
-  const list = h("div", {});
-  const draw = () => {
-    list.replaceChildren(...alarms.map((a) => {
-      const time = h("input", { type: "time", value: a.time, "aria-label": "Horário do alarme" }) as HTMLInputElement;
-      time.addEventListener("change", () => { if (/^\d\d:\d\d$/.test(time.value)) { a.time = time.value; saveAlarms(); } });
-      const label = h("input", { type: "text", value: a.label, placeholder: "Nome", maxlength: 40, "aria-label": "Nome do alarme" }) as HTMLInputElement;
-      label.addEventListener("change", () => { a.label = label.value; saveAlarms(); });
-      const days = DAYS.map((d, n) => {
-        const b = h("button", { class: a.days.includes(n) ? "btn primary" : "btn secondary", text: d, title: DAY_NAMES[n], "aria-label": DAY_NAMES[n], "aria-pressed": a.days.includes(n) });
-        b.addEventListener("click", () => {
-          a.days = a.days.includes(n) ? a.days.filter((x) => x !== n) : [...a.days, n].sort();
-          b.className = a.days.includes(n) ? "btn primary" : "btn secondary";
-          b.setAttribute("aria-pressed", String(a.days.includes(n)));
-          saveAlarms();
-        });
-        return b;
-      });
-      const del = h("button", { class: "btn secondary", text: "Remover", "aria-label": "Remover alarme" });
-      del.addEventListener("click", () => { alarms = alarms.filter((x) => x !== a); saveAlarms(); draw(); });
-      return h("div", { class: "row", title: "Dias: nenhum marcado = todos os dias" }, toggle(a.on, (v) => { a.on = v; saveAlarms(); }, "Alarme ativo"), time, label, ...days, del);
-    }));
-  };
-  draw();
-  const add = h("button", { class: "btn secondary", text: "Novo alarme" });
-  add.addEventListener("click", () => {
-    alarms = [...alarms, { id: `a${Date.now().toString(36)}`, time: "08:00", label: "", days: [], on: true }];
-    saveAlarms(); draw();
-  });
   return {
     el: h("section", { id: "timer" },
       h("h2", {}, h("span", { text: "Timer" })),
@@ -62,8 +29,7 @@ function timerSettingsSection(ms: ModuleSettings): { el: HTMLElement } {
       h("div", { class: "row" }, h("label", { text: "Iniciar a próxima fase sozinho" }),
         toggle(cfg.timerPomodoroAuto !== false, (v) => void ms.save({ timerPomodoroAuto: v }), "Iniciar a próxima fase sozinho")),
       h("div", { class: "row" }, h("label", { text: "\"Iniciar foco\" usa o Pomodoro" }),
-        toggle(!!cfg.timerFocusPomodoro, (v) => void ms.save({ timerFocusPomodoro: v }), "Iniciar foco usa o Pomodoro")),
-      h("h2", {}, h("span", { text: "Alarmes" })), list, add),
+        toggle(!!cfg.timerFocusPomodoro, (v) => void ms.save({ timerFocusPomodoro: v }), "Iniciar foco usa o Pomodoro"))),
   };
 }
 

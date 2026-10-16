@@ -6,8 +6,7 @@
   "settingsDefaults": {
     "timerPomodoro": { "work": 25, "short": 5, "long": 15, "every": 4 },
     "timerPomodoroAuto": true,
-    "timerFocusPomodoro": false,
-    "timerAlarms": []
+    "timerFocusPomodoro": false
   },
   "presets": [
     "tudo",

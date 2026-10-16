@@ -11,7 +11,7 @@ Core foundation for the next modules (everything new is generic API, no module n
 - Island: Alt+drag to move it per monitor, "Centralizar ilha" in the tray and in settings.
 - Mochi: colour per Mochi, idle glances, sleep and greeting v2.
 - Hub: search, presets (essencial, dev, tudo), export/import without secrets, onboarding for fresh installs, safe-mode exit.
-- Timer: pomodoro (work, short and long breaks) and daily alarms.
+- Timer: pomodoro (work, short and long breaks).
 - Dev: `npm run new-module` scaffolder, `npm run fake-agent`, example module "Exemplo" (off by default).
 
 ## 0.8.5
