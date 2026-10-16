@@ -9,6 +9,8 @@ import { MediaBridge, type MediaItem } from "./bridge";
 import { CLAUDE_SERVICE, type LaunchFile } from "../claude/api";
 import type { Disposer, IslandApi, ViewContext, ViewHost } from "../../core/moduleApi";
 import { ICONS } from "./icons";
+import { toolsFor } from "./tools";
+import { ToolRunner } from "./toolsRun";
 
 const THUMB_PX = 160;
 const THUMB_JOBS = 3;
@@ -35,8 +37,9 @@ export class MediaCtl {
   private reloadFn: (() => void) | null = null;
   private closeFns = new Set<() => void>();
   private stops = new Set<Disposer>();
+  readonly tools: ToolRunner;
 
-  constructor(readonly api: IslandApi) {}
+  constructor(readonly api: IslandApi) { this.tools = new ToolRunner(api); }
 
   /** The view registers how it reloads, closes its menu and stops its work. */
   attach(reload: () => void, closeMenu: () => void, stop: Disposer) {
@@ -69,6 +72,7 @@ export class MediaCtl {
       document.removeEventListener("keydown", esc);
       window.removeEventListener("blur", closeAll);
       offList();
+      this.tools.stop();
       for (const s of this.stops) s();
       this.stops.clear();
       this.closeFns.clear();
@@ -100,12 +104,49 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
   const head = paneHead(paneTab(h("b", { text: "Mídia" })), h("div", { class: "grow" }), sub);
   const grid = paneList("media-grid");
   const menu = h("div", { class: "media-menu" });
+  const ffbox = h("div", { class: "media-ffbox" });
+  ffbox.style.display = "none";
   const main = paneMain(head, grid, menu);
   const el = panel({ cls: "media-view", side: { title: "Mídia", sub: "capturas e arquivos" }, main });
 
   menu.style.display = "none";
   const closeMenu = () => (menu.style.display = "none");
   grid.addEventListener("scroll", closeMenu, { passive: true });
+
+  /** The opt-in ffmpeg download: shows size and source first; nothing starts until the click. */
+  async function showFfmpeg() {
+    ctl.tools.ffmpegWanted = false;
+    let st;
+    try { st = await MediaBridge.ffmpegStatus(); } catch (err) { return fail(err); }
+    const hide = () => { ffbox.style.display = "none"; };
+    clear(ffbox);
+    ffbox.style.display = "";
+    if (!ffbox.parentElement) main.insertBefore(ffbox, grid); // only in the DOM once asked for
+    if (st.path) {
+      ffbox.append(h("div", { text: `ffmpeg disponível: ${st.path}` }), h("button", { class: "btn secondary", text: "Ok", onclick: hide }));
+      return;
+    }
+    const status = h("div", { class: "media-ffstatus" });
+    const go = h("button", { class: "btn primary", text: `Baixar ffmpeg (${st.sizeText})` });
+    const cancel = h("button", { class: "btn secondary", text: "Agora não", onclick: hide });
+    go.addEventListener("click", () => {
+      go.setAttribute("disabled", "");
+      let id = 0;
+      cancel.textContent = "Cancelar";
+      cancel.onclick = () => { if (id) void MediaBridge.toolCancel(id).catch(() => {}); hide(); };
+      ctl.tools.track("Baixando ffmpeg", MediaBridge.ffmpegDownload, (e) => {
+        status.textContent = e.state === "progress" ? `Baixando… ${e.pct}%` : e.state === "done" ? "Pronto." : e.state === "error" ? (e.msg ?? "Falhou") : "Cancelado";
+        if (e.state !== "progress") { go.removeAttribute("disabled"); cancel.textContent = "Fechar"; cancel.onclick = hide; }
+      }).then((i) => { id = i; }).catch((err) => { status.textContent = String(err); go.removeAttribute("disabled"); });
+    });
+    ffbox.append(
+      h("div", { text: "As ferramentas de vídeo e GIF precisam do ffmpeg, que não está no seu PATH." }),
+      h("div", { class: "media-ffsmall", text: `Fonte: ${st.url}` }),
+      h("div", { class: "media-ffsmall", text: `SHA-256 esperado: ${st.sha256} (conferido antes de extrair). Fica em %LOCALAPPDATA%\Coucou\tools.` }),
+      status,
+      h("div", { class: "media-ffrow" }, go, cancel),
+    );
+  }
 
   function fail(err: unknown) {
     const msg = String(err).replace(/^Error:\s*/, "");
@@ -142,6 +183,7 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
     // Only with the Claude module on (it provides this hook).
     const launch = api.use<LaunchFile>(CLAUDE_SERVICE.launchFile);
     if (launch) entry("Abrir no Claude", async () => void (await launch(item.path, true)));
+    for (const t of toolsFor(item.path)) entry(t.label, () => ctl.tools.run(t, item.path));
     entry("Abrir", () => MediaBridge.open(item.path));
     entry("Abrir com…", () => MediaBridge.openWith(item.path));
     entry("Mostrar na pasta", () => MediaBridge.reveal(item.path));
@@ -271,6 +313,7 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
     el,
     sync() {
       const on = api.island.view() === "media";
+      if (on && ctl.tools.ffmpegWanted) void showFfmpeg();
       if (on && (!wasOn || dirty)) void load();
       wasOn = on;
     },

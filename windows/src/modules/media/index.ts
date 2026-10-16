@@ -8,6 +8,8 @@ import type { ModuleDef } from "../../core/moduleApi";
 import { armMochiDrop } from "./ghost";
 import { ICONS } from "./icons";
 import { buildMediaView, mediaOf } from "./view";
+import { UPLOAD_SERVICE } from "../upload/api";
+import { dropActions } from "./tools";
 
 export const media: ModuleDef = {
   id: "media",
@@ -21,6 +23,15 @@ export const media: ModuleDef = {
     const ctl = mediaOf(api);
     const stopCtl = ctl.start();
     const stopDrop = armMochiDrop(api, ctl);
-    return () => { stopDrop(); stopCtl(); };
+    // The file-drop card (upload) lists these as chips by extension; upload never imports media.
+    const offActions = dropActions((t, path) => ctl.tools.run(t, path)).map((a) => api.provide(UPLOAD_SERVICE.dropAction, a));
+    const offCancel = api.actions.add({
+      id: "cancel-tool",
+      title: "Cancelar ferramenta de mídia em andamento",
+      keywords: ["converter", "gif", "ffmpeg", "ocr"],
+      when: () => ctl.tools.busy,
+      run: () => ctl.tools.cancelAll(),
+    });
+    return () => { offCancel(); offActions.forEach((o) => o()); stopDrop(); stopCtl(); };
   },
 };

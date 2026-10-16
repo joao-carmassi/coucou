@@ -2,7 +2,8 @@
 export const Up = {
   /** A file is being dragged over the island. */
   dragOver: false,
-  droppedFile: null as { name: string; path: string } | null,
+  /** `source` is the file where the user dropped it from (results go next to it); `path` may be the inbox copy. */
+  droppedFile: null as { name: string; path: string; source?: string } | null,
   /** 0..1, driven by the sequence clock. */
   progress: 0,
   /** Seconds the bar takes to fill. */
