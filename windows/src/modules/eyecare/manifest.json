@@ -1,0 +1,13 @@
+{
+  "id": "eyecare",
+  "label": "Pausas",
+  "default": false,
+  "order": 17,
+  "settingsDefaults": {
+    "eyecareInterval": 20,
+    "eyecareKinds": ["eyes", "stretch", "water"],
+    "eyecareExcluded": ["lockapp.exe"],
+    "eyecareKeepDays": 30
+  },
+  "presets": ["tudo", "vitrine"]
+}

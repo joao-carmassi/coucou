@@ -1,0 +1,8 @@
+/* Pausas: this module's classes, all prefixed "eyecare-". Reuse kit classes; never redefine them. */
+.eyecare-view { font: 400 12px var(--font); color: var(--dim); }
+.eyecare-list { display: flex; flex-direction: column; gap: 3px; }
+.eyecare-row { display: flex; align-items: center; gap: 8px; }
+.eyecare-name { width: 74px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.eyecare-bar { flex: 1; height: 4px; border-radius: 999px; background: var(--surface-track); overflow: hidden; }
+.eyecare-bar > i { display: block; height: 100%; border-radius: inherit; background: var(--amber); }
+.eyecare-dur { width: 58px; text-align: right; font-variant-numeric: tabular-nums; }

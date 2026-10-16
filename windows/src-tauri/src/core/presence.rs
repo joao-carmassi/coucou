@@ -28,10 +28,12 @@ use windows::Win32::System::Registry::{
 use windows::Win32::System::Threading::{
     GetCurrentThreadId, OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
+use windows::Win32::System::SystemInformation::GetTickCount;
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
 use windows::Win32::UI::Shell::SHQueryUserNotificationState;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetMessageW, GetWindowThreadProcessId, PeekMessageW, PostThreadMessageW, EVENT_SYSTEM_FOREGROUND, MSG, PM_NOREMOVE,
+    GetForegroundWindow, GetMessageW, GetWindowThreadProcessId, PeekMessageW, PostThreadMessageW, EVENT_SYSTEM_FOREGROUND, MSG, PM_NOREMOVE,
     WINEVENT_OUTOFCONTEXT, WM_QUIT, WM_USER,
 };
 
@@ -214,10 +216,29 @@ fn unsubscribe(id: u64) {
 /// Calls `cb` on the hook thread at every foreground change, until the module stops. Must return fast and
 /// must not stop modules or unsubscribe (the thread would wait on itself in `quit_thread`: deadlock).
 /// All callers share one thread; it ends with the last of them.
-#[allow(dead_code)] // first module consumer lands in a later task; the core's own watch below uses `subscribe`
 pub fn on_foreground(ctx: &ModuleCtx, cb: fn(&AppHandle, &Foreground)) {
     let id = subscribe(&ctx.app, cb);
     ctx.on_stop(move || unsubscribe(id));
+}
+
+/// The window in front right now (exe name only), for a subscriber that needs a starting point.
+pub fn foreground_now() -> Foreground {
+    foreground_of(unsafe { GetForegroundWindow() })
+}
+
+/// Milliseconds since the last keyboard or mouse input (0 if the OS cannot say). One syscall, no thread.
+pub fn user_idle_ms() -> u64 {
+    let mut info = LASTINPUTINFO { cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32, dwTime: 0 };
+    if unsafe { GetLastInputInfo(&mut info) }.as_bool() {
+        idle_since(unsafe { GetTickCount() }, info.dwTime)
+    } else {
+        0
+    }
+}
+
+/// Both are 32-bit tick counts (wrap after ~49 days): the difference wraps too.
+fn idle_since(tick_now: u32, last_input: u32) -> u64 {
+    u64::from(tick_now.wrapping_sub(last_input))
 }
 
 /// Stops the thread and waits for it, so the hook is gone when this returns.
@@ -339,6 +360,13 @@ mod tests {
         for (s, q) in [(1, false), (2, true), (3, true), (4, true), (5, false), (6, true), (7, false), (0, false)] {
             assert_eq!(quiet_of(s), q, "state {s}");
         }
+    }
+
+    #[test]
+    fn idle_since_wraps_with_the_tick_counter() {
+        assert_eq!(idle_since(5_000, 2_000), 3_000);
+        assert_eq!(idle_since(1_000, u32::MAX - 999), 2_000); // counter wrapped between input and now
+        assert_eq!(idle_since(7, 7), 0);
     }
 
     #[test]
