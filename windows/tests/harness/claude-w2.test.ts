@@ -113,3 +113,10 @@ describe("board card live diff", () => {
     expect(box().querySelector(".live-diff")).toBeNull();
   });
 });
+
+describe("desktop client", () => {
+  it("chip Desktop on the finished card", () => {
+    cl().store.session.client = "desktop";
+    expect([...finished().querySelectorAll(".fin-chip")].map((c) => c.textContent)).toEqual(["Desktop"]);
+  });
+});

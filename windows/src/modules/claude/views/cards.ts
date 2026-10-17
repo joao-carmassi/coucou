@@ -39,9 +39,9 @@ function firstWords(text: string | null): string | null {
   return text?.split("\n").find((line) => line.trim())?.replace(/^#{1,6}\s+|\*\*|`/g, "").trim() ?? null;
 }
 
-/** The chips of a session: permission mode, effort, model; only what the hooks have said. */
+/** The chips of a session: the Claude app when it runs there, permission mode, effort, model; only what the hooks have said. */
 function sessionChips(s: ClaudeSession): string[] {
-  return [s.mode ? modeName(s.mode) : null, s.effort, s.model ? shortModel(s.model) : null].filter((t): t is string => !!t);
+  return [s.client === "desktop" ? "Desktop" : null, s.mode ? modeName(s.mode) : null, s.effort, s.model ? shortModel(s.model) : null].filter((t): t is string => !!t);
 }
 
 /** The last lines of the edit that just landed, while the turn goes on: the card shows it live. */
