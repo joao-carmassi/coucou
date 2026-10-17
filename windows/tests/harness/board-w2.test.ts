@@ -1,9 +1,8 @@
-// W2 board: actions.all/run in the core, the flip (owner's actions), the Utilidades view and the "Último" chip.
+// W2 board: actions.all in the core and the "Último" chip.
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { IslandApi, ModuleDef } from "../../src/core/moduleApi";
 
 const probe: Record<string, IslandApi | null> = {};
-const ran: string[] = [];
 
 const loadModules = async () => {
   const { board } = await import("../../src/modules/board");
@@ -13,7 +12,7 @@ const loadModules = async () => {
       probe[id] = api;
       api.pills.set({ id: `${id}-pill`, label: id, color: "#88aaff", mood: "idle" });
       const offs = withActions ? [
-        api.actions.add({ id: "zeta", title: "Zeta", key: "z", run: () => { ran.push(`${id}.zeta`); } }),
+        api.actions.add({ id: "zeta", title: "Zeta", key: "z", run: () => {} }),
         api.actions.add({ id: "boom", title: "Boom", run: () => { throw new Error("boom"); } }),
       ] : [];
       return () => { offs.forEach((o) => o()); probe[id] = null; };
@@ -49,54 +48,29 @@ beforeAll(async () => {
 });
 afterAll(() => vi.useRealTimers());
 
-describe("actions.all / run", () => {
-  it("lists owners without run closures, runs, routes throws to error", () => {
+describe("actions.all", () => {
+  it("lists owners without run closures", () => {
     const all = probe.beta!.actions.all();
     const z = all.find((a) => a.key === "alpha.zeta")!;
     expect(z).toEqual({ key: "alpha.zeta", title: "Zeta", owner: "alpha", keyHint: "z" });
-    expect(all.some((a) => a.owner === "board")).toBe(true);
     expect(Object.keys(z)).not.toContain("run");
-    expect(probe.beta!.actions.run("alpha.zeta")).toBe(true);
-    expect(ran).toEqual(["alpha.zeta"]);
-    const err = vi.spyOn(island, "error");
-    expect(probe.beta!.actions.run("alpha.boom")).toBe(true);
-    expect(err).toHaveBeenCalledTimes(1);
-    expect(probe.beta!.actions.run("nope.x")).toBe(false);
-    err.mockRestore();
   });
 });
 
-describe("board flip, utilities, chip", () => {
-  it("flip shows the owner's actions; no actions = no flip button", () => {
-    probe.alpha!.pills.focus("alpha-pill");
-    show("overview");
-    expect(q(".flip")!.style.display).toBe("");
-    q(".flip")!.click();
-    tick(50);
-    const btns = [...document.querySelectorAll(".tile-card.back .btn")].map((b) => b.textContent);
-    expect(btns).toEqual(expect.arrayContaining(["Zeta", "Boom"]));
-    expect(btns).not.toContain("Abrir Utilidades");
-    probe.beta!.pills.focus("beta-pill");
-    show("overview");
-    tick(50);
-    expect(q(".flip")!.style.display).toBe("none");
-    expect(q(".tile-card.back")).toBeNull();
-  });
-
-  it("utilities lists all sorted, click runs and sets the chip; the chip clears when the action goes", () => {
-    show("utilities");
-    const titles = [...document.querySelectorAll(".board-util span")].map((e) => e.textContent);
-    expect(titles).toEqual([...titles].sort((a, b) => a!.localeCompare(b!, "pt")));
-    expect(titles).toContain("Abrir Utilidades");
-    const zeta = [...document.querySelectorAll<HTMLElement>(".board-util")].find((b) => b.textContent!.startsWith("Zeta"))!;
-    expect(zeta.textContent).toContain("Alt+Z");
-    zeta.click();
-    expect(ran).toEqual(["alpha.zeta", "alpha.zeta"]);
+describe("board chip", () => {
+  it("the chip shows the last action run, and clears when that action goes", async () => {
+    const { last } = await import("../../src/modules/board/last");
+    last.key = "alpha.zeta";
     show("overview");
     expect(q(".board-last")!.textContent).toBe("Último: Zeta");
     Registry.apply({ board: true, alpha: false, beta: true });
     show("overview");
     expect(q(".board-last")!.style.display).toBe("none");
     expect(probe.beta!.actions.all().some((a) => a.owner === "alpha")).toBe(false);
+  });
+
+  it("the card has no arrow, flip or utilities buttons", () => {
+    show("overview");
+    expect(q(".jump")).toBeNull();
   });
 });

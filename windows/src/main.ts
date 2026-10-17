@@ -52,9 +52,9 @@ export async function startIsland(modules: ModuleDef[], catalog: ModuleInfo[]) {
   });
 
   await onEvent<Presence>("presence", (p) => island.applyPresence(p));
-  await onEvent<null>("palette", () => island.openPalette());
+  await onEvent<null>("palette", () => island.openFromHotkey());
   await onEvent<{ name: string; error: string }>("hotkey-error", (p) => {
-    if (p.name === "palette" && p.error) island.error(`Atalho da paleta indisponível: ${p.error}`);
+    if (p.name === "palette" && p.error) island.error(`Atalho para abrir a ilha indisponível: ${p.error}`);
   });
 
   await onEvent<"moved" | "still" | "aborted">("island-drag-end", (end) => island.dragEnded(end));

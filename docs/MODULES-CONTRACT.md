@@ -545,7 +545,7 @@ Break reminders and screen time per app. Default off, order 17, tab "Pausas".
 Extends `media` (order 2) and the drop card of `upload`; no new module, no new manifest key.
 - **Contract**: `modules/upload/api.ts` defines `upload.dropAction` (`DropAction`, `matchDropActions`). `media` provides one per tool while it is on; `upload` lists `useAll` that fit the dropped file's extension as chips on the `choose` card. Upload never imports media. The same tools are in the Mídia item menu.
 - **Tools**: images (png/jpg/webp/gif): convert, resize 50%/25%, compress, strip metadata, copy to clipboard, OCR (Windows.Media.Ocr, local); PDF: page count and size; video (mp4/mkv/mov/webm/avi): GIF, compress, extract audio (ffmpeg).
-- **Results** are written next to the original (`name-comprimido.png`, `name (2).png`...), never overwriting; announced with `api.island.notice`; palette action "Cancelar ferramenta de mídia em andamento".
+- **Results** are written next to the original (`name-comprimido.png`, `name (2).png`...), never overwriting; announced with `api.island.notice`; action "Cancelar ferramenta de mídia em andamento" (Alt+<key> only).
 - **Commands** (`media_` prefix): `media_tool_info`, `media_tool_run(op, path, arg)`, `media_tool_cancel(id)`, `media_ffmpeg_status`, `media_ffmpeg_download`. Event `media-tool` `{id, op, state: progress|done|error|cancelled, pct, out, text, msg}`.
 - **Threads**: one worker per job via the module spawner, ended when the job ends; cancel flag per job, raised for all on module stop. The webview listens to `media-tool` only while a job is in flight.
 - **ffmpeg**: `ffmpeg.exe` on PATH, else `%LOCALAPPDATA%\Coucou\tools\ffmpeg.exe`. Download is opt-in (button in Mídia shows size, source URL and SHA-256 first; starts only on click): pinned gyan.dev 7.1.1 essentials zip (92,234,348 bytes) from github.com/GyanD/codexffmpeg, SHA-256 verified before `tar` extracts only `ffmpeg.exe`.
@@ -579,13 +579,13 @@ CPU, memory, disk, network, GPU and temperatures (no fans). Tab "Sistema".
 - **Privacy**: no data leaves the machine except the opt-in LibreHardwareMonitor download (github.com), and loopback reads of LHM. Nothing is stored beyond the settings keys above.
 - **Crate added**: `zip` 2 (deflate only) for the pinned archive.
 
-## board W2 (F52 full): `actions.all` / `actions.run`, flip, Utilidades
+## board W2: `actions.all`, "Último" chip; hotkey opens the home
 
-- **Core (neutral)**: `api.actions.all(): readonly ActionInfo[]` (`{key, title, owner, keyHint?}` of every action allowed now, any owner; never the `ActionDef`, so no module's `run` closure leaks) and `api.actions.run(key): boolean` (through `Actions.run`; a throw or rejection goes to `island.error`; false when unknown or not allowed). A stopped module's actions vanish from `all()`. Reader of both fields: `board`.
-- **Board**: `BoardCard.back?(actions)` is the card's other face. The left card's flip button shows it, or by default the pill owner's actions as buttons; with neither, the button is hidden. Face state is memory only, per pill id, reset when the front pill changes. CSS transition only.
-- **View `utilities`** (`tabOf: "overview"`, height `PANEL_H`): every `actions.all()` entry sorted by title with its `Alt+<k>` hint; a click runs it. Opened by the "..." button on the home card or the palette action "Abrir Utilidades".
-- **"Último" chip**: in the home's right column, the title of the last action run from the board (memory only; cleared when that action disappears).
-- **Idle**: no timers; `all()` is read on sync only while the board views are visible. Settings: no new keys. Tests: `tests/harness/board-w2.test.ts`; markup snapshots `board-*` and `claude-board-*` updated.
+- **Core (neutral)**: `api.actions.all(): readonly ActionInfo[]` (`{key, title, owner, keyHint?}` of every action allowed now, any owner; never the `ActionDef`, so no module's `run` closure leaks). A stopped module's actions vanish from `all()`. Reader: `board` (the chip). Actions are run by `Alt+<key>` only; there is no palette, no `actions.run`, no `actions.search`.
+- **Board home card**: no buttons. The card is clickable as a whole when the pill's `BoardCard` has `open`, or `target: true` (then the click calls `pillOpen` for that pill). `BoardCard.back`, the flip, the `utilities` view and the "Abrir Utilidades" action are gone.
+- **"Último" chip**: in the home's right column, the title of `last.key` (memory only; cleared when that action disappears). Nothing sets `last.key` today.
+- **Hotkey** (`paletteHotkey`, Ctrl+Alt+K, setting name kept for compatibility; label "Atalho para abrir a ilha"): event `palette` opens the island expanded on `State.defaultView()` and gives it the keyboard (`island.openFromHotkey`; a waiting pinned request is brought back instead). While it is open that way: Left/Right (and Ctrl+Tab / Ctrl+Shift+Tab, always) move between tabs, Enter clicks the `.opens` card of the view, Esc folds. The keyboard flag ends when the island leaves `expanded`.
+- **Idle**: no timers. Tests: `tests/harness/board-w2.test.ts`, `tests/harness/hotkey.test.ts`; markup snapshots `board-*` and `claude-board-*` updated.
 
 ## aistats (Estatísticas de IA, order 20, default off, Rust prefix `aistats_`)
 

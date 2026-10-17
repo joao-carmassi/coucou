@@ -9,7 +9,7 @@ import { card } from "../../kit/card";
 import { last } from "./last";
 import { homeBody, homeLayout, setSlim, setSolo } from "../../kit/home";
 import { ICONS } from "../../kit/icons";
-import { tile, tileActions, tileCard, tileHead } from "../../kit/tile";
+import { tile } from "../../kit/tile";
 import { rt } from "./primary";
 import type { BoardCard, BoardCardOf, BoardFocus, BoardPillOf } from "./api";
 
@@ -35,33 +35,10 @@ export function buildBoard(ctx: ViewContext): ViewHost {
   const askLook = (id: string) => askPill(api.useAll<BoardPillOf>("board.pill"), id);
 
   const leftBody = homeBody();
-  const jump = h(
-    "button",
-    {
-      class: "icon-btn jump",
-      title: "Abrir",
-      onclick: () => {
-        const id = api.pills.front()?.id;
-        if (id) api.call("pillOpen", id);
-      },
-    },
-    svg(ICONS.arrowUpRight, 8),
-  );
-  // Flip: the left card's other face (face state per pill id, memory only, reset when the pill changes).
-  const flipBtn = h("button", { class: "icon-btn jump flip", title: "Virar o cartão", onclick: () => { actions.blip(); flip.on = !flip.on; sync(); } }, svg(ICONS.chevronLeft, 8));
-  const utilBtn = h("button", { class: "icon-btn jump utils", title: "Utilidades", onclick: () => { actions.blip(); api.island.open("utilities"); } }, svg(ICONS.ellipsis, 8));
-  const left = card(null, leftBody, jump, flipBtn, utilBtn);
+  const left = card(null, leftBody);
   const pills = h("div", { class: "pills" });
   const chip = h("div", { class: "board-last" });
   const right = card(null, chip, pills);
-  const flip = { id: "", on: false };
-  const ownerActions = (task: Pill) => api.actions.all().filter((a) => a.owner === task.owner);
-
-  /** The default back: the pill owner's actions as buttons. */
-  function defaultBack(task: Pill): HTMLElement {
-    return tileCard("back", tileHead({ dot: task.color, title: "Ações" }), tileActions(...ownerActions(task).map((a) =>
-      h("button", { class: "btn", text: a.title, onclick: () => { actions.blip(); last.key = a.key; api.actions.run(a.key); } }))));
-  }
   const el = homeLayout({ left, right });
 
   let shown: BoardCard | null = null;
@@ -69,11 +46,17 @@ export function buildBoard(ctx: ViewContext): ViewHost {
   let pillKey = "";
   let room = 0;
 
-  // A session-like card is clickable as a whole; the arrow and other buttons keep their own click.
+  // A card that opens something is clickable as a whole (its own `open`, else the owner's pillOpen); buttons inside keep their own click.
+  const opener = (): (() => void) | null => {
+    if (shown?.open) return shown.open.bind(shown);
+    const id = api.pills.front()?.id;
+    return shown?.target && id ? () => void api.call("pillOpen", id) : null;
+  };
   left.addEventListener("click", (e) => {
-    if (!shown?.open || flip.on || (e.target as Element).closest("button")) return;
+    const open = opener();
+    if (!open || (e.target as Element).closest("button")) return;
     actions.blip();
-    shown.open();
+    open();
   });
 
   const focus = (id: string) => {
@@ -130,32 +113,26 @@ export function buildBoard(ctx: ViewContext): ViewHost {
   function sync() {
       const task = api.pills.front();
       const next = task ? (askCard(task.id) ?? plainCard(task)) : null;
-      if (flip.id !== (task?.id ?? "")) { flip.id = task?.id ?? ""; flip.on = false; }
-      const mine = task ? ownerActions(task) : [];
-      const canFlip = !!next && (!!next.back || mine.length > 0);
-      if (!canFlip) flip.on = false;
-      flipBtn.style.display = canFlip ? "" : "none";
-      const key = next ? `${task!.id}~${next.key}~${flip.on ? "b" + (next.back ? "" : mine.map((a) => a.key + a.title).join()) : "f"}` : "";
+      const key = next ? `${task!.id}~${next.key}` : "";
       if (key !== cardKey || (!shown && !next && !leftBody.firstChild)) {
         cardKey = key;
         clear(leftBody);
-        leftBody.append(!next ? emptyCard() : flip.on ? (next.back?.(actions) ?? defaultBack(task!)) : next.build(actions));
+        leftBody.append(!next ? emptyCard() : next.build(actions));
       }
       shown = next;
-      if (!flip.on) shown?.sync?.();
+      shown?.sync?.();
       // The "Último" chip: the last action run from the board, until that action disappears.
       const lastInfo = last.key ? api.actions.all().find((a) => a.key === last.key) : undefined;
       if (!lastInfo) last.key = null;
       chip.textContent = lastInfo ? `Último: ${lastInfo.title}` : "";
       chip.style.display = lastInfo ? "" : "none";
 
-      jump.style.display = shown?.target ? "" : "none";
       const nextRoom = shown?.room ?? 0;
       if (nextRoom !== room) {
         room = nextRoom;
         onResize();
       }
-      const opens = !!shown?.open && !flip.on;
+      const opens = !!opener();
       left.classList.toggle("opens", opens);
       left.title = opens ? (shown!.hint ?? "") : "";
 

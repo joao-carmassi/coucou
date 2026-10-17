@@ -195,7 +195,6 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
         return scope.add(off);
       },
       all: () => Actions.all().map((a) => ({ key: a.key, title: a.def.title, owner: a.owner, keyHint: a.def.key })),
-      run: (key) => Actions.run(key, (e) => host.error(e)),
     },
     provide: ((key: string, impl: unknown) =>
       scope.add(key.includes(".") ? Services.provide(key, impl) : Hooks.provide(key as keyof IslandHooks, impl as never))) as IslandApi["provide"],
