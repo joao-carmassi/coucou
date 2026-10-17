@@ -41,6 +41,8 @@
 <h2>6. Claude Code hooks</h2>
 <p>If you install the Claude Code hooks (or the WSL ones), Claude Code sends session events to Coucou through a local named pipe on your computer. These events never leave your computer through Coucou. Before changing any settings file (<code>~/.claude/settings.json</code>, one per profile, and the one inside a WSL distribution), Coucou shows you the exact changes and makes a dated backup. What you allow or deny on the island is sent back to Claude Code on your PC only.</p>
 
+<p>If you turn on the optional AI statistics module (off by default), Coucou reads the local logs of Claude Code and Codex on your computer, only while its tab is open, and keeps token counts per day, model names and project folder names in a local file (%LOCALAPPDATA%\Coucou\aistats.json). It never stores or sends prompts, answers, file paths or account data. You can erase it in Settings.</p>
+
 <h2>7. System permissions</h2>
 <p>Windows asks for no special permission. The microphone is used only by the voice module, on the hotkey. Window capture happens only when you drag Mochi onto a window, and never captures Coucou’s own windows.</p>
 
@@ -91,6 +93,8 @@
 
 <h2>6. Hooks Claude Code</h2>
 <p>Si tu installes les hooks Claude Code (ou ceux de WSL), Claude Code envoie les événements de session à Coucou par un canal nommé local sur ton ordinateur. Coucou ne les fait jamais sortir de ton ordinateur. Avant de modifier un fichier de configuration (<code>~/.claude/settings.json</code>, un par profil, et celui d’une distribution WSL), Coucou te montre les changements exacts et en fait une sauvegarde datée. Ce que tu autorises ou refuses sur l’island est renvoyé à Claude Code sur ton PC uniquement.</p>
+
+<p>Si tu actives le module optionnel de statistiques IA (désactivé par défaut), Coucou lit sur ton ordinateur les journaux locaux de Claude Code et de Codex, seulement quand son onglet est ouvert, et garde des compteurs de jetons par jour, des noms de modèles et des noms de dossiers de projet dans un fichier local (%LOCALAPPDATA%\Coucou\aistats.json). Il ne stocke ni n’envoie jamais de requêtes, de réponses, de chemins de fichiers ni de données de compte. Tu peux l’effacer dans les Paramètres.</p>
 
 <h2>7. Autorisations système</h2>
 <p>Windows ne demande aucune autorisation particulière. Le micro n’est utilisé que par le module vocal, sur le raccourci. La capture de fenêtre n’a lieu que lorsque tu glisses Mochi sur une fenêtre, et ne capture jamais les fenêtres de Coucou.</p>

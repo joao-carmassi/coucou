@@ -586,3 +586,16 @@ CPU, memory, disk, network, GPU and temperatures (no fans). Tab "Sistema".
 - **View `utilities`** (`tabOf: "overview"`, height `PANEL_H`): every `actions.all()` entry sorted by title with its `Alt+<k>` hint; a click runs it. Opened by the "..." button on the home card or the palette action "Abrir Utilidades".
 - **"Último" chip**: in the home's right column, the title of the last action run from the board (memory only; cleared when that action disappears).
 - **Idle**: no timers; `all()` is read on sync only while the board views are visible. Settings: no new keys. Tests: `tests/harness/board-w2.test.ts`; markup snapshots `board-*` and `claude-board-*` updated.
+
+## aistats (Estatísticas de IA, order 20, default off, Rust prefix `aistats_`)
+
+Token counters from the local logs of Claude Code and Codex. Tab "Estatísticas de IA".
+
+- **Manifest / settings keys**: `aistatsKeepDays` (default 90, 1..365). Presets: tudo, vitrine. The long-turn alert (`aistatsLongTurnMin`) is not implemented.
+- **Zero idle**: no watcher, no timer, no thread. Off: nothing. On: nothing until the view opens; the view then calls `aistats_refresh`, which reads only the bytes added since the last call (per file size, mtime and offset), for at most 2 s per call. The view repeats the call while `more` is true and the view is still up. "Atualizar" does one more.
+- **Sources**: Claude `<CLAUDE_CONFIG_DIR or ~/.claude>/projects/**/*.jsonl` (assistant `message.usage`; repeated lines deduped on `message.id` + `requestId`), Codex `<CODEX_HOME or ~/.codex>/sessions/**/*.jsonl` (`token_count` cumulative totals turned into deltas; model from `turn_context`). It does not read the `claudeConfigDir` setting of the claude module. Both formats are undocumented, so unparseable lines are skipped.
+- **Index**: `%LOCALAPPDATA%\Coucou\aistats.json`, written atomically after each refresh; days older than `aistatsKeepDays` are pruned on every write.
+- **Commands** (all return/accept no paths): `aistats_refresh() -> Summary` and `aistats_summary() -> Summary` (both gated by `host.require("aistats")`), `aistats_clear()` (works while off; deletes only our index, never the logs). `Summary`: last 30 local days, totals, models (all, biggest first), top 5 projects, `approx`, `more`.
+- **Privacy**: only numbers, model ids, day keys and project folder base names are stored. No prompt, answer, tool input, full path, `cwd`, user id or e-mail. Nothing leaves the machine.
+- **Cost estimate** (`logic.ts`): per-family price table dated in the UI as "estimativa"; an unknown model has no cost (null), not zero, and the total is flagged "parcial".
+- **Limits**: a log that shrinks is read again from the start and the view says the numbers are approximate (old tokens cannot be subtracted). Codex tokens are not split by project. A same-size, same-second rewrite of a log is not noticed.
