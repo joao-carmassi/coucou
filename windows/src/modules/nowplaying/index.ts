@@ -1,5 +1,5 @@
-// Tocando agora: the player (Rust: Windows media session) as a tab, a compact card (cover, title, artist, time left) and a
-// peek when the track changes; the spectrum (Rust: loopback + FFT) makes the one Mochi dance and fills the bars, and runs
+// Tocando agora: the player (Rust: Windows media session) as a tab, a one-line source "track" (the compact card: cover, title,
+// artist, time left; shown when pinned from the tab or right after leaving it) and a peek when the track changes; the spectrum (Rust: loopback + FFT) makes the one Mochi dance and fills the bars, and runs
 // only while someone sees it.
 import "./nowplaying.css";
 import { svg } from "../../kit/dom";
@@ -10,15 +10,13 @@ import { compactCard, danceLevel, trackKey, trackLine, wantCapture, wantTick, cl
 import { NP } from "./store";
 import { buildView } from "./view";
 
-// Lowest line above the clock's: any agent / notice / timer line beats it, and a non-ambient pill hides it.
-const LINE_PRIORITY = BAND.AMBIENT + 2;
-
 function start(api: IslandApi): Disposer {
   NP.reset();
   const cfg = () => api.settings<Cfg>();
   let capturing = false;
   let tick: Disposer | null = null;
   let announced = trackKey(null);
+  const source = api.status.source("track", { label: "Tocando agora", view: "nowplaying" });
 
   // One place decides what runs: the capture and the 1 s progress tick exist only while they have a viewer.
   const reconcile = () => {
@@ -37,10 +35,10 @@ function start(api: IslandApi): Disposer {
     publishCard();
   };
 
-  // The compact island shows cover, title, artist and time left whenever a track is known (dimmed while paused).
+  // The card (cover, title, artist, time left; dimmed while paused) whenever a track is known: the core decides when it is shown.
   const publishCard = () => {
     const t = NP.track;
-    api.status.set(t && !api.paused() ? { priority: LINE_PRIORITY, ...compactCard(t, Date.now()) } : null);
+    source.set(t && !api.paused() ? { priority: BAND.AMBIENT, ...compactCard(t, Date.now()) } : null);
   };
 
   const apply = (t: Track | null, initial = false) => {
@@ -90,7 +88,7 @@ function start(api: IslandApi): Disposer {
     if (capturing) void Bridge.capture(false).catch(() => {});
     capturing = false;
     api.avatar.level(0);
-    api.status.set(null);
+    source.dispose();
     NP.paintProgress = NP.paintBars = null;
     NP.reset();
   };

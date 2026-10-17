@@ -1,13 +1,13 @@
-// Clima (Open-Meteo, no key). The forecast is fetched only while the Clima view is on screen (store.ts keeps it ~10 min).
-// The status line shows the cached temperature while that cache is fresh and belongs to the chosen city and units.
-// The settings window can change the city while the island is hidden: the status line is re-checked on every visible
-// sync of the view, so until then it can show the old city, for at most the rest of its 10-min ttl (set below).
-// Nothing runs in the background: no timers, no listeners.
+// Clima (Open-Meteo, no key). The forecast is fetched while the Clima view is on screen (store.ts keeps it ~10 min).
+// One-line source "now" (icon + temperature): shown on the compact island when the user pinned it from the Clima tab, or for
+// the focus time after leaving the tab. While it is PINNED the forecast is refreshed every 30 min by one api.interval
+// (whenVisible: armed only while pinned and the island is visible); the pinned line is also fetched once at start, so a
+// hidden island does not release the pin for lack of content. Not pinned: nothing runs in the background.
 import "./weather.css";
 import { BAND, type Disposer, type IslandApi, type ModuleDef } from "../../core/moduleApi";
 import { svg } from "../../kit/dom";
 import { weatherBridge } from "./bridge";
-import { CACHE_MS, cacheKey, isFresh, statusText } from "./logic";
+import { cacheKey, needsPoll, POLL_MS, statusParts } from "./logic";
 import { ICONS } from "./icons";
 import { WeatherStore, weatherCfg } from "./store";
 import { buildWeatherView } from "./view";
@@ -16,22 +16,42 @@ const store = new WeatherStore((lat, lon, units) => weatherBridge.forecast(lat, 
 let showStatus: () => void = () => {};
 
 function start(api: IslandApi): Disposer {
+  const source = api.status.source("now", { label: "Clima agora", view: "weather" });
+  let poll: Disposer | null = null;
   showStatus = () => {
     const { place, units } = weatherCfg(api);
-    const now = Date.now();
     const c = store.cache;
-    const fresh = place && c?.forecast && c.key === cacheKey(place, units) && isFresh(c, now) ? c : null;
-    api.status.set(fresh?.forecast
-      ? { priority: BAND.AMBIENT, text: statusText(fresh.forecast, units), ttlMs: CACHE_MS - (now - fresh.at) }
-      : null);
+    const f = place && c?.key === cacheKey(place, units) ? c.forecast : null;
+    source.set(f ? { priority: BAND.AMBIENT, ...statusParts(f, units) } : null);
+  };
+  /** Fetches when the pinned line has nothing fresh enough. */
+  const refresh = () => {
+    const { place, units } = weatherCfg(api);
+    if (place && needsPoll(store.cache, cacheKey(place, units), Date.now())) store.load(place, units, true);
+  };
+  const reconcile = () => {
+    const on = api.status.pinned("now");
+    if (on && !poll) {
+      poll = api.interval(() => { const { place, units } = weatherCfg(api); if (place) store.load(place, units, true); }, POLL_MS, { whenVisible: true });
+      refresh();
+    } else if (!on && poll) { poll(); poll = null; }
   };
   store.onChange = () => { showStatus(); api.island.redraw(); };
+  const offs = [
+    api.island.onChange(reconcile),
+    // The interval sleeps while hidden: catch up on return.
+    api.onVisibility((mode) => { if (mode !== "hidden" && poll) refresh(); }),
+  ];
   showStatus();
+  reconcile();
   return () => {
+    offs.forEach((o) => o());
+    poll?.();
+    poll = null;
     showStatus = () => {};
     store.onChange = () => {};
     store.reset();
-    api.status.set(null);
+    source.dispose();
   };
 }
 

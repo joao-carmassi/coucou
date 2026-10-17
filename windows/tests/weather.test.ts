@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CACHE_MS, cacheKey, describe, dayLabel, fmtTemp, hourLabel, isFresh, placeLabel, statusText } from "../src/modules/weather/logic.ts";
+import { CACHE_MS, cacheKey, describe, dayLabel, fmtTemp, hourLabel, isFresh, needsPoll, placeLabel, POLL_MS, statusParts, statusText } from "../src/modules/weather/logic.ts";
 import type { Forecast } from "../src/modules/weather/logic.ts";
 
 test("WMO codes map to pt-BR text and an icon, day and night", () => {
@@ -66,4 +66,14 @@ test("status text is the icon and the temperature of the current conditions", ()
 test("place label drops empty parts", () => {
   assert.equal(placeLabel({ name: "Campinas", admin: "São Paulo", country: "Brasil", lat: 0, lon: 0 }), "Campinas, São Paulo, Brasil");
   assert.equal(placeLabel({ name: "Ilha", admin: "", country: "", lat: 0, lon: 0 }), "Ilha");
+});
+
+test("status parts split the icon from the temperature; the pinned line polls every 30 min", () => {
+  const f = { current: { time: "", temp: 22.6, feels: 20, humidity: 50, wind: 10, code: 2, isDay: true }, hours: [], days: [] } as Forecast;
+  assert.deepEqual(statusParts(f, "C"), { icon: "⛅", text: "23°C" });
+  assert.equal(POLL_MS, 1_800_000);
+  assert.equal(needsPoll(null, "k", 10), true);
+  assert.equal(needsPoll({ key: "other", at: 0 }, "k", 10), true);
+  assert.equal(needsPoll({ key: "k", at: 0 }, "k", POLL_MS - 1), false);
+  assert.equal(needsPoll({ key: "k", at: 0 }, "k", POLL_MS), true);
 });

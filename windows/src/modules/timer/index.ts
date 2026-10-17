@@ -6,13 +6,13 @@ import { TimerClock } from "./timer";
 import { buildTimerView, type PomoUi } from "./view";
 import { pomoCfg, pomoLabel, pomoMinutes, pomoNext, pomoStart, type PomoState } from "./pomodoro";
 
-interface Cfg { timerPomodoro: unknown; timerPomodoroAuto: boolean }
+interface Cfg { timerPomodoro: unknown; timerPomodoroAuto: boolean; timerGlance: boolean }
 
 // State lives here (not in State); the object is inert until start() gives it an onChange.
 const Timer = new TimerClock();
 // Pomodoro phase on top of the countdown; null = a plain timer / stopwatch.
 let pomo: PomoState | null = null;
-let readCfg: () => Cfg = () => ({ timerPomodoro: null, timerPomodoroAuto: true });
+let readCfg: () => Cfg = () => ({ timerPomodoro: null, timerPomodoroAuto: true, timerGlance: false });
 const pomoUi: PomoUi = {
   label: () => (pomo ? pomoLabel(pomo, pomoCfg(readCfg().timerPomodoro)) : null),
   start: () => preparePomo(),
@@ -27,11 +27,25 @@ function start(api: IslandApi): Disposer {
   let tick: Disposer | null = null;
   let done: Disposer | null = null;
   let hold: Disposer | null = null;
+  let glance: Disposer | null = null;
   const refresh = () => {
     api.status.set(Timer.active ? { priority: 50, text: Timer.text(), overGrid: true } : null);
     api.island.redraw();
   };
-  const disarm = () => { tick?.(); done?.(); tick = done = null; };
+  const disarm = () => { tick?.(); done?.(); glance?.(); tick = done = glance = null; };
+  // timerGlance: while a timer runs, every focus time a short peek with its line, even if the island is hidden.
+  // One timeout, re-armed after each fire, dropped with the timer (disarm) and with the module.
+  const armGlance = () => {
+    glance = api.timeout(() => {
+      glance = null;
+      if (Timer.status !== "running") return;
+      if (!api.island.busy()) {
+        const label = pomo ? ` · ${pomoLabel(pomo, pomoCfg(readCfg().timerPomodoro))}` : "";
+        api.island.notice({ text: `${Timer.text()}${label}`, priority: BAND.NOTICE, view: "timer", key: "timer-glance", peek: true, ms: 3000 });
+      }
+      armGlance();
+    }, api.island.focusMs());
+  };
   // Next phase: running at once, or ready (a click starts it) when timerPomodoroAuto is false.
   const advance = (text: string | null) => {
     const c = readCfg(), cfg = pomoCfg(c.timerPomodoro);
@@ -68,6 +82,7 @@ function start(api: IslandApi): Disposer {
       // One-shot, so the end still rings (and is shown) if the island is hidden.
       if (Timer.kind === "countdown") done = api.timeout(finish, Timer.remaining());
       tick = api.interval(refresh, 1000, { whenVisible: true });
+      if (readCfg().timerGlance === true) armGlance();
     }
     refresh();
   };
@@ -75,6 +90,12 @@ function start(api: IslandApi): Disposer {
   pomo = null;
   readCfg = () => api.settings<Cfg>();
   Timer.onChange = arm;
+  // The settings window saved: look one tick later (the core updates State after its own listener).
+  const offCfg = api.listen("settings-changed", () => { api.timeout(() => {
+    const want = Timer.status === "running" && readCfg().timerGlance === true;
+    if (want && !glance) armGlance();
+    else if (!want && glance) { glance(); glance = null; }
+  }, 0); });
   const offKeep = api.island.keepAwake(() => Timer.active);
   // Alt+F / palette: a pomodoro work phase, only while nothing is running.
   const offAction = api.actions.add({
@@ -87,6 +108,7 @@ function start(api: IslandApi): Disposer {
   return () => {
     disarm();
     hold?.();
+    offCfg();
     offKeep();
     offAction();
     offVis();

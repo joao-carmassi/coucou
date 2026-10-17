@@ -5,6 +5,7 @@ import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
 import { Compact } from "../../src/core/compact";
 import { State } from "../../src/core/state";
+import { Pin } from "../../src/core/pin";
 import { buildCatalog } from "../../src/modules/resolve";
 
 // Counted fake for the Rust bridge: no network in the harness.
@@ -50,6 +51,7 @@ beforeEach(() => {
   T.forecasts = 0;
   T.host = null;
   settings().weatherPlace = place;
+  State.settings.pinnedLine = "";
 });
 
 describe("weather module", () => {
@@ -85,8 +87,85 @@ describe("weather module", () => {
     T.island!.open("weather");
     T.host!.sync();
     await tick();
+    expect(Compact.resolve(0)).toBeNull(); // not pinned, not left yet: no line
+    Pin.set("weather.now");
+    expect(Compact.resolve(0)?.text).toMatch(/23°C/);
+    expect(Compact.resolve(0)?.icon).toBe("⛅");
+    Registry.apply({ weather: false });
+    expect(Compact.resolve(0)).toBeNull();
+  });
+
+  it("pinned: one 30-min interval, armed only while the island is visible; hidden = none", async () => {
+    vi.useFakeTimers();
+    const live = new Set<unknown>();
+    const armed: { fn: () => void; ms: number }[] = [];
+    const si = window.setInterval, ci = window.clearInterval;
+    window.setInterval = ((fn: () => void, ms: number) => { const id = si(fn, ms); live.add(id); armed.push({ fn, ms }); return id; }) as typeof window.setInterval;
+    window.clearInterval = ((id: number) => { live.delete(id); ci(id); }) as typeof window.clearInterval;
+    try {
+      State.settings.pinnedLine = "weather.now";
+      Registry.apply({ weather: true });
+      await vi.advanceTimersByTimeAsync(50);
+      const fetched = T.forecasts; // once at start, even if hidden
+      expect(fetched).toBe(1);
+      T.island!.hide();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(live.size).toBe(0); // hidden: no interval armed
+      await vi.advanceTimersByTimeAsync(2 * 60 * 60_000);
+      expect(T.forecasts).toBe(fetched); // hidden: no polling at all
+      State.settings.compactHideInterval = 0; // never hides again on its own
+      T.island!.applySettings();
+      T.island!.reveal();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(live.size).toBe(1); // pinned and visible: exactly the one poll
+      expect(T.forecasts).toBe(fetched + 1); // caught up on return (cache older than 30 min)
+      const poll = armed.at(-1)!;
+      expect(poll.ms).toBe(30 * 60_000);
+      poll.fn(); // the interval fires
+      await vi.advanceTimersByTimeAsync(10);
+      expect(T.forecasts).toBe(fetched + 2);
+      Pin.set("");
+      await vi.advanceTimersByTimeAsync(100);
+      expect(live.size).toBe(0);
+    } finally {
+      State.settings.compactHideInterval = 60;
+      window.setInterval = si;
+      window.clearInterval = ci;
+      vi.useRealTimers();
+    }
+  });
+
+  it("not pinned: no polling, no timers of its own", async () => {
+    Registry.apply({ weather: true });
+    expect(T.forecasts).toBe(0);
+  });
+
+  it("the Clima view's pin button toggles the pin and shows it", async () => {
+    Registry.apply({ weather: true });
+    T.island!.open("weather");
+    T.host!.sync();
+    await tick();
+    T.host!.sync();
+    const btn = document.querySelector<HTMLButtonElement>(".weather-head .pin-btn")!;
+    expect(btn.title).toBe("Fixar na ilha");
+    btn.click();
+    expect(State.settings.pinnedLine).toBe("weather.now");
+    expect(btn.title).toBe("Soltar");
+    expect(btn.getAttribute("aria-pressed")).toBe("true");
+    btn.click();
+    expect(State.settings.pinnedLine).toBe("");
+    expect(btn.title).toBe("Fixar na ilha");
+  });
+
+  it("module off: the source is gone and the pin stays in the settings", async () => {
+    State.settings.pinnedLine = "weather.now";
+    Registry.apply({ weather: true });
+    T.island!.open("weather");
+    T.host!.sync();
+    await tick();
     expect(Compact.resolve(0)?.text).toMatch(/23°C/);
     Registry.apply({ weather: false });
     expect(Compact.resolve(0)).toBeNull();
+    expect(State.settings.pinnedLine).toBe("weather.now");
   });
 });

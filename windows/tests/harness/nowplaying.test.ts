@@ -23,6 +23,7 @@ import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
 import { State } from "../../src/core/state";
 import { Compact } from "../../src/core/compact";
+import { Pin } from "../../src/core/pin";
 import { buildCatalog } from "../../src/modules/resolve";
 import { nowplayingModule } from "../../src/modules/nowplaying";
 import manifest from "../../src/modules/nowplaying/manifest.json";
@@ -72,6 +73,10 @@ describe("nowplaying lifecycle", () => {
     expect(State.mode).toBe("compact");
     emit("nowplaying-state", track(true));
     await tick(100);
+    expect(State.statusLine).toBeNull(); // a source line is shown only when pinned or just after leaving the tab
+    Pin.set("nowplaying.track");
+    emit("nowplaying-state", track(true, "Faixa")); // same track: the card is republished
+    await tick(100);
     expect(captures()).toEqual([true]);
     expect(State.pills.some((p) => p.owner === "nowplaying")).toBe(false); // the one Mochi dances; no ambient mini
     expect(State.statusLine).toMatchObject({ text: "Faixa", card: { sub: "Artista", trail: "-3:19", dim: false, art: null } });
@@ -103,21 +108,21 @@ describe("nowplaying lifecycle", () => {
     await tick(100);
   });
 
-  it("an agent / notice line beats the card; it returns when that line goes", async () => {
-    Compact.set("claude", { priority: 30, text: "lendo arquivos" });
+  it("a stronger line (voice, timer, notice) beats the pinned card; it returns when that line goes", async () => {
+    Compact.set("claude", { priority: 40, text: "lendo arquivos" });
     expect(State.statusLine?.text).toBe("lendo arquivos");
     expect(State.statusLine?.card).toBeUndefined();
     Compact.set("claude", null);
     expect(State.statusLine?.card?.sub).toBe("Artista");
   });
 
-  it("a non-ambient pill (another task) hides the card; an ambient one does not", () => {
+  it("a pinned line stays beside other pills (overGrid)", () => {
     const own = { owner: "x", label: "l", color: "#fff", mood: "idle" as const };
     const before = State.pills.length;
     State.pills.push({ ...own, id: "t1" }, { ...own, id: "t2", ambient: true });
     expect(State.statusLine?.card?.sub).toBe("Artista"); // t1 is the front pill; t2 is ambient
     State.pills.push({ ...own, id: "t3" });
-    expect(State.statusLine).toBeNull(); // t3 is a real second task
+    expect(State.statusLine?.card?.sub).toBe("Artista"); // the pinned line is not hidden by a second task
     State.pills.length = before;
     State.focusId = State.focusId && State.pills.some((p) => p.id === State.focusId) ? State.focusId : null;
   });
