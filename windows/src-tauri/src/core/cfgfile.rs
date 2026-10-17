@@ -1,8 +1,5 @@
 // Checked editing of small config files: strict read, fingerprint, diff,
 // dated backup, and a write that refuses when the file changed since preview.
-//
-// Consumers land in later tasks; until then nothing in the crate calls these.
-#![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
 
