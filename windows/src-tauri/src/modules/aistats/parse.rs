@@ -12,6 +12,9 @@ pub struct Totals {
     pub cache_write: u64,
     /// Informational: already part of `output`.
     pub reasoning: u64,
+    /// Requests (Claude: one per deduped assistant message; Codex: one per growing `token_count`). Missing in old indexes.
+    #[serde(default)]
+    pub req: u64,
 }
 
 impl Totals {
@@ -21,6 +24,7 @@ impl Totals {
         self.cache_read += o.cache_read;
         self.cache_write += o.cache_write;
         self.reasoning += o.reasoning;
+        self.req += o.req;
     }
     pub fn sum(&self) -> u64 {
         self.input + self.output + self.cache_read + self.cache_write
@@ -35,6 +39,7 @@ impl Totals {
             cache_read: self.cache_read - o.cache_read,
             cache_write: self.cache_write - o.cache_write,
             reasoning: self.reasoning.saturating_sub(o.reasoning),
+            req: 0,
         }
     }
 }
@@ -111,6 +116,7 @@ pub fn claude_line(line: &str, off: i64) -> Option<ClaudeRec> {
         cache_read: u(usage, "cache_read_input_tokens"),
         cache_write: u(usage, "cache_creation_input_tokens"),
         reasoning: usage.get("output_tokens_details").map_or(0, |d| u(d, "thinking_tokens")),
+        req: 1,
     };
     let model = msg.get("model")?.as_str()?;
     if model.starts_with('<') {
@@ -148,9 +154,10 @@ pub fn codex_line(line: &str, st: &mut CodexState, off: i64) -> Option<(String, 
                 cache_read: cached,
                 cache_write: u(t, "cache_write_input_tokens"),
                 reasoning: u(t, "reasoning_output_tokens"),
+                req: 0,
             };
             // Cumulative per file; a drop means the counter restarted, so the new value is all new.
-            let delta = match st.last {
+            let mut delta = match st.last {
                 Some(l) if total.covers(&l) => total.minus(&l),
                 _ => total,
             };
@@ -158,6 +165,7 @@ pub fn codex_line(line: &str, st: &mut CodexState, off: i64) -> Option<(String, 
             if delta.sum() == 0 {
                 return None;
             }
+            delta.req = 1;
             let day = local_day(v.get("timestamp")?.as_str()?, off)?;
             let model = if st.model.is_empty() { "codex".to_string() } else { st.model.clone() };
             Some((day, model, delta))
@@ -176,7 +184,7 @@ mod tests {
     fn claude_sample() {
         let r = claude_line(CLAUDE, 0).unwrap();
         assert_eq!((r.day.as_str(), r.model.as_str(), r.key.as_str(), r.project.as_str()), ("2026-10-02", "claude-opus-4-1", "msg1|req1", "proj"));
-        assert_eq!(r.tok, Totals { input: 10, output: 20, cache_read: 40, cache_write: 30, reasoning: 5 });
+        assert_eq!(r.tok, Totals { input: 10, output: 20, cache_read: 40, cache_write: 30, reasoning: 5, req: 1 });
         assert_eq!(claude_line(CLAUDE, -14 * 3600).unwrap().day, "2026-10-01", "local day, not UTC");
         assert!(claude_line(r#"{"type":"user","message":{}}"#, 0).is_none());
         assert!(claude_line("not json", 0).is_none());
@@ -194,7 +202,7 @@ mod tests {
         let (_, m, t) = codex_line(&tc(100, 60, 10), &mut st, 0).unwrap();
         assert_eq!((m.as_str(), t.input, t.cache_read, t.output), ("gpt-5", 40, 60, 10));
         let (_, _, t) = codex_line(&tc(150, 90, 25), &mut st, 0).unwrap();
-        assert_eq!((t.input, t.cache_read, t.output), (20, 30, 15));
+        assert_eq!((t.input, t.cache_read, t.output, t.req), (20, 30, 15, 1));
         assert!(codex_line(&tc(150, 90, 25), &mut st, 0).is_none(), "no change, no record");
         let (_, _, t) = codex_line(&tc(10, 0, 5), &mut st, 0).unwrap();
         assert_eq!((t.input, t.output), (10, 5), "reset takes the new total");
