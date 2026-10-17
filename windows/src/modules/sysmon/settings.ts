@@ -34,7 +34,7 @@ function sysmonSettingsSection(ms: ModuleSettings): { el: HTMLElement } {
     el: h("section", { id: "sysmon" },
       h("h2", {}, h("span", { text: "Sistema" })),
       h("div", { class: "hint", text: "A leitura só acontece com a seção Sistema aberta. Nenhum dado sai do computador, exceto o teste de velocidade (ao clicar) e o download opcional." }),
-      shown("cpu", "CPU"), shown("ram", "Memória"), shown("gpu", "GPU"), shown("disk", "Disco"), shown("net", "Rede"), shown("temp", "Temperaturas"), shown("top", "Apps que mais consomem"),
+      shown("cpu", "CPU"), shown("ram", "Memória"), shown("gpu", "GPU"), shown("disk", "Disco"), shown("net", "Rede"), shown("temp", "Temperaturas"),
       row("Alertas (avisos na ilha)", toggle(cfg.sysmonAlerts === true, (v) => void ms.save({ sysmonAlerts: v }), "Alertas")),
       num("CPU acima de (%)", "sysmonCpuMax", 10, 100, 90), num("Memória acima de (%)", "sysmonRamMax", 10, 100, 90),
       num("Disco do sistema acima de (%)", "sysmonDiskMax", 10, 100, 95), num("Temperatura acima de (°C)", "sysmonTempMax", 40, 120, 85),

@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { calls } from "./setup";
 import { dummyModule, dummyProbe } from "./dummyModule";
 
-const SNAP = { cpu: 1, ramUsed: 1, ramTotal: 2, disks: [], diskBusy: null, netDown: null, netUp: null, gpu: null, gpuMem: null, driveTemps: [{ name: "Disco 0", celsius: 99 }], byCpu: [], byMem: [] };
+const SNAP = { cpu: 1, ramUsed: 1, ramTotal: 2, disks: [], diskBusy: null, netDown: null, netUp: null, gpu: null, gpuMem: null, driveTemps: [{ name: "Disco 0", celsius: 99 }] };
 const bus = vi.hoisted(() => ({ fns: [] as ((p: unknown) => void)[] }));
 vi.mock("@tauri-apps/api/event", () => ({
   listen: async (name: string, fn: (p: unknown) => void) => {
@@ -60,6 +60,7 @@ describe("sysmon module", () => {
     dummyProbe.api!.island.open("sysmon");
     await tick(2_500);
     expect(n("sysmon_sample")).toBeGreaterThan(0);
+    expect(calls.invoke.find((c) => c.cmd === "sysmon_sample")!.args).toEqual({ opts: { temps: true } });
     const releases = n("sysmon_release");
     dummyProbe.api!.island.hide();
     await tick(10);

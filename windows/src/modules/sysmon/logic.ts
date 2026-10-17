@@ -1,7 +1,8 @@
 // Pure helpers: formatting and the alert rules. No DOM, no Tauri (Node tests load this file).
 
-export interface Show { cpu: boolean; ram: boolean; gpu: boolean; disk: boolean; net: boolean; temp: boolean; top: boolean }
-export const SHOW_DEFAULT: Show = { cpu: true, ram: true, gpu: true, disk: true, net: true, temp: true, top: true };
+// A stale `top` key in an older settings file is ignored.
+export interface Show { cpu: boolean; ram: boolean; gpu: boolean; disk: boolean; net: boolean; temp: boolean }
+export const SHOW_DEFAULT: Show = { cpu: true, ram: true, gpu: true, disk: true, net: true, temp: true };
 
 export function showOf(v: unknown): Show {
   const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
@@ -20,6 +21,19 @@ export function bytes(n: number): string {
 
 export const rate = (n: number | null): string => (n == null ? "–" : `${bytes(n)}/s`);
 export const pct = (n: number | null): string => (n == null ? "–" : `${Math.round(n)}%`);
+
+/** Colour band of a temperature: hot from the alert limit, warm from 20 °C under it. */
+export const heat = (c: number, max: number): "cool" | "warm" | "hot" => (c >= max ? "hot" : c >= max - 20 ? "warm" : "cool");
+
+/** Sparkline of the last `slots` samples, right-aligned, in a 100 x 24 box (values 0..100). Empty below 2 points. */
+export function spark(v: number[], slots = 30): { line: string; area: string } {
+  const pts = v.slice(-slots);
+  if (pts.length < 2) return { line: "", area: "" };
+  const step = 100 / (slots - 1);
+  const xy = pts.map((p, i) => `${(100 - (pts.length - 1 - i) * step).toFixed(2)},${(23 - (Math.max(0, Math.min(100, p)) * 22) / 100).toFixed(2)}`);
+  const line = `M${xy.join("L")}`;
+  return { line, area: `${line}L100,24L${xy[0].split(",")[0]},24Z` };
+}
 
 export function clampInt(v: unknown, lo: number, hi: number, dflt: number): number {
   const n = Math.floor(Number(v));
