@@ -5,7 +5,7 @@ import { h, clear } from "../../kit/dom";
 import { card, view } from "../../kit/card";
 import type { ViewContext, ViewHost } from "../../core/moduleApi";
 import { SysmonBridge, type LhmInfo, type Reading, type Snapshot } from "./bridge";
-import { bytes, clampInt, heat, pct, rate, showOf, spark } from "./logic";
+import { bytes, clampInt, fitHeight, heat, pct, rate, showOf, spark } from "./logic";
 
 interface Cfg { sysmonShow: unknown; sysmonLhm: boolean; sysmonLhmPort: number; sysmonTempMax: number }
 const msg = (e: unknown) => String(e).replace(/^Error:\s*/, "");
@@ -82,6 +82,14 @@ export function buildSysmonView(ctx: ViewContext, onTemp: (c: number | null) => 
   let lhmInfo: LhmInfo | null = null;
   let lhmMsg = "";
   let last: Snapshot | null = null;
+  let fitted = fitHeight(showOf(null), { drives: 1, chipLines: 1, note: false });
+  // Height follows what is shown; asked again (onResize) only when it changes.
+  const refit = () => {
+    const next = fitHeight(showOf(api.settings<Cfg>().sysmonShow), { drives: last?.disks.length ?? 1, chipLines: Math.ceil(chips.children.length / 4), note: !lhmBox.hidden });
+    if (next === fitted) return;
+    fitted = next;
+    ctx.onResize();
+  };
   let driveRows = new Map<string, { bar: ReturnType<typeof bar>; free: HTMLElement }>();
 
   const cpuTemps = () => (readings ?? []).filter((r) => /cpu|core|package|tctl|tdie/i.test(`${r.hardware} ${r.label}`));
@@ -125,7 +133,7 @@ export function buildSysmonView(ctx: ViewContext, onTemp: (c: number | null) => 
     tiles.hidden = !show.cpu && !show.ram && !show.gpu;
     disk.hidden = !show.disk; net.hidden = !show.net; io.hidden = !show.disk && !show.net;
     temps.hidden = !show.temp;
-    if (!s) return;
+    if (!s) { refit(); return; }
     const ramPct = s.ramTotal ? (s.ramUsed * 100) / s.ramTotal : null;
     cpu.set(s.cpu, s.cpu == null ? "medindo…" : "uso total");
     ram.set(ramPct, `${bytes(s.ramUsed)} de ${bytes(s.ramTotal)}`);
@@ -136,6 +144,7 @@ export function buildSysmonView(ctx: ViewContext, onTemp: (c: number | null) => 
     down.textContent = rate(s.netDown); up.textContent = rate(s.netUp);
     drawTemps(s);
   };
+  const redraw = () => { draw(); drawLhm(); refit(); };
 
   const drawLhm = () => {
     clear(lhmBox);
@@ -176,7 +185,7 @@ export function buildSysmonView(ctx: ViewContext, onTemp: (c: number | null) => 
         if (!readings) lhmMsg = "";
       }
       onTemp(hottest());
-      draw(); drawLhm();
+      redraw();
     } catch (e) {
       api.island.error(msg(e));
     } finally {
@@ -192,12 +201,14 @@ export function buildSysmonView(ctx: ViewContext, onTemp: (c: number | null) => 
   };
   const arm = () => {
     if (tick) return;
-    draw(); drawLhm();
+    redraw();
     void SysmonBridge.lhmInfo().then((i) => { lhmInfo = i; drawLhm(); }, () => {});
     void sample();
     tick = api.interval(() => { if (!open()) return stop(); void sample(); }, 2000, { whenVisible: true });
   };
   // A hidden island ticks nothing, so the interval cannot notice: release here too.
   api.onVisibility((mode) => { if (mode === "hidden") stop(); });
-  return { el, sync() { if (open()) arm(); } };
+  // Settings may change while the view is open: refit then too (deferred, as the stored settings replace after listeners).
+  api.listen("settings-changed", () => void api.timeout(() => { draw(); refit(); }, 0));
+  return { el, get height() { return fitted; }, sync() { if (open()) arm(); } };
 }
