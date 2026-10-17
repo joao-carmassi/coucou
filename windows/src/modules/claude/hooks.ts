@@ -62,6 +62,10 @@ export interface HookPayload {
   session_title?: string;
   /** On a Stop: what Claude said to end its turn. */
   last_message?: string;
+  /** Every event carries the permission mode and effort; SessionStart the model. */
+  permission_mode?: string;
+  effort?: { level?: string };
+  model?: string;
 }
 
 /** Sessions followed at once: as many as the island has tabs for. */
@@ -161,7 +165,7 @@ function isAutomated(payload: HookPayload): boolean {
   return (payload.entrypoint ?? "").toLowerCase().startsWith(SDK_ENTRYPOINT);
 }
 
-function clientOf(payload: HookPayload): ClaudeClient {
+export function clientOf(payload: HookPayload): ClaudeClient {
   const entry = (payload.entrypoint ?? "").toLowerCase();
   if (entry.includes("desktop")) return "desktop";
   if (entry.includes("vscode") || (payload.term_program ?? "").toLowerCase().includes("vscode")) return "vscode";
@@ -186,6 +190,9 @@ function sessionOf(c: Claude, payload: HookPayload): ClaudeSession {
   session.client = clientOf(payload);
   session.profile = payload.config_dir ?? session.profile;
   if (payload.session_title) session.title = payload.session_title;
+  if (typeof payload.permission_mode === "string") session.mode = payload.permission_mode;
+  if (typeof payload.effort?.level === "string") session.effort = payload.effort.level;
+  if (typeof payload.model === "string" && payload.model) session.model = payload.model;
   if (payload.cwd) {
     session.cwd = payload.cwd;
     // The distro goes with the folder: a Windows session after a WSL one clears it.

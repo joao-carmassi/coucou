@@ -185,6 +185,24 @@ export interface ClaudeSession {
   /** Subagents running now, and how many were launched in this wave. */
   agentsRunning: number;
   agentsLaunched: number;
+  /** What the hooks say of how it runs: the model, the permission mode, the effort level. */
+  model: string | null;
+  mode: string | null;
+  effort: string | null;
+}
+
+/** The permission modes Claude Code reports, as the user knows them. */
+const MODE_NAMES: Record<string, string> = {
+  default: "padrão", plan: "plano", acceptEdits: "aceitar edições", auto: "auto",
+  bypassPermissions: "sem permissões", dontAsk: "não perguntar",
+};
+export const modeName = (mode: string): string => MODE_NAMES[mode] ?? mode;
+
+/** "claude-opus-4-5-20251001" -> "Opus 4.5"; anything unrecognised is shown as it came. */
+export function shortModel(model: string): string {
+  const m = /^claude-(opus|sonnet|haiku)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?(?:\[.*\])?$/i.exec(model);
+  if (!m) return model;
+  return `${m[1].charAt(0).toUpperCase()}${m[1].slice(1).toLowerCase()} ${m[2]}${m[3] ? `.${m[3]}` : ""}`;
 }
 
 /** What a session is called before its folder is known. */
@@ -195,7 +213,7 @@ export function newSession(id: string): ClaudeSession {
     id, profile: "", client: null, title: null, project: SESSION_UNNAMED, cwd: null, state: "idle",
     lines: [], steps: [], asked: null, answer: null, answeredAt: 0,
     approval: null, question: null, news: null, heardAt: 0, wslDistro: null, terminalPids: [],
-    agentsRunning: 0, agentsLaunched: 0,
+    agentsRunning: 0, agentsLaunched: 0, model: null, mode: null, effort: null,
   };
 }
 
