@@ -113,7 +113,7 @@ describe("board primary with the real claude module", () => {
 
 describe("Y/N on the approval card", () => {
   const press = (key: string, target: EventTarget = document.body) => target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
-  it("ignored right after the card appears and right after the palette, honored later, never in a text field", () => {
+  it("ignored right after the card appears, honored later, never in a text field", () => {
     const decide = vi.spyOn(cl(), "decide").mockImplementation(() => {});
     cl().store.session.approval = approval("r9");
     cl().syncRequest(true);
@@ -127,14 +127,6 @@ describe("Y/N on the approval card", () => {
     press("y", input);
     expect(decide).not.toHaveBeenCalled();
     input.remove();
-    // the palette had the keyboard a moment ago
-    State.view = "palette";
-    press("a");
-    State.view = "approval";
-    tick(100);
-    press("y");
-    expect(decide).not.toHaveBeenCalled();
-    tick(1600);
     press("y");
     expect(decide).toHaveBeenCalledWith("allow");
     decide.mockRestore();

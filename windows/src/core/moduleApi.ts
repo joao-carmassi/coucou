@@ -102,7 +102,7 @@ export interface Notice {
   /** May reveal a hidden island to compact (never while presence is quiet, unless urgent). */
   peek?: boolean;
 }
-/** A command for the palette (api.actions.add) and, with `key`, for Alt+<key>. */
+/** A command (api.actions.add); with `key`, run by Alt+<key>. */
 export interface ActionDef {
   /** Local id; the core stamps "<moduleId>.<id>". */
   id: string;
@@ -110,7 +110,7 @@ export interface ActionDef {
   keywords?: readonly string[];
   /** One [a-z0-9]: Alt+<key> while the island has the keyboard. The first to claim it keeps it; duplicates warn. */
   key?: string;
-  /** Not offered (palette, shortcut) while this says false. */
+  /** Not offered (shortcut) while this says false. */
   when?(): boolean;
   /** A throw or rejection goes to api.island.error. */
   run(): void | Promise<void>;
@@ -282,12 +282,10 @@ export interface IslandApi {
     redraw(): void;
   };
   actions: {
-    /** Adds a command to the palette (and Alt+<key>); removed by the disposer or when this module stops. */
+    /** Adds a command (Alt+<key> when it has a `key`); removed by the disposer or when this module stops. */
     add(def: ActionDef): Disposer;
     /** Every action allowed now, any owner. */
     all(): readonly ActionInfo[];
-    /** Runs one by its stamped key (errors go to api.island.error). False when unknown or not allowed now. */
-    run(key: string): boolean;
   };
   provide<K extends keyof IslandHooks>(hook: K, fn: IslandHooks[K]): Disposer;
   /** Offers a service under a namespaced key ("<module>.<name>"; the types live in that module's api.ts). Removed when this module stops. */
