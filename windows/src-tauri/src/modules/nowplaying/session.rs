@@ -15,14 +15,13 @@ use windows::Media::Control::{
 use windows::Storage::Streams::DataReader;
 use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
 
-use super::volume::app_label;
 use crate::core::log;
 
 /// What the island needs to draw the player. `art` is a small JPEG data URL (bounded, see `art_data_url`).
 #[derive(Serialize, Clone, PartialEq, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
-    /// Media-session id of the player (an exe name or a packaged id): the volume control matches by it.
+    /// Media-session id of the player (an exe name or a packaged id).
     pub app_id: String,
     pub app: String,
     pub title: String,
@@ -333,9 +332,42 @@ pub fn run(app: &AppHandle, tx: Sender<Msg>, rx: Receiver<Msg>, gen: u64) {
     }
 }
 
+
+/// Lowercase last name of an app id: "Spotify.exe" -> "spotify"; "Microsoft.ZuneMusic_8we!Microsoft.ZuneMusic" -> "zunemusic".
+/// A packaged id ending in the generic "App" uses the package name before "!" instead.
+pub fn app_key(id: &str) -> String {
+    let mut parts = id.rsplit('!');
+    let last = parts.next().unwrap_or(id);
+    let after = match parts.next() {
+        Some(pkg) if last.eq_ignore_ascii_case("app") => pkg,
+        _ => last,
+    };
+    let before = after.split('_').next().unwrap_or(after);
+    let lower = before.to_lowercase();
+    let lower = lower.strip_suffix(".exe").unwrap_or(&lower);
+    lower.rsplit('.').next().unwrap_or(lower).to_string()
+}
+
+/// Display name: the key with a capital ("spotify" -> "Spotify").
+pub fn app_label(id: &str) -> String {
+    let k = app_key(id);
+    let mut c = k.chars();
+    c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keys_from_exe_and_packaged_ids() {
+        assert_eq!(app_key("Spotify.exe"), "spotify");
+        assert_eq!(app_key("Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic"), "zunemusic");
+        assert_eq!(app_key("SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify"), "spotify");
+        assert_eq!(app_key("Some.Pkg_abc!App"), "pkg");
+        assert_eq!(app_label("spotify.exe"), "Spotify");
+        assert_eq!(app_label(""), "");
+    }
 
     fn snap(pos: Option<u64>, at: u64, playing: bool) -> Snapshot {
         Snapshot { title: "t".into(), playing, position_ms: pos, duration_ms: Some(200_000), at, ..Default::default() }

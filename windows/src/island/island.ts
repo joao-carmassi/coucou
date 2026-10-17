@@ -523,7 +523,7 @@ export class Island implements IslandHost {
     const line = this.noticeLine;
     if (front !== this.noticeEntry || (front && line && (front.text !== line.text || front.priority !== line.priority))) {
       this.noticeEntry = front;
-      this.noticeLine = front ? { priority: front.priority, text: front.text, overGrid: true } : null;
+      this.noticeLine = front ? { priority: front.priority, text: front.text, card: front.card, overGrid: true } : null;
       Compact.set("#notice", this.noticeLine);
       this.redraw();
     } else if (front && front.shownAt == null) this.redraw(); // re-added on screen: its on-screen time restarts at the next sync

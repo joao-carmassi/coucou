@@ -1,6 +1,6 @@
 import { h, svg } from "../../kit/dom";
 import { card, view } from "../../kit/card";
-import type { Disposer, ViewContext, ViewHost } from "../../core/moduleApi";
+import type { ViewContext, ViewHost } from "../../core/moduleApi";
 import { NowPlayingBridge as Bridge, type Control } from "./bridge";
 import { ICONS } from "./icons";
 import { clock, fraction, positionAt, shapeBands, trackKey } from "./logic";
@@ -9,7 +9,7 @@ import { pinButton } from "../../kit/pin";
 
 const BARS = 16;
 
-/** The Tocando agora tab: cover, title, progress (when the length is known), controls, player volume and the spectrum. */
+/** The Tocando agora tab: cover, title, progress (when the length is known), controls and the spectrum. */
 export function buildView(ctx: ViewContext): ViewHost {
   const { api } = ctx;
   const fail = (e: unknown) => api.island.error(e);
@@ -30,12 +30,10 @@ export function buildView(ctx: ViewContext): ViewHost {
   const prev = iconBtn("prev", "Faixa anterior", control("prev"));
   const next = iconBtn("next", "Próxima faixa", control("next"));
   const toggle = iconBtn("play", "Tocar ou pausar", control("toggle"));
-  const vol = h("input", { class: "np-vol", type: "range", min: 0, max: 100, step: 1, "aria-label": "Volume do app", disabled: true }) as HTMLInputElement;
-  const volHint = h("span", { class: "np-hint" });
   const player = h("div", { class: "np-player" },
     h("div", { class: "np-main" }, art, h("div", { class: "np-meta" }, title, artist, where), eq),
     progress,
-    h("div", { class: "np-ctl" }, prev, toggle, next, h("div", { class: "grow" }), volHint, vol));
+    h("div", { class: "np-ctl" }, prev, toggle, next));
   const empty = h("div", { class: "np-empty" },
     h("div", { class: "title", text: "Nada tocando agora" }),
     h("div", { class: "sub", text: "Toque algo no Spotify, no navegador ou em outro player." }));
@@ -64,18 +62,6 @@ export function buildView(ctx: ViewContext): ViewHost {
   NP.paintBars = paintBars;
 
   let key = "";
-  let volFor = ""; // the player whose volume the slider shows; reset whenever the tab is left
-  let sent: Disposer | null = null;
-  let want = 0;
-  vol.addEventListener("input", () => {
-    want = Number(vol.value) / 100;
-    if (sent) return; // one write per 120 ms while dragging
-    sent = api.timeout(() => {
-      sent = null;
-      void Bridge.volumeSet(want).then((ok) => { volHint.textContent = ok ? "" : "sem volume"; }).catch(fail);
-    }, 120);
-  });
-
   const draw = (t: NonNullable<typeof NP.track>) => {
     title.textContent = t.title || t.app;
     artist.textContent = t.artist;
@@ -89,7 +75,7 @@ export function buildView(ctx: ViewContext): ViewHost {
   return {
     el,
     sync() {
-      if (!visible()) { volFor = ""; return; }
+      if (!visible()) return;
       pin.sync();
       const t = NP.track;
       empty.hidden = !!t;
@@ -97,17 +83,6 @@ export function buildView(ctx: ViewContext): ViewHost {
       if (!t) return;
       const k = trackKey(t) + t.playing + t.canPrev + t.canNext + t.canToggle + (t.art ? 1 : 0);
       if (k !== key) { key = k; draw(t); }
-      if (volFor !== t.appId) {
-        volFor = t.appId;
-        vol.disabled = true;
-        volHint.textContent = "";
-        void Bridge.volumeGet().then((v) => {
-          if (volFor !== t.appId) return;
-          vol.disabled = v === null;
-          volHint.textContent = v === null ? "sem volume" : "";
-          if (v !== null) vol.value = String(Math.round(v * 100));
-        }).catch(fail);
-      }
       paintProgress();
       paintBars();
     },
