@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.5
+
+- Claude finished card: the answer sits in an inset panel with its own background (code blocks stand out) and the card grows to fit it (up to the panel limit, then the panel scrolls).
+
 ## 0.12.4
 
 - Clima redesigned (Agora / 7 dias tabs; hero, wind/humidity/rain/UV tiles, 12-hour grid, 7-day range bars; forecast now 7 days with wind direction and UV).
