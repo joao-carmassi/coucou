@@ -33,6 +33,11 @@ pub fn language(s: &Settings) -> &'static str {
     LANGS.iter().find(|l| **l == v).copied().unwrap_or("auto")
 }
 
+/// "" = no hotkey (the assistant is off).
+pub fn assist_hotkey(s: &Settings) -> String {
+    s.extra.get("voiceAssistHotkey").and_then(Value::as_str).unwrap_or("").to_string()
+}
+
 /// Right Ctrl dictation into any app (the keyboard hook exists only while this is true).
 pub fn flow_enabled(s: &Settings) -> bool {
     s.extra.get("voiceFlowEnabled").and_then(Value::as_bool).unwrap_or(false)
@@ -104,6 +109,14 @@ mod tests {
         assert!(flow_enabled(&s));
         s.extra.insert("voiceFlowEnabled".into(), json!("yes"));
         assert!(!flow_enabled(&s), "only a real boolean turns the hook on");
+    }
+
+    #[test]
+    fn assistant_is_off_by_default() {
+        let mut s = Settings::default();
+        assert_eq!(assist_hotkey(&s), "");
+        s.extra.insert("voiceAssistHotkey".into(), json!("Ctrl+Alt+Space"));
+        assert_eq!(assist_hotkey(&s), "Ctrl+Alt+Space");
     }
 
     #[test]

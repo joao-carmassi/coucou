@@ -2,7 +2,8 @@ import { command, commandOrThrow } from "../../kit/tauri";
 
 
 export const VoiceBridge = {
-  voiceStart: () => commandOrThrow<void>("voice_start"),
+  voiceStart: (mode?: "assist") => commandOrThrow<void>("voice_start", { mode }),
+  voiceSpeak: (text: string) => command<void>("voice_speak", { text }),
   voiceStop: () => command<void>("voice_stop"),
   voiceCancel: () => command<void>("voice_cancel"),
   voiceModelStatus: () => command<VoiceStatus>("voice_model_status"),

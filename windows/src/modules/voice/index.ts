@@ -5,6 +5,7 @@ import type { Disposer, IslandApi, ModuleDef } from "../../core/moduleApi";
 import { App } from "../../kit/app";
 import { VoiceBridge } from "./bridge";
 import { bindFlow, FLOW_STATUS } from "./flow";
+import { match } from "./logic";
 import { buildVoiceView, send, Voice } from "./view";
 
 const reviewing = () => Voice.phase === "review";
@@ -92,7 +93,23 @@ function start(api: IslandApi): Disposer {
       api.avatar.level(v);
       if (Voice.phase === "listening" && Voice.level)Voice.level.style.width = `${Math.round(v * 100)}%`;
     }),
-    api.listen<{ text: string }>("voice-text", ({ text }) => {
+    // Assistant hotkey (off while empty): same card as a take, but the text is matched against the registered actions.
+    api.listen("voice-assist-hotkey", () => {
+      VoiceBridge.voiceStart("assist").catch((e) => { Voice.phase = "error"; Voice.note = String(e).replace(/^Error:\s*/, ""); line(); show(); });
+    }),
+    api.listen<{ text: string; mode?: string }>("voice-text", ({ text, mode }) => {
+      if (mode === "assist") {
+        // Only a registered action runs (api.actions.run); nothing else is ever launched. No match: the text waits for a click.
+        const hit = match(text, api.actions.all());
+        if (hit && api.actions.run(hit.key)) {
+          Voice.phase = "none";
+          Voice.leave();
+          const done = `Feito: ${hit.title}`;
+          api.island.notice({ text: done, key: "assist", peek: true });
+          if (api.settings<{ voiceSpeak: boolean }>().voiceSpeak === true) void VoiceBridge.voiceSpeak(done);
+          return;
+        }
+      }
       Voice.text = text;
       Voice.phase = "review";
       keys(true);

@@ -19,7 +19,7 @@ const WHISPER_FILES = [
 
 /** Rust keeps these keys in `extra`: absent = the default (settingsDefaults), "" = off. */
 export function voiceSettingsSection(ms: ModuleSettings, ui: SettingsUi): { el: HTMLElement; dispose(): void } {
-  const cur = () => ms.get<{ voiceHotkey: string; voiceEngine: string; voiceLanguage: string; voiceFlowEnabled: boolean }>();
+  const cur = () => ms.get<{ voiceHotkey: string; voiceEngine: string; voiceLanguage: string; voiceFlowEnabled: boolean; voiceAssistHotkey: string; voiceSpeak: boolean }>();
   const status = h("span", { class: "hint" });
   const wstatus = h("span", { class: "hint" });
   const err = h("div", { class: "notice warn", style: "display:none" });
@@ -81,6 +81,21 @@ export function voiceSettingsSection(ms: ModuleSettings, ui: SettingsUi): { el: 
     void ms.save({ voiceFlowEnabled: flowOn });
   });
 
+  const assist = h("input", {
+    type: "text", value: cur().voiceAssistHotkey, spellcheck: "false", placeholder: "ex.: Ctrl+Alt+Space (vazio = desligado)",
+  }) as HTMLInputElement;
+  assist.addEventListener("change", () => {
+    void ms.save({ voiceAssistHotkey: assist.value.trim() }).then(() => ui.timeout(() => void refresh(), 300));
+  });
+  let speakOn = cur().voiceSpeak === true;
+  const speak = h("button", { class: speakOn ? "switch on" : "switch", "aria-pressed": speakOn, "aria-label": "Falar a confirmação" });
+  speak.addEventListener("click", () => {
+    speakOn = !speakOn;
+    speak.classList.toggle("on", speakOn);
+    speak.setAttribute("aria-pressed", String(speakOn));
+    void ms.save({ voiceSpeak: speakOn });
+  });
+
   const input = h("input", {
     type: "text", value: cur().voiceHotkey, spellcheck: "false", placeholder: "ex.: Ctrl+Alt+V",
   }) as HTMLInputElement;
@@ -113,6 +128,12 @@ export function voiceSettingsSection(ms: ModuleSettings, ui: SettingsUi): { el: 
       flow,
       h("span", { class: "hint", text: "Segure o Ctrl direito e fale; solte para colar o texto no app em foco. Dois toques rápidos = mãos livres; um toque encerra; Esc cancela. Usa um gancho de teclado do Windows; nenhuma tecla é gravada; o texto é colado no app em foco e a área de transferência é restaurada; apps rodando como administrador não recebem a colagem." }),
     ),
+    h("div", { class: "row" },
+      h("label", { text: "Atalho do assistente" }),
+      assist,
+      h("span", { class: "hint", text: "Diga o nome de um comando do Coucou (ex.: \"próxima faixa\") e ele é executado. Só roda comandos que os módulos registraram; nada fora dessa lista. Sem correspondência, o texto fica no cartão para você copiar ou enviar. Não há palavra de ativação: o microfone só abre no atalho." }),
+    ),
+    h("div", { class: "row" }, h("label", { text: "Falar a confirmação" }), speak, h("span", { class: "hint", text: "Lê em voz alta \"Feito: …\" com a voz padrão do Windows, depois de um comando do assistente." })),
     err,
   );
   return { el, dispose: () => offs.forEach((o) => void o.then((off) => off())) };

@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IslandApi } from "../../src/core/moduleApi";
 import { bindFlow } from "../../src/modules/voice/flow";
+import { voiceModule } from "../../src/modules/voice";
 import { send, speakHint, Voice } from "../../src/modules/voice/view";
 
 const apiWith = (impl?: (p: string) => Promise<void>) => {
@@ -105,5 +106,53 @@ describe("voice flow", () => {
     handlers["settings-changed"](null);
     expect(handlers["voice-flow"]).toBeUndefined();
     off();
+  });
+});
+
+describe("voice assistant", () => {
+  const boot = (infos: { key: string; title: string; owner: string }[], run = vi.fn(() => true)) => {
+    const handlers: Record<string, (p: unknown) => void> = {};
+    const notices: unknown[] = [];
+    const api: Record<string, unknown> = {
+      listen: (name: string, fn: (p: unknown) => void) => { handlers[name] = fn; return () => {}; },
+      onVisibility: () => () => {},
+      settings: () => ({ voiceFlowEnabled: false, voiceSpeak: false }),
+      timeout: () => () => {},
+      status: { set: () => {} },
+      avatar: { level: () => {} },
+      actions: { all: () => infos, run },
+      island: { request: () => () => {}, notice: (n: unknown) => { notices.push(n); return () => {}; }, view: () => "voice", busy: () => false, close: () => {}, redraw: () => {} },
+    };
+    const off = voiceModule.start!(api as unknown as IslandApi);
+    return { handlers, run, notices, off };
+  };
+
+  it("runs the matching registered action and says what it did", () => {
+    Voice.reset();
+    const { handlers, run, notices, off } = boot([{ key: "nowplaying.next", title: "Próxima faixa", owner: "nowplaying" }]);
+    handlers["voice-text"]({ text: "ok coucou, próxima faixa", mode: "assist" });
+    expect(run).toHaveBeenCalledWith("nowplaying.next");
+    expect(notices).toEqual([expect.objectContaining({ text: "Feito: Próxima faixa" })]);
+    expect(Voice.phase).toBe("none");
+    off?.();
+  });
+
+  it("with no match nothing runs and the card shows the text for Copiar / Enviar", () => {
+    Voice.reset();
+    const { handlers, run, off } = boot([{ key: "nowplaying.next", title: "Próxima faixa", owner: "nowplaying" }]);
+    handlers["voice-text"]({ text: "abrir o navegador", mode: "assist" });
+    expect(run).not.toHaveBeenCalled();
+    expect(Voice.phase).toBe("review");
+    expect(Voice.text).toBe("abrir o navegador");
+    off?.();
+  });
+
+  it("a plain take never runs an action, even when the words match", () => {
+    Voice.reset();
+    const { handlers, run, off } = boot([{ key: "nowplaying.next", title: "Próxima faixa", owner: "nowplaying" }]);
+    handlers["voice-text"]({ text: "próxima faixa" });
+    expect(run).not.toHaveBeenCalled();
+    expect(Voice.phase).toBe("review");
+    off?.();
   });
 });

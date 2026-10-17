@@ -7,7 +7,9 @@
     "voiceHotkey": "Ctrl+Alt+V",
     "voiceEngine": "whistle",
     "voiceLanguage": "auto",
-    "voiceFlowEnabled": false
+    "voiceFlowEnabled": false,
+    "voiceAssistHotkey": "",
+    "voiceSpeak": false
   },
   "presets": [
     "tudo",

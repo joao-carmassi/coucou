@@ -41,6 +41,7 @@ impl Module for Voice {
 
     fn stop(&self, ctx: &ModuleCtx) {
         hotkeys::clear(&ctx.app, "voice");
+        hotkeys::clear(&ctx.app, "voice-assist");
         flow::set(ctx, false); // removes the keyboard hook
         voice::stop(); // the capture loop ends within 30 ms and closes the microphone
     }
@@ -49,6 +50,9 @@ impl Module for Voice {
 fn set_hotkey(app: &AppHandle, s: &Settings) {
     let combo = hotkeys::clean(&cfg::hotkey(s), cfg::DEFAULT_HOTKEY);
     hotkeys::set(app, "voice", "Voz", &combo, voice::on_hotkey);
+    // "" = the assistant is off (no default combo). An invalid combo is dropped, not replaced.
+    let assist = hotkeys::clean(&cfg::assist_hotkey(s), "");
+    hotkeys::set(app, "voice-assist", "Assistente de voz", &assist, voice::on_assist_hotkey);
 }
 
 pub const PREFIXES: &[&str] = &["voice_"];
@@ -59,5 +63,5 @@ pub fn modules() -> Vec<Box<dyn Module>> {
 
 pub fn handler() -> crate::core::host::Handler {
     use voice::*;
-    crate::core::host::handler(tauri::generate_handler![voice_start, voice_stop, voice_cancel, voice_model_status, voice_download_model, voice_download_whisper])
+    crate::core::host::handler(tauri::generate_handler![voice_start, voice_stop, voice_cancel, voice_model_status, voice_download_model, voice_download_whisper, voice_speak])
 }

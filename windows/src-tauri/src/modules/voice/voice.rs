@@ -90,8 +90,42 @@ fn emit_state(app: &AppHandle, state: &str, message: &str) {
 // ── Commands ─────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn voice_start(app: AppHandle) -> Result<(), String> {
-    start(&app, Mode::Card)
+pub fn voice_start(app: AppHandle, mode: Option<String>) -> Result<(), String> {
+    start(&app, if mode.as_deref() == Some("assist") { Mode::Assist } else { Mode::Card })
+}
+
+/// Speaks a short confirmation with the system default voice (Settings → Voz → "Falar a confirmação").
+/// One utterance at a time; stopped when the module stops.
+#[tauri::command]
+pub fn voice_speak(app: AppHandle, text: String) -> Result<(), String> {
+    let host = app.state::<ModuleHost>();
+    host.require("voice")?;
+    let ctx: Arc<ModuleCtx> = host.ctx("voice").ok_or("O módulo Voz está desligado nas Configurações.")?;
+    let text: String = text.chars().take(200).collect(); // a confirmation, never a reading of long text
+    ctx.spawn(move |module_stop| speak(&text, &module_stop));
+    Ok(())
+}
+
+fn speak(text: &str, module_stop: &AtomicBool) {
+    use windows::core::HSTRING;
+    use windows::Win32::Media::Speech::{ISpVoice, SpVoice, SPF_ASYNC, SPF_PURGEBEFORESPEAK, SPVOICESTATUS};
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        let Ok(v) = CoCreateInstance::<_, ISpVoice>(&SpVoice, None, CLSCTX_ALL) else { return };
+        if v.Speak(&HSTRING::from(text), (SPF_ASYNC.0 | SPF_PURGEBEFORESPEAK.0) as u32, None).is_err() {
+            return;
+        }
+        let deadline = Instant::now() + Duration::from_secs(20);
+        // shortcut: polls every 50 ms while it speaks (a few seconds at most); upgrade to the voice's notify event if it ever matters.
+        while Instant::now() < deadline && !module_stop.load(Ordering::SeqCst) {
+            let mut st = SPVOICESTATUS::default();
+            if v.GetStatus(&mut st, std::ptr::null_mut()).is_err() || st.dwRunningState & 2 == 0 {
+                return; // 2 = SPRS_IS_SPEAKING
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let _ = v.Speak(windows::core::PCWSTR::null(), SPF_PURGEBEFORESPEAK.0 as u32, None);
+    }
 }
 
 #[tauri::command]
@@ -161,12 +195,22 @@ pub fn cancel() {
 #[derive(Clone, Copy, PartialEq)]
 pub enum Mode {
     Card,
+    /// The assistant hotkey: the text is matched against the registered actions (in the island), not sent to Claude.
+    Assist,
     Flow { target: isize },
 }
 
 /// Flow's status line and meter: `voice-flow` {state: listening|transcribing|pasted|moved|error|idle, chars, message}.
 fn emit_flow(app: &AppHandle, state: &str, chars: usize, message: &str) {
     let _ = app.emit("voice-flow", serde_json::json!({ "state": state, "chars": chars, "message": message }));
+}
+
+/// The assistant hotkey: ends the recording in progress; otherwise the island starts an `assist` take.
+pub fn on_assist_hotkey(app: &AppHandle) {
+    if CAPTURING.load(Ordering::SeqCst) {
+        return stop();
+    }
+    let _ = app.emit("voice-assist-hotkey", ());
 }
 
 /// Called from the Flow key thread. Flow never opens the card and never takes focus.
@@ -209,7 +253,7 @@ fn start(app: &AppHandle, mode: Mode) -> Result<(), String> {
     let app = app.clone();
     ctx.spawn(move |module_stop| {
         let state = |s: &str| match mode {
-            Mode::Card => emit_state(&app, s, ""),
+            Mode::Card | Mode::Assist => emit_state(&app, s, ""),
             Mode::Flow { .. } => emit_flow(&app, s, 0, ""),
         };
         state("listening");
@@ -245,7 +289,8 @@ fn start(app: &AppHandle, mode: Mode) -> Result<(), String> {
         }
         match result {
             Ok(Some(t)) if !t.0.is_empty() => {
-                let _ = app.emit("voice-text", serde_json::json!({ "text": t.0, "language": t.1 }));
+                let kind = if mode == Mode::Assist { "assist" } else { "card" };
+                let _ = app.emit("voice-text", serde_json::json!({ "text": t.0, "language": t.1, "mode": kind }));
                 emit_state(&app, "idle", "");
             }
             Ok(_) => emit_state(&app, "idle", ""),
