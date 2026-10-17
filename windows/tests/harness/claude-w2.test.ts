@@ -67,6 +67,33 @@ describe("finished card", () => {
     expect(chips).toEqual(["aceitar edições", "high", "Opus 4.5"]);
   });
 
+  it("answer panel: height follows the answer, short stays small, long is capped", () => {
+    // jsdom has no layout: stand in for it (a character is 1px; the panel's own CSS cap is 150px).
+    const desc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight");
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.classList.contains("fin-md") ? Math.min(150, 16 + (this.textContent ?? "").length) : 20;
+      },
+    });
+    try {
+      const heightFor = (answer: string) => {
+        cl().store.sessions[0].answer = answer;
+        cl().store.present();
+        const host = CARDS.buildFinished(cl(), { onResize() {} } as never);
+        host.sync();
+        expect(host.el.querySelector(".fin-md")).not.toBeNull();
+        return host.height as number;
+      };
+      const short = heightFor("Pronto.");
+      const long = heightFor("linha longa. ".repeat(40));
+      expect(short).toBeLessThan(long);
+      expect(long).toBeLessThanOrEqual(320);
+    } finally {
+      if (desc) Object.defineProperty(HTMLElement.prototype, "offsetHeight", desc);
+    }
+  });
+
   it("no answer: the old title line, no body", () => {
     cl().store.session.answer = null;
     cl().store.session.lines = ["Rodou testes"];
