@@ -46,3 +46,8 @@ test("claude cache is 5 minutes", () => {
   assert.equal(claudeFresh(NOW - 299_000, NOW), true);
   assert.equal(claudeFresh(NOW - 300_000, NOW), false);
 });
+
+test("line takes Claude's window labelled 5 h wherever it is", () => {
+  const c: AgentUsage = { agent: "claude", source: "network", at: NOW, windows: [{ label: "semana", usedPct: 9, resetsAt: null }, { label: "5 h", usedPct: 23, resetsAt: null }] };
+  assert.equal(lineText(null, c, NOW), "Claude 5 h 23%");
+});

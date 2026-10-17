@@ -1,6 +1,6 @@
 // Uso do plano. Codex 5 h / weekly limits come from local files (Rust watches them; no network). Claude's come from an
 // opt-in, unofficial network call (planusageClaudeNet, default off), made only while the view is open or on "Atualizar".
-// One-line source "plan" (pinnable). Provides agents.usage. Nothing runs by itself: no timer here, the view arms its own.
+// One-line source "plan" (pinnable). Provides agents.usage (cached numbers, never fetches). Nothing runs by itself: no timer here, the view arms its own.
 import "./planusage.css";
 import { BAND, PANEL_H, type Disposer, type IslandApi, type ModuleDef } from "../../core/moduleApi";
 import { svg } from "../../kit/dom";
@@ -67,7 +67,7 @@ function start(api: IslandApi): Disposer {
   };
 
   const usage: AgentsUsage = async (agent) => {
-    if (agent !== "codex" && netOn()) await fetchClaude(false);
+    // Cached only: the network is reached from the open view or "Atualizar", never from a consumer.
     return [codex, netOn() ? claude : null].filter((u): u is AgentUsage => !!u && (!agent || u.agent === agent));
   };
   const offs = [

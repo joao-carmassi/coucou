@@ -55,7 +55,8 @@ impl Module for Planusage {
 
 /// The newest rollout among the changed paths: re-read its tail, announce only when the numbers moved.
 fn on_change(app: &AppHandle, paths: &[std::path::PathBuf]) {
-    let Some(p) = pick_newest(paths) else { return };
+    // A dir path (event overflow) has no .jsonl extension: fall back to the newest rollout.
+    let Some(p) = pick_newest(paths).or_else(|| codex::newest(&codex::sessions_dir())) else { return };
     let Some(next) = codex::read_usage(&p) else { return };
     let moved = {
         let mut cur = lock(&CODEX);

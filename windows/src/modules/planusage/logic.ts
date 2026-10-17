@@ -25,7 +25,7 @@ export function agentText(u: AgentUsage, now: number): string {
 
 /** The pinned line: Codex in full, Claude's 5 h window only (when the network opt-in gave a fresh answer). */
 export function lineText(codex: AgentUsage | null, claude: AgentUsage | null, now: number): string | null {
-  const c = claude && !claude.error ? agentText({ ...claude, windows: claude.windows.slice(0, 1) }, now) : "";
+  const c = claude && !claude.error ? agentText({ ...claude, windows: claude.windows.filter((w) => w.label === "5 h") }, now) : "";
   const parts = [codex ? agentText(codex, now) : "", c].filter(Boolean);
   return parts.length ? parts.join(" | ") : null;
 }

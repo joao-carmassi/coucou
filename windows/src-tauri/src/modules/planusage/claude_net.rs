@@ -76,17 +76,21 @@ pub fn parse_usage(v: &Value) -> Option<Vec<Window>> {
     if out.is_empty() {
         for l in v.get("limits")?.as_array()? {
             let name = l.get("name")?.as_str()?.to_lowercase();
-            let label: String = if name.contains("five") || name.contains('5') {
-                "5 h".into()
-            } else if name.contains("seven") || name.contains("week") {
-                "semana".into()
-            } else {
-                name.chars().take(24).collect()
-            };
+            let label = limit_label(&name);
             out.push(win(&label, l.get("percent").and_then(Value::as_f64), l.get("resets_at")));
         }
     }
+    out.sort_by_key(|w| w.label != "5 h"); // stable: the 5 h window first
     (!out.is_empty()).then_some(out)
+}
+
+/// "week" is matched first; model weeklies (weekly_opus...) keep their raw name so labels and notice keys do not collide.
+fn limit_label(name: &str) -> String {
+    let raw = || name.chars().take(24).collect::<String>();
+    if name.contains("week") || name.contains("seven") {
+        return if matches!(name, "week" | "weekly" | "seven_day" | "seven-day") { "semana".into() } else { raw() };
+    }
+    if ["five_hour", "five-hour", "5_hour", "5-hour", "5h", "session"].iter().any(|k| name.contains(k)) { "5 h".into() } else { raw() }
 }
 
 /// One request. Every error is a fixed pt-BR text: reqwest's own messages could carry the URL or headers.
@@ -137,6 +141,16 @@ mod tests {
         assert_eq!(a[1].resets_at, None);
         let b = parse_usage(&json!({"limits":[{"name":"five_hour","percent":10,"resets_at":"1970-01-01T00:00:01Z"},{"name":"seven_day","percent":4.0}]})).unwrap();
         assert_eq!((b[0].label.as_str(), b[0].used_pct, b[0].resets_at, b[1].label.as_str()), ("5 h", Some(10.0), Some(1000), "semana"));
+    }
+
+    #[test]
+    fn limits_labels_are_explicit_and_five_hour_sorts_first() {
+        let v = parse_usage(&json!({"limits":[
+            {"name":"weekly_opus","percent":1},{"name":"seven_day","percent":2},{"name":"sonnet 5","percent":3},{"name":"session","percent":4}]})).unwrap();
+        let l: Vec<_> = v.iter().map(|w| w.label.as_str()).collect();
+        assert_eq!(l, ["5 h", "weekly_opus", "semana", "sonnet 5"]);
+        let o = parse_usage(&json!({"seven_day":{"utilization":1.0},"five_hour":{"utilization":2.0}})).unwrap();
+        assert_eq!(o[0].label, "5 h");
     }
 
     #[test]
