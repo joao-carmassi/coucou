@@ -57,3 +57,10 @@ export function dueNotices(u: AgentUsage, seen: Map<string, number>, now: number
 
 /** Claude's answer is reused for 5 minutes (errors included), as on the Rust side. */
 export const claudeFresh = (at: number | null, now: number) => at != null && now - at < CLAUDE_MS;
+
+/** Island height for what the view shows: `windows` = bar rows per block (0 = a one-line note instead). Scrolls only past `max`. */
+export function fitPlan(blocks: number[], max = 320, chrome = 56, pad = 14): { height: number; scroll: boolean } {
+  const parts = [...blocks.map((w) => (w ? 14 + w * 35 : 31)), 30]; // block = title + rows (or title + note); last = "Atualizar"
+  const need = chrome + 2 * pad + parts.reduce((a, b) => a + b, 0) + 10 * (parts.length - 1);
+  return { height: Math.min(max, Math.max(160, need)), scroll: need > max };
+}

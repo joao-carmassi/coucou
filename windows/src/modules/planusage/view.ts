@@ -3,9 +3,9 @@
 import { h, clear } from "../../kit/dom";
 import { card, view } from "../../kit/card";
 import { pinButton } from "../../kit/pin";
-import type { ViewContext, ViewHost } from "../../core/moduleApi";
+import { PANEL_H, type ViewContext, type ViewHost } from "../../core/moduleApi";
 import type { AgentUsage } from "../agents/api";
-import { CLAUDE_MS, agentName, live, resetText } from "./logic";
+import { CLAUDE_MS, agentName, fitPlan, live, resetText } from "./logic";
 
 export interface Ctrl {
   codex(): AgentUsage | null;
@@ -21,6 +21,7 @@ export function buildPlanusageView(ctx: ViewContext, ctrl: Ctrl, subscribe: (fn:
   const pin = pinButton(api, "plan");
   const el = view(card(null, body, pin.el));
   let tick: (() => void) | null = null;
+  let fitted = fitPlan([0, 0]).height;
 
   const block = (u: AgentUsage | null, empty: string) => {
     const now = Date.now();
@@ -46,10 +47,15 @@ export function buildPlanusageView(ctx: ViewContext, ctrl: Ctrl, subscribe: (fn:
   const draw = () => {
     clear(body);
     const codex = ctrl.codex();
+    const rows = (u: AgentUsage | null) => (u && !u.error ? u.windows.length : 0);
+    const blocks = [rows(codex)];
     body.append(block(codex ? { ...codex, agent: "codex" } : null, "Sem dados do Codex ainda."));
-    if (ctrl.netOn()) body.append(block(ctrl.claude(), "Consultando…"));
+    if (ctrl.netOn()) { body.append(block(ctrl.claude(), "Consultando…")); blocks.push(rows(ctrl.claude())); }
     else body.append(h("div", { class: "planusage-sub", text: "Claude: ative a consulta de rede em Ajustes > Uso do plano." }));
     body.append(h("button", { class: "btn secondary", text: "Atualizar", onclick: () => void ctrl.refresh(true) }));
+    const fit = fitPlan(blocks, PANEL_H);
+    body.classList.toggle("scroll", fit.scroll);
+    if (fit.height !== fitted) { fitted = fit.height; ctx.onResize(); }
   };
   subscribe(() => { if (el.isConnected) draw(); });
 
@@ -64,6 +70,7 @@ export function buildPlanusageView(ctx: ViewContext, ctrl: Ctrl, subscribe: (fn:
 
   return {
     el,
+    get height() { return fitted; },
     sync() {
       pin.sync();
       draw();

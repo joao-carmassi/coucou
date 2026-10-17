@@ -95,6 +95,6 @@ export const planusageModule: ModuleDef = {
     layout: { height: PANEL_H, botX: 54, botY: null, botDiameter: 46 },
     build: (ctx) => buildPlanusageView(ctx, { codex: () => ctrl.codex(), claude: () => ctrl.claude(), netOn: () => ctrl.netOn(), refresh: (f) => ctrl.refresh(f) }, subscribe),
   }],
-  tabs: [{ view: "planusage", title: "Uso do plano", icon: () => svg(ICONS.dial, 13, { stroke: 1.6 }), order: 52 }],
+  tabs: [{ view: "planusage", title: "Uso do plano", icon: () => svg(ICONS.quota, 13, { stroke: 1.8 }), order: 52 }],
   start,
 };

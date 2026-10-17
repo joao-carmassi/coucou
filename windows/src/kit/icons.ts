@@ -24,6 +24,8 @@ export const ICONS = {
   pulse: "M3 12h4l2.5-6 5 12 2.5-6H21",
   // an eye, stroked
   eye: "M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12zm10-3a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+  // stacked usage bars against a limit line, stroked
+  quota: "M4 7h9M4 12h12M4 17h6M20 4v16",
   // a pushpin (pin.fill)
   pin: "M14.6 2.8 21.2 9.4l-1.5 1.5-1.8-.5-3.3 3.3.5 3.7-1.5 1.5-3.7-3.7-5.6 5.6-1-1 5.6-5.6-3.7-3.7 1.5-1.5 3.7.5 3.3-3.3-.5-1.8 1.5-1.5z",
 } as const;
