@@ -51,3 +51,14 @@ test("line takes Claude's window labelled 5 h wherever it is", () => {
   const c: AgentUsage = { agent: "claude", source: "network", at: NOW, windows: [{ label: "semana", usedPct: 9, resetsAt: null }, { label: "5 h", usedPct: 23, resetsAt: null }] };
   assert.equal(lineText(null, c, NOW), "Claude 5 h 23%");
 });
+
+test("fitPlan: Codex + Claude (2 windows each) fit without scroll; many blocks scroll at the cap", async () => {
+  const { fitPlan } = await import("../src/modules/planusage/logic.ts");
+  const two = fitPlan([2, 2]);
+  assert.equal(two.scroll, false);
+  assert.ok(two.height <= 320);
+  assert.ok(fitPlan([1, 1]).height < two.height);
+  const many = fitPlan([2, 2, 2, 2]);
+  assert.equal(many.scroll, true);
+  assert.equal(many.height, 320);
+});

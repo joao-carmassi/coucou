@@ -41,7 +41,7 @@ describe("planusage module", () => {
   it("on with the network opt-in off: one local read, never a Claude call, no polling", async () => {
     State.settings.planusageClaudeNet = false;
     Registry.apply({ planusage: true });
-    await tick(5);
+    await tick(2000);
     expect(n("planusage_get")).toBe(1);
     const timers = vi.getTimerCount();
     await tick(3 * 3600_000);
