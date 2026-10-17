@@ -362,7 +362,17 @@ pub fn paste(text: &str, target: isize) -> Result<(), String> {
             let _ = put(fmt, &[0, 0, 0, 0]);
         }
         let _ = CloseClipboard();
-        set?;
+        if let Err(e) = set {
+            // The clipboard was emptied above: put the previous text back before giving up.
+            if open_clipboard() {
+                let _ = EmptyClipboard();
+                if let Some(old) = saved.filter(|v| !v.is_empty()) {
+                    let _ = put(CF_UNICODETEXT, &utf16_bytes(&old));
+                }
+                let _ = CloseClipboard();
+            }
+            return Err(e);
+        }
         let seq = GetClipboardSequenceNumber();
         let inputs = [key(VK_CONTROL, false), key(VK_V, false), key(VK_V, true), key(VK_CONTROL, true)];
         let sent = SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
