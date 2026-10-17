@@ -12,6 +12,8 @@ export interface BoardCard {
   key: string;
   /** `actions.blip()` is the island's click sound. */
   build(actions: { blip(): void }): HTMLElement;
+  /** The card's other face (the left card's flip button). Without it the flip shows the pill owner's actions, if it has any. */
+  back?(actions: { blip(): void }): HTMLElement;
   /** Called on every redraw while the card is shown (a card that keeps its own DOM updates it here). */
   sync?(): void;
   /** The whole card is a button: a click that is not on a button inside it (the board plays the blip). */
