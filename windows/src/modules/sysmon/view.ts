@@ -75,10 +75,8 @@ export function buildSysmonView(ctx: ViewContext, onTemp: (c: number | null) => 
   temps.append(chips, lhmBox);
 
   const body = h("div", { class: "sysmon-body" }, tiles, io, temps);
-  const el = view(card(null, body));
   const pin = pinButton(api, "usage");
-  pin.el.classList.add("sysmon-pin");
-  el.append(pin.el);
+  const el = view(card(null, body, pin.el)); // sibling of the scrolling body, inside the positioned card
   let tick: (() => void) | null = null;
   let n = 0;
   let busy = false;

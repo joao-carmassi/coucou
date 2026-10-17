@@ -75,6 +75,7 @@ export class Island implements IslandHost {
   private palettePrev: { mode: IslandMode; view: string } | null = null;
 
   private width = new Tracked(compactWidth(0, 0));
+  private lastCw = 0; // last compact width of a text line (hysteresis input)
   private widthTarget = -1;
   private gridH = 0;
   private activityShown = false;
@@ -686,7 +687,8 @@ export class Island implements IslandHost {
     const fitted = this.views?.get(State.view)?.height ?? null;
     const line = this.compactLine();
     const others = this.textOverGrid() ? 0 : State.gridPills.length;
-    const cw = compactWidth(others, line ? this.lineWidth(line) : 0, State.statusLine?.still ? 16 : 8);
+    const cw = compactWidth(others, line ? this.lineWidth(line) : 0, State.statusLine?.still ? 16 : 8, this.lastCw);
+    this.lastCw = others === 0 && line ? cw : 0;
     const { w, h } = islandSize(State.mode, State.view, fitted, cw);
     const r = State.mode === "expanded" ? EXPANDED_CORNER : ROUNDED_CORNER;
     return { w, h, r };

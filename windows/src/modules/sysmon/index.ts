@@ -62,7 +62,7 @@ function start(api: IslandApi): Disposer {
   const stopPoll = () => { usagePoll?.(); usagePoll = null; void SysmonBridge.quickStop().catch(() => {}); };
   const reconcileUsage = () => {
     const on = api.status.pinned("usage");
-    if (on && !usagePoll) { usagePoll = api.interval(() => void read(), USAGE_MS, { whenVisible: true }); void read(true); }
+    if (on && !usagePoll) { usagePoll = api.interval(() => void read(), USAGE_MS, { whenVisible: true }); if (api.island.mode() !== "hidden") void read(true); }
     else if (!on && usagePoll) { stopPoll(); usage.set(lastLine ? { priority: BAND.AMBIENT, icon: "📊", text: lastLine } : null); }
   };
   reconcileUsage();

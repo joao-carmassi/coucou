@@ -5,15 +5,24 @@ import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
 import { Compact } from "../../src/core/compact";
 import { State } from "../../src/core/state";
+import { Requests } from "../../src/core/requests";
 import { Pin } from "../../src/core/pin";
 import { buildCatalog } from "../../src/modules/resolve";
 
 // Counted fake for the Rust bridge: no network in the harness.
-const T = vi.hoisted(() => ({ forecasts: 0, host: null as null | { sync(): void }, island: null as null | Island }));
+const bus = vi.hoisted(() => ({ fns: [] as ((p: unknown) => void)[] }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: async (name: string, fn: (p: unknown) => void) => {
+    if (name === "settings-changed") bus.fns.push(fn);
+    return () => { const i = bus.fns.indexOf(fn); if (i >= 0) bus.fns.splice(i, 1); };
+  },
+}));
+const T = vi.hoisted(() => ({ fail: false, forecasts: 0, host: null as null | { sync(): void }, island: null as null | Island }));
 vi.mock("../../src/modules/weather/bridge", () => ({
   weatherBridge: {
     forecast: async () => {
       T.forecasts++;
+      if (T.fail) throw new Error("offline");
       return {
         current: { time: "2026-10-15T14:20", temp: 22.6, feels: 21, humidity: 50, wind: 10, code: 2, isDay: true },
         hours: [], days: [],
@@ -159,6 +168,8 @@ describe("weather module", () => {
 
   describe("glance (weatherGlanceEvery)", () => {
     const MIN15 = 15 * 60_000;
+    let notice: ReturnType<typeof vi.spyOn> | undefined;
+    const peeks = () => notice!.mock.calls.filter((c: any[]) => c[1].key === "weather-glance").length;
     const run = async (every: number, body: (armed: () => number) => Promise<void>) => {
       vi.useFakeTimers();
       const sp = vi.spyOn(window, "setTimeout");
@@ -169,6 +180,9 @@ describe("weather module", () => {
         await body(() => sp.mock.calls.filter((c) => c[1] === MIN15).length);
       } finally {
         sp.mockRestore();
+        notice?.mockRestore();
+        T.fail = false;
+        State.setPaused(false);
         settings().weatherGlanceEvery = 0;
         vi.useRealTimers();
       }
@@ -183,16 +197,57 @@ describe("weather module", () => {
     it("on with a city: one timeout, fires a peek notice with the line, re-arms; stale cache fetches first", async () => {
       await run(15, async (armed) => {
         expect(armed()).toBe(1);
+        notice = vi.spyOn(T.island!, "addNotice");
         T.island!.hide();
         await vi.advanceTimersByTimeAsync(MIN15);
         expect(T.forecasts).toBe(1); // no cache: fetched first
         expect(armed()).toBe(2); // re-armed
-        expect(document.body.textContent).toMatch(/23°C/); // peeked even though it was hidden
+        expect(peeks()).toBe(1); // peeked even though it was hidden
+        expect(notice!.mock.calls.find((c) => c[1].key === "weather-glance")![1].text).toMatch(/23°C/);
         await vi.advanceTimersByTimeAsync(MIN15);
         expect(T.forecasts).toBe(1); // cache younger than 30 min: no fetch
         await vi.advanceTimersByTimeAsync(MIN15);
         expect(T.forecasts).toBe(2); // 45 min old: stale
         expect(armed()).toBe(4);
+      });
+    });
+
+    it("busy island, silent failure and Pause: no peek, the cadence goes on", async () => {
+      await run(15, async (armed) => {
+        notice = vi.spyOn(T.island!, "addNotice");
+        const busy = vi.spyOn(Requests, "busy").mockReturnValue(true);
+        await vi.advanceTimersByTimeAsync(MIN15);
+        expect(peeks()).toBe(0); // busy: skipped
+        expect(armed()).toBe(2);
+        busy.mockRestore();
+        Registry.apply({ weather: false }); // empty cache
+        T.fail = true;
+        T.forecasts = 0;
+        Registry.apply({ weather: true });
+        await vi.advanceTimersByTimeAsync(MIN15); // the fetch fails
+        expect(T.forecasts).toBe(1);
+        expect(peeks()).toBe(0); // failure: silent
+        T.fail = false;
+        State.setPaused(true);
+        const f = T.forecasts;
+        await vi.advanceTimersByTimeAsync(2 * MIN15);
+        expect(T.forecasts).toBe(f); // paused: no fetch, no peek
+        expect(peeks()).toBe(0);
+        State.setPaused(false);
+        await vi.advanceTimersByTimeAsync(MIN15);
+        expect(peeks()).toBe(1); // resumed
+      });
+    });
+
+    it("a settings change re-arms only when weatherGlanceEvery changed", async () => {
+      await run(15, async (armed) => {
+        expect(armed()).toBe(1);
+        const emit = async () => { bus.fns.forEach((f) => f({})); await vi.advanceTimersByTimeAsync(10); };
+        await emit();
+        expect(armed()).toBe(1); // unchanged: the countdown is kept
+        settings().weatherGlanceEvery = 30;
+        await emit();
+        expect(armed()).toBe(1); // re-armed at 30 min instead (not counted in the 15 min tally)
       });
     });
 

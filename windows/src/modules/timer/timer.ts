@@ -16,7 +16,7 @@ export class TimerClock {
   private base = 0; // ms: remaining (countdown) or elapsed (stopwatch) while paused
 
   private now: () => number;
-  constructor(now: () => number = Date.now) {
+  constructor(now: () => number = () => Date.now()) {
     this.now = now;
   }
 

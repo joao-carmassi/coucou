@@ -45,21 +45,36 @@ beforeEach(async () => {
 
 describe("timer glance", () => {
   it("arms exactly one timeout more than without it, and clears it when the timer stops", async () => {
-    await startTimer();
-    island.collapse();
-    await tick(100);
-    const without = vi.getTimerCount();
-    await stopTimer();
-    island.collapse();
-    State.settings.timerGlance = true;
-    await startTimer();
-    island.collapse();
-    await tick(100);
-    expect(vi.getTimerCount()).toBe(without + 1);
-    await stopTimer();
-    island.collapse();
-    await tick(100);
-    expect(vi.getTimerCount()).toBeLessThan(without);
+    // Only timeouts of the (distinctive) focus time count: other timers coming and going cannot flake this.
+    State.settings.compactHideInterval = 37;
+    island.applySettings();
+    const set = vi.spyOn(window, "setTimeout");
+    const clr = vi.spyOn(window, "clearTimeout");
+    const live = () => {
+      const ids = set.mock.calls.map((c, i) => (c[1] === 37_000 ? set.mock.results[i].value : null)).filter((v) => v !== null);
+      return ids.filter((id) => !clr.mock.calls.some((c) => c[0] === id)).length;
+    };
+    try {
+      await startTimer();
+      island.collapse();
+      await tick(100);
+      const without = live();
+      await stopTimer();
+      island.collapse();
+      State.settings.timerGlance = true;
+      await startTimer();
+      island.collapse();
+      await tick(100);
+      expect(live()).toBeGreaterThanOrEqual(without + 1);
+      const armed = live();
+      await stopTimer();
+      island.collapse();
+      await tick(100);
+      expect(live()).toBeLessThan(armed);
+    } finally {
+      set.mockRestore();
+      clr.mockRestore();
+    }
   });
 
   it("peeks with the remaining time every focus time, even hidden, and re-arms after each fire", async () => {

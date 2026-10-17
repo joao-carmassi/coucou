@@ -7,7 +7,6 @@
   font: 400 11.5px var(--font); color: var(--dim);
   scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
-.sysmon-pin { position: absolute; top: 8px; right: 10px; z-index: 1; }
 .sysmon-body::-webkit-scrollbar { width: 6px; }
 .sysmon-body::-webkit-scrollbar-track { background: transparent; }
 .sysmon-body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 999px; }

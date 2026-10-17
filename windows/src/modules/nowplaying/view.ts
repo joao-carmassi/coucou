@@ -40,10 +40,9 @@ export function buildView(ctx: ViewContext): ViewHost {
     h("div", { class: "title", text: "Nada tocando agora" }),
     h("div", { class: "sub", text: "Toque algo no Spotify, no navegador ou em outro player." }));
   const pin = pinButton(api, "track");
-  pin.el.classList.add("np-pin");
-  const body = h("div", { class: "stack np-body pin-room" }, empty, player, pin.el);
-  body.style.padding = "14px 16px 14px 84px"; // room for the Mochi on the left (botX 54)
-  const el = view(card(null, body));
+  const body = h("div", { class: "stack np-body" }, empty, player);
+  body.style.padding = "14px 48px 14px 84px"; // room for the Mochi on the left (botX 54) and the pin on the right
+  const el = view(card(null, body, pin.el)); // the pin is a sibling of the scrolling body: it never scrolls or sits under the scrollbar
 
   const visible = () => api.island.view() === "nowplaying";
   const paintProgress = () => {

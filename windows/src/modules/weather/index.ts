@@ -42,29 +42,32 @@ function start(api: IslandApi): Disposer {
     } else if (!on && poll) { poll(); poll = null; }
   };
   let glance: Disposer | null = null;
+  let glanceEvery = glanceMinutes(api.settings<WeatherCfg>().weatherGlanceEvery);
   let stopped = false;
   const armGlance = () => {
     glance?.();
     glance = null;
-    const min = glanceMinutes(api.settings<WeatherCfg>().weatherGlanceEvery);
+    const min = glanceEvery = glanceMinutes(api.settings<WeatherCfg>().weatherGlanceEvery);
     if (min && weatherCfg(api).place) glance = api.timeout(fireGlance, min * 60_000);
   };
   const fireGlance = async () => {
     glance = null;
     armGlance(); // next one first: a failed fetch still keeps the cadence
+    if (api.paused()) return; // Pause: no fetch, no peek; the re-armed one tries again
     const { place, units } = weatherCfg(api);
     if (!place) return;
     const key = cacheKey(place, units);
+    if (store.pending === key) return; // a load for this key is already in flight: no second request, the next glance retries
     if (needsPoll(store.cache, key, Date.now())) await store.load(place, units, true);
     const c = store.cache;
-    if (stopped || c?.key !== key || !c.forecast || api.island.busy()) return; // failure: skip silently
+    if (stopped || api.paused() || c?.key !== key || !c.forecast || api.island.busy()) return; // failure: skip silently
     api.island.notice({ text: statusText(c.forecast, units), priority: BAND.NOTICE, view: "weather", key: "weather-glance", peek: true, ms: 3000 });
   };
   store.onChange = () => { showStatus(); api.island.redraw(); };
   const offs = [
     api.island.onChange(reconcile),
     // The settings window changed the city or units (the core updates State after its own listener).
-    api.listen("settings-changed", () => { api.timeout(() => { showStatus(); reconcile(); if (poll) refresh(); armGlance(); }, 0); }),
+    api.listen("settings-changed", () => { api.timeout(() => { showStatus(); reconcile(); if (poll) refresh(); const min = glanceMinutes(api.settings<WeatherCfg>().weatherGlanceEvery); if (min !== glanceEvery || !!glance !== !!(min && weatherCfg(api).place)) armGlance(); }, 0); }),
     // The interval sleeps while hidden: catch up on return.
     api.onVisibility((mode) => { if (mode !== "hidden" && poll) refresh(); }),
   ];
