@@ -1,14 +1,83 @@
-/* Sistema: this module's classes, all prefixed "sysmon-". */
-.sysmon-body { padding: 4px 14px 6px 84px; max-height: 300px; overflow-y: auto; font: 400 11.5px var(--font); color: var(--dim); display: flex; flex-direction: column; gap: 8px; }
-.sysmon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px 10px; }
-.sysmon-cell { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.sysmon-k { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--dim); }
-.sysmon-v { font: 600 16px/20px var(--font); color: var(--ink); font-variant-numeric: tabular-nums; }
-.sysmon-sub { font-size: 10.5px; color: var(--dim); overflow-wrap: anywhere; }
-.sysmon-bar { display: block; height: 3px; border-radius: 999px; background: var(--surface-track); overflow: hidden; }
-.sysmon-bar > i { display: block; height: 100%; background: var(--amber); }
-.sysmon-procs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.sysmon-list { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.sysmon-proc { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
-.sysmon-name { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
-.sysmon-lhm { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+/* Sistema: this module's classes, all prefixed "sysmon-". Only transitions (nothing animates on its own), so a hidden
+   island computes nothing here. */
+.sysmon-body {
+  height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 14px 16px 14px 84px;
+  display: flex; flex-direction: column; gap: 10px;
+  font: 400 11.5px var(--font); color: var(--dim);
+  scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.sysmon-body::-webkit-scrollbar { width: 6px; }
+.sysmon-body::-webkit-scrollbar-track { background: transparent; }
+.sysmon-body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 999px; }
+.sysmon-body::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.28); }
+.sysmon-body [hidden] { display: none !important; }
+
+.sysmon-k { font: 600 10px var(--font); text-transform: uppercase; letter-spacing: 0.6px; color: var(--dim-2); }
+.sysmon-sub { font-size: 10.5px; color: var(--dim-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.sysmon-num { font-variant-numeric: tabular-nums; color: var(--surface-text); white-space: nowrap; text-align: right; }
+.sysmon-num.wide { min-width: 9ch; }
+
+/* Metric tiles: CPU, memory, GPU */
+.sysmon-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; flex: 0 0 auto; }
+.sysmon-tile {
+  --tone: var(--cyan);
+  display: flex; flex-direction: column; gap: 4px; min-width: 0;
+  padding: 8px 11px 7px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035); border: 1px solid var(--surface-edge);
+  transition: opacity 0.3s ease-out;
+}
+.sysmon-tile.sysmon-ram { --tone: var(--indigo); }
+.sysmon-tile.sysmon-gpu { --tone: var(--green-2); }
+.sysmon-tile.off { opacity: 0.55; }
+.sysmon-tile-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.sysmon-v { font: 600 19px/1 var(--font); color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -0.3px; }
+.sysmon-spark { display: block; width: 100%; height: 22px; overflow: visible; }
+.sysmon-mid { stroke: var(--surface-track); stroke-width: 1; stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; fill: none; }
+.sysmon-line { fill: none; stroke: var(--tone); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.sysmon-area { fill: var(--tone); opacity: 0.14; stroke: none; }
+
+/* Disk and network */
+.sysmon-io { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 18px; flex: 0 0 auto; }
+.sysmon-sec { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 0 0 auto; }
+.sysmon-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding-bottom: 5px; border-bottom: 1px solid var(--surface-edge); }
+.sysmon-aside { font-size: 10.5px; color: var(--dim-3); white-space: nowrap; }
+.sysmon-aside .sysmon-num { display: inline-block; min-width: 4ch; }
+.sysmon-list { display: flex; flex-direction: column; gap: 4px; }
+.sysmon-row { display: flex; align-items: center; gap: 8px; min-width: 0; height: 16px; }
+.sysmon-name { color: var(--surface-text); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sysmon-name.drive { flex: 0 0 22px; font-variant-numeric: tabular-nums; }
+.sysmon-arrow { flex: 0 0 14px; text-align: center; font-weight: 600; }
+.sysmon-arrow.dn { color: var(--cyan); }
+.sysmon-arrow.up { color: var(--pink); }
+.sysmon-bar { flex: 1 1 auto; display: block; height: 5px; border-radius: 999px; background: var(--surface-track); overflow: hidden; min-width: 40px; }
+.sysmon-bar > i { display: block; height: 100%; width: 0; border-radius: inherit; background: rgba(255, 255, 255, 0.42); transition: width 0.6s cubic-bezier(0.3, 0.7, 0.4, 1), background 0.3s; }
+.sysmon-bar.warm > i { background: var(--amber); }
+.sysmon-bar.high > i { background: var(--red); }
+
+/* Temperatures */
+.sysmon-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.sysmon-chip {
+  --heat: var(--green-2);
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  padding: 3px 9px 3px 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--heat) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--heat) 28%, transparent);
+  transition: background 0.3s, border-color 0.3s;
+}
+.sysmon-chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--heat); flex: 0 0 auto; }
+.sysmon-chip.warm { --heat: var(--amber); }
+.sysmon-chip.hot { --heat: var(--red); }
+.sysmon-chip-name { color: var(--dim); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sysmon-chip b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* LibreHardwareMonitor opt-in */
+.sysmon-note {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: 9px 11px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025); border: 1px dashed rgba(255, 255, 255, 0.08);
+}
+.sysmon-note .sysmon-sub { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
+.sysmon-note-title { color: var(--surface-text); font-weight: 500; }
+.sysmon-btn { margin-top: 4px; padding: 5px 12px; font-size: 11.5px; }
+.sysmon-btn:disabled { opacity: 0.5; }

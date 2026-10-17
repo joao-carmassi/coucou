@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { AlertState, bytes, clampInt, COOLDOWN, pct, showOf } from "../src/modules/sysmon/logic.ts";
+import { AlertState, bytes, clampInt, COOLDOWN, heat, pct, rate, showOf, spark } from "../src/modules/sysmon/logic.ts";
 
 const lim = { cpu: 90, ram: 90, disk: 95, temp: 85 };
 
@@ -17,6 +17,25 @@ test("showOf fills defaults and ignores junk", () => {
   assert.deepEqual(showOf(null).cpu, true);
   assert.equal(showOf({ gpu: false, cpu: "no" }).gpu, false);
   assert.equal(showOf({ gpu: false, cpu: "no" }).cpu, true);
+  assert.equal("top" in showOf({ top: true }), false, "the removed top-apps key is ignored");
+});
+
+test("rates and temperature bands", () => {
+  assert.equal(rate(0), "0 B/s");
+  assert.equal(rate(2048), "2,0 KB/s");
+  assert.equal(rate(null), "–");
+  assert.equal(heat(50, 85), "cool");
+  assert.equal(heat(65, 85), "warm");
+  assert.equal(heat(85, 85), "hot");
+});
+
+test("sparkline is right-aligned, clamped, and empty below two points", () => {
+  assert.deepEqual(spark([5]), { line: "", area: "" });
+  const p = spark([0, 100], 3);
+  assert.equal(p.line, "M50.00,23.00L100.00,1.00");
+  assert.equal(p.area, "M50.00,23.00L100.00,1.00L100,24L50.00,24Z");
+  assert.equal(spark([-50, 200], 2).line, "M0.00,23.00L100.00,1.00");
+  assert.equal(spark(Array.from({ length: 40 }, () => 1)).line.split("L").length, 30, "keeps the last 30");
 });
 
 test("clampInt", () => {

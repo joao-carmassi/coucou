@@ -11,18 +11,12 @@ use windows::Win32::NetworkManagement::IpHelper::{FreeMibTable, GetIfTable2, MIB
 use windows::Win32::Storage::FileSystem::{
     CreateFileW, GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDrives, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
 };
-use windows::Win32::System::Diagnostics::ToolHelp::{
-    CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
-};
 use windows::Win32::System::Performance::{
     PdhAddEnglishCounterW, PdhCloseQuery, PdhCollectQueryData, PdhGetFormattedCounterArrayW, PdhOpenQueryW,
     PDH_FMT_COUNTERVALUE_ITEM_W, PDH_FMT_DOUBLE, PDH_HCOUNTER, PDH_HQUERY,
 };
-use windows::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
 use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
-use windows::Win32::System::Threading::{
-    GetProcessTimes, GetSystemTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
-};
+use windows::Win32::System::Threading::GetSystemTimes;
 use windows::Win32::System::IO::DeviceIoControl;
 
 const DRIVE_FIXED: u32 = 3;
@@ -32,7 +26,6 @@ const IF_OPER_UP: i32 = 1;
 const PDH_MORE_DATA: u32 = 0x800007D2;
 const IOCTL_STORAGE_QUERY_PROPERTY: u32 = 0x002D1400;
 const STORAGE_DEVICE_TEMPERATURE_PROPERTY: u32 = 52;
-const TOP_N: usize = 8;
 
 // ---- pure logic ----
 
@@ -68,26 +61,6 @@ pub fn gpu_load(items: &[(String, f64)]) -> f32 {
     by_type.values().cloned().fold(0.0, f64::max).clamp(0.0, 100.0) as f32
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct Proc {
-    pub pid: u32,
-    pub name: String,
-    pub cpu: f32,
-    pub mem: u64,
-}
-
-/// The `n` busiest by CPU and the `n` biggest by memory.
-pub fn top_n(all: &[Proc], n: usize) -> (Vec<Proc>, Vec<Proc>) {
-    let mut a = all.to_vec();
-    a.sort_by(|x, y| y.cpu.total_cmp(&x.cpu));
-    a.truncate(n);
-    let mut b = all.to_vec();
-    b.sort_by(|x, y| y.mem.cmp(&x.mem));
-    b.truncate(n);
-    (a, b)
-}
-
 // ---- readings ----
 
 #[derive(Serialize, Clone, Debug)]
@@ -118,8 +91,6 @@ pub struct Snapshot {
     pub gpu: Option<f32>,
     pub gpu_mem: Option<u64>,
     pub drive_temps: Vec<DriveTemp>,
-    pub by_cpu: Option<Vec<Proc>>,
-    pub by_mem: Option<Vec<Proc>>,
 }
 
 pub fn cpu_times() -> Option<(u64, u64, u64)> {
@@ -184,38 +155,6 @@ pub fn net_octets() -> Option<(u64, u64)> {
         FreeMibTable(t as *const _);
         Some((rx, tx))
     }
-}
-
-/// Every process: (pid, exe name, 100 ns CPU time, working set). Handles are closed before returning.
-pub fn processes() -> Vec<(u32, String, u64, u64)> {
-    let mut out = Vec::new();
-    unsafe {
-        let Ok(snap) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else { return out };
-        let mut e = PROCESSENTRY32W { dwSize: size_of::<PROCESSENTRY32W>() as u32, ..Default::default() };
-        let mut ok = Process32FirstW(snap, &mut e).is_ok();
-        while ok {
-            let n = e.szExeFile.iter().position(|c| *c == 0).unwrap_or(e.szExeFile.len());
-            let name = String::from_utf16_lossy(&e.szExeFile[..n]);
-            let (mut cpu, mut mem) = (0u64, 0u64);
-            if e.th32ProcessID > 4 {
-                if let Ok(h) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, e.th32ProcessID) {
-                    let (mut c, mut x, mut k, mut u) = (FILETIME::default(), FILETIME::default(), FILETIME::default(), FILETIME::default());
-                    if GetProcessTimes(h, &mut c, &mut x, &mut k, &mut u).is_ok() {
-                        cpu = ft(k) + ft(u);
-                    }
-                    let mut pm = PROCESS_MEMORY_COUNTERS { cb: size_of::<PROCESS_MEMORY_COUNTERS>() as u32, ..Default::default() };
-                    if K32GetProcessMemoryInfo(h, &mut pm, pm.cb).as_bool() {
-                        mem = pm.WorkingSetSize as u64;
-                    }
-                    let _ = CloseHandle(h);
-                }
-            }
-            out.push((e.th32ProcessID, name, cpu, mem));
-            ok = Process32NextW(snap, &mut e).is_ok();
-        }
-        let _ = CloseHandle(snap);
-    }
-    out
 }
 
 // ---- NVMe / SATA drive temperature (IOCTL_STORAGE_QUERY_PROPERTY, no admin on current Windows) ----
@@ -372,7 +311,6 @@ pub struct Sampler {
     n: u64,
     cpu: Option<(u64, u64, u64)>,
     net: Option<(u64, u64)>,
-    procs: HashMap<u32, u64>,
     pdh: Option<Pdh>,
     drive_temps: Vec<DriveTemp>,
 }
@@ -382,10 +320,10 @@ const STALE_SECS: f64 = 10.0;
 
 impl Sampler {
     pub fn new() -> Self {
-        Sampler { at: Instant::now(), n: 0, cpu: None, net: None, procs: HashMap::new(), pdh: Pdh::open(), drive_temps: Vec::new() }
+        Sampler { at: Instant::now(), n: 0, cpu: None, net: None, pdh: Pdh::open(), drive_temps: Vec::new() }
     }
 
-    pub fn sample(&mut self, with_procs: bool, with_temps: bool) -> Snapshot {
+    pub fn sample(&mut self, with_temps: bool) -> Snapshot {
         let secs = self.at.elapsed().as_secs_f64();
         let stale = self.n == 0 || secs > STALE_SECS;
         let mut s = Snapshot::default();
@@ -421,23 +359,6 @@ impl Sampler {
             s.drive_temps = self.drive_temps.clone();
         }
 
-        if with_procs {
-            let all = processes();
-            let ncpu = std::thread::available_parallelism().map_or(1, |n| n.get()) as f64;
-            let list: Vec<Proc> = all
-                .iter()
-                .filter(|(pid, ..)| *pid != 0)
-                .map(|(pid, name, cpu, mem)| {
-                    let d = self.procs.get(pid).map_or(0, |p| cpu.saturating_sub(*p));
-                    let pct = if stale || secs <= 0.0 { 0.0 } else { (d as f64 / 1e7 / secs / ncpu * 100.0).min(100.0) as f32 };
-                    Proc { pid: *pid, name: name.clone(), cpu: pct, mem: *mem }
-                })
-                .collect();
-            self.procs = all.iter().map(|(pid, _, cpu, _)| (*pid, *cpu)).collect();
-            let (a, b) = top_n(&list, TOP_N);
-            s.by_cpu = Some(a);
-            s.by_mem = Some(b);
-        }
         self.at = Instant::now();
         self.n += 1;
         s
@@ -475,15 +396,6 @@ mod tests {
     }
 
     #[test]
-    fn top_lists_are_sorted_and_cut() {
-        let p = |pid, cpu, mem| Proc { pid, name: format!("p{pid}"), cpu, mem };
-        let all = vec![p(1, 5.0, 100), p(2, 50.0, 10), p(3, 20.0, 900)];
-        let (c, m) = top_n(&all, 2);
-        assert_eq!(c.iter().map(|x| x.pid).collect::<Vec<_>>(), [2, 3]);
-        assert_eq!(m.iter().map(|x| x.pid).collect::<Vec<_>>(), [3, 1]);
-    }
-
-    #[test]
     fn drive_temp_needs_a_plausible_complete_answer() {
         assert_eq!(parse_drive_temp(true, 48, 1, 41), Some(41.0));
         assert_eq!(parse_drive_temp(false, 48, 1, 41), None);
@@ -500,12 +412,11 @@ mod tests {
         assert!(!disks().is_empty());
         assert!(net_octets().is_some());
         let mut s = Sampler::new();
-        let a = s.sample(true, true);
+        let a = s.sample(true);
         assert!(a.cpu.is_none(), "first sample has no CPU baseline");
         std::thread::sleep(std::time::Duration::from_millis(300));
-        let b = s.sample(true, true);
+        let b = s.sample(true);
         assert!(b.cpu.is_some_and(|c| (0.0..=100.0).contains(&c)));
-        assert!(b.by_cpu.as_ref().is_some_and(|l| !l.is_empty()) && b.by_mem.as_ref().is_some_and(|l| !l.is_empty()));
         eprintln!("sysmon live: gpu={:?} gpuMem={:?} diskBusy={:?} net={:?}/{:?} driveTemps={:?}", b.gpu, b.gpu_mem, b.disk_busy, b.net_down, b.net_up, b.drive_temps);
     }
 
@@ -516,17 +427,17 @@ mod tests {
         n
     }
 
-    // A view opened and closed 100 times: the sampler (PDH query, snapshots, process handles) leaks nothing.
+    // A view opened and closed 100 times: the sampler (PDH query, drive handles, snapshots) leaks nothing.
     #[test]
     fn open_close_100_times_keeps_handles_flat() {
         let mut warm = Sampler::new();
-        warm.sample(true, true);
+        warm.sample(true);
         drop(warm);
         let before = handle_count();
         for _ in 0..100 {
             let mut s = Sampler::new();
-            s.sample(true, true);
-            s.sample(true, true);
+            s.sample(true);
+            s.sample(true);
         }
         let after = handle_count();
         assert!(after <= before + 8, "handles grew {before} -> {after}");

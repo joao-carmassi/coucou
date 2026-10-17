@@ -4,7 +4,7 @@
   "default": false,
   "order": 14,
   "settingsDefaults": {
-    "sysmonShow": { "cpu": true, "ram": true, "gpu": true, "disk": true, "net": true, "temp": true, "top": true },
+    "sysmonShow": { "cpu": true, "ram": true, "gpu": true, "disk": true, "net": true, "temp": true },
     "sysmonAlerts": false,
     "sysmonCpuMax": 90,
     "sysmonRamMax": 90,

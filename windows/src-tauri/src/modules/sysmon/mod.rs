@@ -58,7 +58,6 @@ fn gate(app: &AppHandle) -> Result<(), String> {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SampleOpts {
-    pub procs: bool,
     pub temps: bool,
 }
 
@@ -66,7 +65,7 @@ pub struct SampleOpts {
 #[tauri::command]
 pub async fn sysmon_sample(app: AppHandle, opts: SampleOpts) -> Result<metrics::Snapshot, String> {
     gate(&app)?;
-    blocking(move || lock(&SAMPLER).get_or_insert_with(metrics::Sampler::new).sample(opts.procs, opts.temps)).await
+    blocking(move || lock(&SAMPLER).get_or_insert_with(metrics::Sampler::new).sample(opts.temps)).await
 }
 
 /// The view went away: drop the PDH query and the previous readings.
