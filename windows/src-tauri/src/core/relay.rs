@@ -18,7 +18,8 @@ use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
 use serde_json::{json, Value};
-use tauri::AppHandle;
+use std::path::{Path, PathBuf};
+use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use tokio::sync::mpsc;
@@ -32,6 +33,74 @@ const DECISION_TIMEOUT: Duration = Duration::from_secs(108);
 const ACK_TIMEOUT: Duration = Duration::from_millis(800);
 const MAX_PAYLOAD: usize = 1 << 20;
 const MAX_REPLY: usize = 64 * 1024;
+
+/// Where the relay client lives once installed.
+pub fn client_exe_path() -> std::path::PathBuf {
+    crate::core::settings::local_dir().join("bin").join(crate::core::platform::HOOK_EXE)
+}
+
+/// Copies the relay (coucou-hook.exe / coucou-hook) into the local data dir's
+/// bin/ on launch. In a bundled install it comes from the app resources; in
+/// `tauri dev` it sits next to the app binary in the workspace target directory.
+///
+/// Every candidate is tried rather than just the first, because getting this
+/// wrong is silent and fatal: `resources` used to be a glob, which made NSIS
+/// mirror the source path into `_up_\target\release\`, no candidate matched, and
+/// the relay was simply never installed. It only looked healthy on a developer
+/// machine, where a leftover copy from `tauri dev` was already sitting in bin/.
+pub fn ensure_client_exe(app: &AppHandle) {
+    let dest = client_exe_path();
+    let Some(dir) = dest.parent() else { return };
+    // Nobody else may swap the relay client runs: its folder is ours only.
+    if crate::core::platform::ensure_private_dir(&crate::core::settings::local_dir()).is_err()
+        || std::fs::create_dir_all(dir).is_err()
+    {
+        return;
+    }
+
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(p) = app.path().resolve(crate::core::platform::HOOK_EXE, tauri::path::BaseDirectory::Resource) {
+        candidates.push(p);
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            // Installed build, then `tauri dev` (target/debug) next to the
+            // release hook the pre-build step produces.
+            candidates.push(parent.join(crate::core::platform::HOOK_EXE));
+            candidates.push(parent.join("../release").join(crate::core::platform::HOOK_EXE));
+            // Belt and braces: where the old glob form used to land it.
+            candidates.push(parent.join("_up_/target/release").join(crate::core::platform::HOOK_EXE));
+        }
+    }
+
+    let tried: Vec<String> = candidates.iter().map(|p| p.display().to_string()).collect();
+    let Some(src) = candidates.into_iter().find(|p| p.exists()) else {
+        log::line(format!(
+            "{} not found — the relay client cannot work. Looked in: {}",
+            crate::core::platform::HOOK_EXE,
+            tried.join(", ")
+        ));
+        return;
+    };
+    install_client(&src, &dest);
+}
+
+fn install_client(src: &Path, dest: &Path) {
+    let same = match (std::fs::metadata(src), std::fs::metadata(dest)) {
+        (Ok(a), Ok(b)) => a.len() == b.len() && a.modified().ok() == b.modified().ok(),
+        _ => false,
+    };
+    if same {
+        return;
+    }
+    // A hook may be running right now and hold the file open; keeping the old
+    // copy is fine, it is the same relay.
+    if let Err(err) = std::fs::copy(src, dest) {
+        if !dest.exists() {
+            log::line(format!("could not install {}: {err}", crate::core::platform::HOOK_EXE));
+        }
+    }
+}
 
 #[derive(Clone, Copy)]
 pub struct Channel {

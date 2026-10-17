@@ -6,9 +6,7 @@ use serde_json::{json, Value};
 
 use crate::core::settings::{self, Settings};
 
-pub fn hook_exe_path() -> PathBuf {
-    settings::local_dir().join("bin").join(crate::core::platform::HOOK_EXE)
-}
+pub use crate::core::relay::client_exe_path as hook_exe_path;
 
 pub fn wsl_hooks(s: &Settings) -> Vec<String> {
     s.extra
