@@ -121,7 +121,7 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
       gulp: () => host.avatarGulp(),
       tint: (c) => host.avatarTint(c),
       bodyColor: () => host.avatarBodyColor(),
-      level: (v) => host.avatarLevel(v),
+      level: (v, opts) => host.avatarLevel(v, opts),
       glow: glowOf,
       defineMood(local, def) {
         const name = `${id}.${local}` as const;

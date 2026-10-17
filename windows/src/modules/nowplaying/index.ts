@@ -1,15 +1,17 @@
-// Tocando agora: the player (Rust: Windows media session) as a tab, an ambient pill and a peek when the track changes;
-// the spectrum (Rust: loopback + FFT) drives Mochi's squash and the bars, and runs only while someone sees it.
+// Tocando agora: the player (Rust: Windows media session) as a tab, a compact card (cover, title, artist, time left) and a
+// peek when the track changes; the spectrum (Rust: loopback + FFT) makes the one Mochi dance and fills the bars, and runs
+// only while someone sees it.
 import "./nowplaying.css";
 import { svg } from "../../kit/dom";
 import { BAND, type Disposer, type IslandApi, type ModuleDef } from "../../core/moduleApi";
 import { NowPlayingBridge as Bridge } from "./bridge";
 import { ICONS } from "./icons";
-import { danceLevel, trackKey, trackLine, wantCapture, clampSens, type Cfg, type Track } from "./logic";
+import { compactCard, danceLevel, trackKey, trackLine, wantCapture, wantTick, clampSens, type Cfg, type Track } from "./logic";
 import { NP } from "./store";
 import { buildView } from "./view";
 
-const PILL = "nowplaying";
+// Lowest line above the clock's: any agent / notice / timer line beats it, and a non-ambient pill hides it.
+const LINE_PRIORITY = BAND.AMBIENT + 2;
 
 function start(api: IslandApi): Disposer {
   NP.reset();
@@ -29,17 +31,21 @@ function start(api: IslandApi): Disposer {
       void Bridge.capture(capture).catch((e) => api.island.error(e));
       if (!capture) { NP.bands = []; api.avatar.level(0); NP.paintBars?.(); }
     }
-    const progress = !!NP.track?.playing && mode === "expanded" && view === "nowplaying";
-    if (progress && !tick) tick = api.interval(() => NP.paintProgress?.(), 1000, { whenVisible: true });
+    const progress = wantTick({ playing: !!NP.track?.playing, paused: api.paused(), mode, view, hasLength: !!NP.track?.durationMs && NP.track.positionMs !== null });
+    if (progress && !tick) tick = api.interval(() => { NP.paintProgress?.(); publishCard(); }, 1000, { whenVisible: true });
     else if (!progress && tick) { tick(); tick = null; }
+    publishCard();
+  };
+
+  // The compact island shows cover, title, artist and time left whenever a track is known (dimmed while paused).
+  const publishCard = () => {
+    const t = NP.track;
+    api.status.set(t && !api.paused() ? { priority: LINE_PRIORITY, ...compactCard(t, Date.now()) } : null);
   };
 
   const apply = (t: Track | null, initial = false) => {
     const was = NP.track;
     NP.track = t;
-    if (t?.playing) {
-      api.pills.set({ id: PILL, label: t.title || t.app, color: "#b79cff", mood: "idle", ambient: true });
-    } else api.pills.remove(PILL);
     // A new track peeks at the island (not when it is already open on the player, nor on the first read).
     const key = trackKey(t);
     if (!initial && t?.playing && key !== announced && key !== trackKey(was) && api.island.mode() !== "expanded") {
@@ -57,7 +63,7 @@ function start(api: IslandApi): Disposer {
       if (!capturing) return; // a late event after the capture was switched off
       NP.bands = p.bands;
       NP.paintBars?.();
-      if (cfg().nowplayingDance !== false) api.avatar.level(danceLevel(p.level, NP.sens));
+      if (cfg().nowplayingDance !== false) api.avatar.level(danceLevel(p.level, NP.sens), { dance: true });
     }),
     // The settings window saved: the core updates State after its own listener, so look one tick later.
     api.listen("settings-changed", () => { api.timeout(reconcile, 0); }),
@@ -84,7 +90,7 @@ function start(api: IslandApi): Disposer {
     if (capturing) void Bridge.capture(false).catch(() => {});
     capturing = false;
     api.avatar.level(0);
-    api.pills.remove(PILL);
+    api.status.set(null);
     NP.paintProgress = NP.paintBars = null;
     NP.reset();
   };
@@ -94,7 +100,7 @@ export const nowplayingModule: ModuleDef = {
   id: "nowplaying",
   views: [{
     name: "nowplaying",
-    layout: { height: 175, botX: 54, botY: null, botDiameter: 46 },
+    layout: { height: 200, botX: 54, botY: null, botDiameter: 46, botCenter: { top: 42, h: 158 } },
     build: (ctx) => buildView(ctx),
   }],
   tabs: [{ view: "nowplaying", title: "Tocando", icon: () => svg(ICONS.note, 13), order: 35 }],

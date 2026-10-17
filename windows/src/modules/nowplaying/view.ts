@@ -39,7 +39,7 @@ export function buildView(ctx: ViewContext): ViewHost {
     h("div", { class: "title", text: "Nada tocando agora" }),
     h("div", { class: "sub", text: "Toque algo no Spotify, no navegador ou em outro player." }));
   const body = h("div", { class: "stack np-body" }, empty, player);
-  body.style.padding = "4px 16px 4px 84px";
+  body.style.padding = "14px 16px 14px 84px"; // room for the Mochi on the left (botX 54)
   const el = view(card(null, body));
 
   const visible = () => api.island.view() === "nowplaying";

@@ -120,6 +120,10 @@ export function bodyShade(c: RGB): { top: RGB; bottom: RGB; ink: string } {
 export const LEVEL_GAP_MS = 33;
 export const LEVEL_DECAY_MS = 300;
 export const LEVEL_SQUASH = 0.06;
+/** A level sent with {dance:true} also squashes more, hops the whole figure (fraction of its radius) and sways it (radians). */
+export const LEVEL_SQUASH_DANCE = 0.14;
+export const LEVEL_HOP = 0.16;
+export const LEVEL_SWAY = 0.1;
 export const levelAt = (v: number, at: number, nowMs: number) => Math.max(0, v * (1 - (nowMs - at) / LEVEL_DECAY_MS));
 
 /** Sideways look offset of an idle glance: only while idle and inside its window. */
@@ -212,12 +216,14 @@ export class BotEngine {
 
   private lvV = 0;
   private lvAt = -1e9;
+  private lvDance = false;
   private glanceTo = 0;
   private glanceUntil = 0;
   private nextGlance = now() + 6 + Math.random() * 8;
 
   /** Loudness 0..1. False when dropped (too soon after the last one); 0 is never dropped. */
-  setLevel(v: number, nowMs = performance.now()): boolean {
+  setLevel(v: number, nowMs = performance.now(), dance = false): boolean {
+    this.lvDance = dance;
     const x = Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0;
     if (x > 0 && nowMs - this.lvAt < LEVEL_GAP_MS) return false;
     this.lvV = x;
@@ -726,15 +732,19 @@ export class BotEngine {
     const rx = R * 1.14;
     const ry = R * 0.88;
     const cx = W / 2 + this.ox * R;
-    const cy = H / 2 + this.particleOverhang / 2 + this.oy * R + R * 0.06;
+    let cy = H / 2 + this.particleOverhang / 2 + this.oy * R + R * 0.06;
 
+    const lv = this.isMini ? 0 : this.level;
+    const dance = this.lvDance;
+    const sq = dance ? LEVEL_SQUASH_DANCE : LEVEL_SQUASH;
+    cy -= dance ? LEVEL_HOP * R * lv : 0; // the whole figure hops: hands, badge and particles follow
     this.drawHandsBehind(x, R, rx, ry, cx, cy);
 
     x.save();
     x.translate(cx, cy);
-    if (this.tilt !== 0) x.rotate(this.tilt);
-    const lv = this.isMini ? 0 : this.level;
-    x.scale(this.sx * (1 - LEVEL_SQUASH * 0.5 * lv), this.sy * (1 + LEVEL_SQUASH * lv));
+    const sway = dance && lv > 0 ? Math.sin(now() * 9) * LEVEL_SWAY * lv : 0;
+    if (this.tilt + sway !== 0) x.rotate(this.tilt + sway);
+    x.scale(this.sx * (1 - sq * 0.5 * lv), this.sy * (1 + sq * lv));
 
     const body = this.bodyPath(rx, ry, R);
     this.drawBody(x, body, R, rx, ry);

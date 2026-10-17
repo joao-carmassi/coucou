@@ -9,7 +9,9 @@ let seq = 0;
 
 const same = (a: StatusLine, b: StatusLine) =>
   a.priority === b.priority && a.text === b.text && a.icon === b.icon &&
-  a.ttlMs === b.ttlMs && a.urgent === b.urgent && a.overGrid === b.overGrid;
+  a.ttlMs === b.ttlMs && a.urgent === b.urgent && a.overGrid === b.overGrid &&
+  a.card?.art === b.card?.art && a.card?.sub === b.card?.sub && a.card?.trail === b.card?.trail && a.card?.dim === b.card?.dim &&
+  !a.card === !b.card;
 
 export const Compact = {
   /** True when the line changed. Never notifies State: the caller redraws. */

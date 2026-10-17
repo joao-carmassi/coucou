@@ -22,6 +22,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
 import { State } from "../../src/core/state";
+import { Compact } from "../../src/core/compact";
 import { buildCatalog } from "../../src/modules/resolve";
 import { nowplayingModule } from "../../src/modules/nowplaying";
 import manifest from "../../src/modules/nowplaying/manifest.json";
@@ -53,6 +54,7 @@ describe("nowplaying lifecycle", () => {
     expect(mine()).toEqual([]);
     expect(t.handlers.has("nowplaying-state")).toBe(false);
     expect(State.pills.some((p) => p.owner === "nowplaying")).toBe(false);
+    expect(State.statusLine).toBeNull();
   });
 
   it("on: asks for the current track once, no capture while nothing plays", async () => {
@@ -66,29 +68,74 @@ describe("nowplaying lifecycle", () => {
     expect(State.pills.some((p) => p.owner === "nowplaying")).toBe(false);
   });
 
-  it("playing with the island visible starts the capture; a pill and a level reach the avatar", async () => {
+  it("playing with the island visible starts the capture; the compact card shows (no second Mochi), a level reaches the avatar", async () => {
     expect(State.mode).toBe("compact");
     emit("nowplaying-state", track(true));
     await tick(100);
     expect(captures()).toEqual([true]);
-    expect(State.pills.find((p) => p.owner === "nowplaying")?.label).toBe("Faixa");
+    expect(State.pills.some((p) => p.owner === "nowplaying")).toBe(false); // the one Mochi dances; no ambient mini
+    expect(State.statusLine).toMatchObject({ text: "Faixa", card: { sub: "Artista", trail: "-3:19", dim: false, art: null } });
     emit("nowplaying-bands", { bands: Array(16).fill(0.5), level: 0.5 });
     await tick(50); // must not throw
   });
 
-  it("paused or hidden island stops the capture; the same state twice does not repeat the call", async () => {
-    emit("nowplaying-state", track(true)); // unchanged
-    await tick(100);
-    expect(captures()).toEqual([true]);
+  it("the time left ticks once a second while the compact island shows it; none when hidden or paused", async () => {
+    await tick(1000);
+    expect(State.statusLine?.card?.trail).toBe("-3:18");
     island.hide();
     await tick(500);
-    expect(captures()).toEqual([true, false]);
+    const frozen = State.statusLine?.card?.trail;
+    await tick(5000);
+    expect(State.statusLine?.card?.trail).toBe(frozen); // no timer while hidden
     island.reveal();
-    await tick(500);
-    expect(captures()).toEqual([true, false, true]);
+    await tick(1500);
+    expect(State.statusLine?.card?.trail).not.toBe(frozen);
     emit("nowplaying-state", track(false));
     await tick(100);
-    expect(captures()).toEqual([true, false, true, false]);
+    const paused = State.statusLine?.card;
+    expect(paused?.dim).toBe(true);
+    await tick(5000);
+    expect(State.statusLine?.card?.trail).toBe(paused?.trail); // paused: nothing runs
+    emit("nowplaying-state", { ...track(true), durationMs: null });
+    await tick(100);
+    expect(State.statusLine?.card?.trail).toBe(""); // unknown length (browsers): no remaining time
+    emit("nowplaying-state", track(true));
+    await tick(100);
+  });
+
+  it("an agent / notice line beats the card; it returns when that line goes", async () => {
+    Compact.set("claude", { priority: 30, text: "lendo arquivos" });
+    expect(State.statusLine?.text).toBe("lendo arquivos");
+    expect(State.statusLine?.card).toBeUndefined();
+    Compact.set("claude", null);
+    expect(State.statusLine?.card?.sub).toBe("Artista");
+  });
+
+  it("a non-ambient pill (another task) hides the card; an ambient one does not", () => {
+    const own = { owner: "x", label: "l", color: "#fff", mood: "idle" as const };
+    const before = State.pills.length;
+    State.pills.push({ ...own, id: "t1" }, { ...own, id: "t2", ambient: true });
+    expect(State.statusLine?.card?.sub).toBe("Artista"); // t1 is the front pill; t2 is ambient
+    State.pills.push({ ...own, id: "t3" });
+    expect(State.statusLine).toBeNull(); // t3 is a real second task
+    State.pills.length = before;
+    State.focusId = State.focusId && State.pills.some((p) => p.id === State.focusId) ? State.focusId : null;
+  });
+
+  it("paused or hidden island stops the capture; the same state twice does not repeat the call", async () => {
+    const n0 = captures().length;
+    emit("nowplaying-state", track(true)); // unchanged
+    await tick(100);
+    expect(captures().slice(n0)).toEqual([]);
+    island.hide();
+    await tick(500);
+    expect(captures().slice(n0)).toEqual([false]);
+    island.reveal();
+    await tick(500);
+    expect(captures().slice(n0)).toEqual([false, true]);
+    emit("nowplaying-state", track(false));
+    await tick(100);
+    expect(captures().slice(n0)).toEqual([false, true, false]);
     emit("nowplaying-state", track(true));
     await tick(100);
   });
@@ -121,6 +168,7 @@ describe("nowplaying lifecycle", () => {
     await tick(100);
     expect(captures().at(-1)).toBe(false);
     expect(State.pills.some((p) => p.owner === "nowplaying")).toBe(false);
+    expect(State.statusLine).toBeNull();
     expect(t.handlers.has("nowplaying-state")).toBe(false);
     expect(t.handlers.has("nowplaying-bands")).toBe(false);
     const n = mine().length;
