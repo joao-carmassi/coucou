@@ -5,7 +5,7 @@ to the **core-only** tree (tag `m3b-core-only`): there is no legacy code to adap
 ported one by one in M5 from `git show m3-ok:<path>`.
 
 Decisions: modules ON by default: `board`, `claude`, `media`, `upload`. OFF: `timer`, `voice`, and the
-seven service modules (`github`, `vercel`, `stripe`, `n8n`, `resend`, `calcom`, `notion`). `voice` and `upload` require `claude`. A disabled module has no tab, view,
+seven service modules (`github`, `vercel`, `stripe`, `n8n`, `resend`, `calcom`, `notion`). `upload` requires `claude` (`voice` stopped requiring it in 0.13, see the last section). A disabled module has no tab, view,
 pill, timer, thread, or listener. One status line: highest priority wins. Commands are NOT
 gated in M4 (a command only answers a request); `host.require(id)` exists for M5.
 Settings stay one FLAT `settings.json`; unknown keys travel in `extra`.
@@ -634,3 +634,14 @@ Pills, notices and (where a blocking hook exists) an approval card for Codex, Cu
 - **Approval**: Codex (`PermissionRequest`) and Cursor (`beforeShellExecution`) only, only while `agentsApprove` is on. Card `agents-approval` at request priority 95, pinned (under Claude's 100, over questions at 90). The exe answers Cursor with `{"continue":true,"permission":"ask"}` on every path without a decision (Coucou closed, no pipe, bad stdin, timeout, decline). Gemini, Copilot and OpenCode only observe. Nothing is approved without a click or the Y/N key on the card.
 - **Pills** `agent_<id>`: removed 5.2 s after a turn ends. Services provided: `agents.list` (`AgentInfo[]`), `board.card`, `board.pill`, `board.focus` for the owned pills.
 - **Idle**: off = nothing. On = one relay subscription, no thread, no timer, no file watcher. Detection runs only when the settings section opens.
+
+## voz, wave 3 (F42 / F38 / F41)
+
+`voice` no longer `requires` claude and is out of the Claude group (manifest end state: `voiceHotkey`, `voiceEngine`, `voiceLanguage`; Flow and assistant keys arrive with F38 / F41). Without the claude module the review card offers "Copiar" (clipboard) where it offers "Enviar" with it; `requires_follow_claude` (host.rs) and `resolvers.test.ts` use `upload` as the "requires" example now.
+
+- **F42, engine** (`voiceEngine`: `whistle` default | `whisper`; `voiceLanguage`: `auto|pt|en|es|fr|de|it`, whisper only). Rust reads both only in `modules/voice/cfg.rs` (an unknown value falls back to `whistle` / `auto`). `Voice::start/apply` copy them into the module (`voice::configure`).
+- **whisper.cpp offline** (`modules/voice/whisper.rs`): `whisper-cli.exe` from build tag `b5454` (`whisper-bin-x64.zip`, 8 928 640 bytes, sha256 `6ba69e34...6ccb`) and model `ggml-base-q5_1.bin` (59 707 625 bytes, sha256 `422f1ae4...8898`, Hugging Face revision `5359861c739e955e79d9a303bcbc70fb988958b1`). Both fetched only by `voice_download_whisper` (a click in Settings, which shows host, size and SHA-256 first): https only, redirects capped, size cap, SHA-256 while streaming, `.part` then rename, the zip extracted through `core/archive.rs` to `%LOCALAPPDATA%\Coucou\voice\whisper\bin` (the zip keeps its files under `Release/`). `voice_model_status` gains `whisperReady`. Run as a child process on a temp WAV (`-m -f -l -nt -np -t`, language through an allowlist, `min(4, cores)` threads), no window, killed on timeout or module stop; stdout is the text (`parse_stdout` drops empty lines and `[...]` / `(...)` markers). Verified on the pinned build with a short clip.
+- **Live caption: not built.** `whisper-cli` has no streaming without SDL (`whisper-stream`); the card shows the final text only.
+- **`core/archive.rs`** (neutral): `hex`, `sha256_file`, `extract_zip` (enclosed names, entry and size caps), moved unchanged from `modules/sysmon/lhm.rs`, which re-exports the two it uses. Modules never call each other.
+- **Privacy**: Settings text and `docs/privacy.html` say everything runs on the PC and the only network use is the clicked download (github.com, huggingface.co).
+- **Not verified here**: a real microphone take through whisper in pt-BR (only the CLI on a synthetic clip), the download over the app's own HTTP client.

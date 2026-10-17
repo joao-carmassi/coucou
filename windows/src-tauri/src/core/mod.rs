@@ -1,6 +1,7 @@
 // Plumbing shared by every module: the island window, tray, settings, log and
 // the per-OS layer.
 
+pub mod archive;
 pub mod b64;
 pub mod cfgfile;
 pub mod drop_target;

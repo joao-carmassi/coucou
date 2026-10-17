@@ -12,6 +12,27 @@ pub fn hotkey(s: &Settings) -> String {
     s.extra.get("voiceHotkey").and_then(Value::as_str).unwrap_or(DEFAULT_HOTKEY).to_string()
 }
 
+/// Languages whisper accepts from us; anything else becomes "auto".
+pub const LANGS: [&str; 7] = ["auto", "pt", "en", "es", "fr", "de", "it"];
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Engine {
+    Whistle,
+    Whisper,
+}
+
+pub fn engine(s: &Settings) -> Engine {
+    match s.extra.get("voiceEngine").and_then(Value::as_str) {
+        Some("whisper") => Engine::Whisper,
+        _ => Engine::Whistle,
+    }
+}
+
+pub fn language(s: &Settings) -> &'static str {
+    let v = s.extra.get("voiceLanguage").and_then(Value::as_str).unwrap_or("auto");
+    LANGS.iter().find(|l| **l == v).copied().unwrap_or("auto")
+}
+
 /// Pre-module settings.json: `voiceEnabled` was the switch. Only fills a missing `modulesEnabled.voice`.
 pub fn migrate(s: &mut Settings) -> bool {
     if s.modules_enabled.contains_key("voice") {
@@ -56,6 +77,18 @@ mod tests {
         s.modules_enabled.insert("voice".into(), true);
         mirror_legacy(&mut s);
         assert_eq!(s.extra["voiceEnabled"], json!(true));
+    }
+
+    #[test]
+    fn engine_and_language_fall_back() {
+        let mut s = Settings::default();
+        assert_eq!((engine(&s), language(&s)), (Engine::Whistle, "auto"));
+        s.extra.insert("voiceEngine".into(), json!("whisper"));
+        s.extra.insert("voiceLanguage".into(), json!("pt"));
+        assert_eq!((engine(&s), language(&s)), (Engine::Whisper, "pt"));
+        s.extra.insert("voiceEngine".into(), json!("x"));
+        s.extra.insert("voiceLanguage".into(), json!("../../evil"));
+        assert_eq!((engine(&s), language(&s)), (Engine::Whistle, "auto"));
     }
 
     #[test]

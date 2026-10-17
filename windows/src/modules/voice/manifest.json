@@ -2,13 +2,11 @@
   "id": "voice",
   "label": "Voz",
   "default": false,
-  "requires": [
-    "claude"
-  ],
-  "group": "Claude",
   "order": 5,
   "settingsDefaults": {
-    "voiceHotkey": "Ctrl+Alt+V"
+    "voiceHotkey": "Ctrl+Alt+V",
+    "voiceEngine": "whistle",
+    "voiceLanguage": "auto"
   },
   "presets": [
     "tudo",

@@ -1,6 +1,7 @@
-// Voice input (English): a global hotkey toggles the microphone; the recording runs through silence until
-// the user ends it (hotkey again or Enter on the card; Esc cancels) or the 10-minute safety cap hits, then is transcribed on-device by Cactus' `needle.exe` + `whistle.cact` (child process on a temp WAV,
-// telemetry off), and the text goes to the island, which shows it on a card. Nothing is sent anywhere by
+// Voice input: a global hotkey toggles the microphone; the recording runs through silence until
+// the user ends it (hotkey again or Enter on the card; Esc cancels) or the 10-minute safety cap hits, then is transcribed on-device
+// by Cactus' `needle.exe` + `whistle.cact` (English) or whisper.cpp's `whisper-cli` (several languages, see whisper.rs); both run as a child process on a temp WAV
+// (telemetry off), and the text goes to the island, which shows it on a card. Nothing is sent anywhere by
 // this module; the model files are fetched only on the Settings button, pinned and SHA-256 checked.
 //
 // shortcut: a fixed loudness threshold (QUIET) only decides "was anything said at all"; a noisy room
@@ -11,7 +12,7 @@ use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
@@ -20,8 +21,11 @@ use tauri::{AppHandle, Emitter, Manager};
 use windows::Win32::Media::Audio::*;
 use windows::Win32::System::Com::*;
 
+use super::cfg::Engine;
+use super::whisper;
 use crate::core::host::{blocking, ModuleCtx, ModuleHost};
 use crate::core::hotkeys;
+use crate::core::settings::Settings;
 
 const RATE: usize = 16_000;
 /// Hard safety cap so a forgotten recording cannot grow forever (~38 MB of f32); the only automatic stop.
@@ -33,6 +37,8 @@ const ENGINE_TIMEOUT: Duration = Duration::from_secs(180); // up to 10 min of au
 #[serde(rename_all = "camelCase")]
 pub struct VoiceStatus {
     pub ready: bool,
+    /// whisper.cpp binary + model are installed and verified.
+    pub whisper_ready: bool,
     pub listening: bool,
     /// Why a hotkey could not be registered ("" = fine).
     pub hotkey_error: String,
@@ -104,11 +110,19 @@ pub fn voice_cancel() {
 pub async fn voice_model_status() -> VoiceStatus {
     blocking(|| VoiceStatus {
         ready: ready(&dir()),
+        whisper_ready: whisper::ready(),
         listening: CAPTURING.load(Ordering::SeqCst),
         hotkey_error: hotkeys::error(),
     })
     .await
     .unwrap_or_default()
+}
+
+/// Settings → "Baixar Whisper". Emits `voice-download` {file, received, total}.
+#[tauri::command]
+pub async fn voice_download_whisper(app: AppHandle) -> Result<(), String> {
+    app.state::<ModuleHost>().require("voice")?;
+    whisper::download(app).await
 }
 
 /// Settings → "Baixar modelo". Emits `voice-download` {file, received, total} as it goes.
@@ -119,6 +133,16 @@ pub async fn voice_download_model(app: AppHandle) -> Result<(), String> {
 }
 
 // ── Capture + transcription ──────────────────────────────────────────────────
+
+/// Engine + language, copied from the settings by `configure` (module start and every apply).
+static CFG: Mutex<(Engine, &'static str)> = Mutex::new((Engine::Whistle, "auto"));
+
+pub fn configure(s: &Settings) {
+    *CFG.lock().unwrap_or_else(PoisonError::into_inner) = (super::cfg::engine(s), super::cfg::language(s));
+}
+fn current() -> (Engine, &'static str) {
+    *CFG.lock().unwrap_or_else(PoisonError::into_inner)
+}
 
 static CAPTURING: AtomicBool = AtomicBool::new(false);
 static STOP: AtomicBool = AtomicBool::new(false);
@@ -142,7 +166,8 @@ fn start(app: &AppHandle) -> Result<(), String> {
     host.require("voice")?;
     let ctx: Arc<ModuleCtx> = host.ctx("voice").ok_or("O módulo Voz está desligado nas Configurações.")?;
     let d = dir();
-    if !ready(&d) {
+    let (engine, lang) = current();
+    if !(if engine == Engine::Whisper { whisper::ready() } else { ready(&d) }) {
         return Err("Modelo de voz ausente: baixe em Configurações → Voz.".into());
     }
     if CAPTURING.swap(true, Ordering::SeqCst) {
@@ -156,7 +181,7 @@ fn start(app: &AppHandle) -> Result<(), String> {
         let result = record(&app, &module_stop).and_then(|pcm| match pcm {
             Some(pcm) if !CANCEL.load(Ordering::SeqCst) => {
                 emit_state(&app, "transcribing", "");
-                transcribe(&d, &pcm, &module_stop).map(Some)
+                transcribe(engine, lang, &d, &pcm, &module_stop).map(Some)
             }
             _ => Ok(None),
         });
@@ -280,21 +305,9 @@ impl Drop for Temp {
     }
 }
 
-/// (text, language). The clip lives in a temp file only while the engine runs.
-fn transcribe(dir: &Path, pcm: &[f32], module_stop: &AtomicBool) -> Result<(String, String), String> {
-    if !ready(dir) {
-        return Err("Modelo de voz ausente ou corrompido.".into());
-    }
-    let tmp = Temp(std::env::temp_dir().join(format!("coucou-voice-{}.wav", std::process::id())));
-    std::fs::write(&tmp.0, wav(pcm)).map_err(|e| e.to_string())?;
-    let mut child = Command::new(dir.join("needle.exe"))
-        .arg("--model")
-        .arg(dir.join("whistle.cact"))
-        .arg("--audio")
-        .arg(&tmp.0)
-        .env("NEEDLE_TELEMETRY", "0")
-        .env("DO_NOT_TRACK", "1")
-        .current_dir(dir)
+/// Runs the engine to completion with stdout captured. Err on timeout or module stop (the child is killed).
+fn run(mut cmd: Command, module_stop: &AtomicBool) -> Result<(Option<i32>, Vec<u8>), String> {
+    let mut child = cmd
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -329,6 +342,31 @@ fn transcribe(dir: &Path, pcm: &[f32], module_stop: &AtomicBool) -> Result<(Stri
         (code, reader.join().unwrap_or_default())
     });
     let Some(code) = code else { return Err("O motor de voz não respondeu a tempo.".into()) };
+    Ok((code, out))
+}
+
+/// (text, language). The clip lives in a temp file only while the engine runs.
+fn transcribe(engine: Engine, lang: &str, dir: &Path, pcm: &[f32], module_stop: &AtomicBool) -> Result<(String, String), String> {
+    let whisper_on = engine == Engine::Whisper;
+    if !(if whisper_on { whisper::ready() } else { ready(dir) }) {
+        return Err("Modelo de voz ausente ou corrompido.".into());
+    }
+    let tmp = Temp(std::env::temp_dir().join(format!("coucou-voice-{}.wav", std::process::id())));
+    std::fs::write(&tmp.0, wav(pcm)).map_err(|e| e.to_string())?;
+    if whisper_on {
+        let mut cmd = Command::new(whisper::exe());
+        cmd.args(whisper::args(lang, &tmp.0, &whisper::model(), whisper::threads())).current_dir(whisper::dir().join("bin").join("Release"));
+        let (code, out) = run(cmd, module_stop)?;
+        drop(tmp);
+        if code != Some(0) {
+            return Err(format!("O motor de voz falhou (código {code:?})."));
+        }
+        let text = whisper::parse_stdout(&String::from_utf8_lossy(&out));
+        return Ok((text, if lang == "auto" { String::new() } else { lang.to_string() }));
+    }
+    let mut cmd = Command::new(dir.join("needle.exe"));
+    cmd.arg("--model").arg(dir.join("whistle.cact")).arg("--audio").arg(&tmp.0).env("NEEDLE_TELEMETRY", "0").env("DO_NOT_TRACK", "1").current_dir(dir);
+    let (code, out) = run(cmd, module_stop)?;
     drop(tmp);
     let stdout = String::from_utf8_lossy(&out).into_owned();
     let v = stdout

@@ -7,6 +7,7 @@ export const VoiceBridge = {
   voiceCancel: () => command<void>("voice_cancel"),
   voiceModelStatus: () => command<VoiceStatus>("voice_model_status"),
   voiceDownloadModel: () => commandOrThrow<void>("voice_download_model"),
+  voiceDownloadWhisper: () => commandOrThrow<void>("voice_download_whisper"),
 };
 
-export interface VoiceStatus { ready: boolean; listening: boolean; hotkeyError: string }
+export interface VoiceStatus { ready: boolean; whisperReady: boolean; listening: boolean; hotkeyError: string }

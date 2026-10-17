@@ -1,5 +1,5 @@
 // Voice module: hotkey (Rust) -> listening (until Enter/hotkey; Esc cancels) -> transcript -> transcript inline on the voice card -> Enter launches a
-// Claude session with the text. Needs the claude module (catalog `requires`).
+// Claude session with the text. Without the claude module the card offers "Copiar" instead.
 
 import type { Disposer, IslandApi, ModuleDef } from "../../core/moduleApi";
 import { App } from "../../kit/app";

@@ -38,8 +38,9 @@ export async function send(api: IslandApi) {
   Voice.busy = true;
   try {
     const launch = api.use<LaunchPrompt>(CLAUDE_SERVICE.launchPrompt);
-    if (!launch) throw new Error("O módulo Claude está desligado: não dá para enviar.");
-    await launch(Voice.text);
+    // No claude module: the same Enter copies the text instead.
+    if (launch) await launch(Voice.text);
+    else await navigator.clipboard.writeText(Voice.text);
     Voice.phase = "none";
     Voice.leave();
   } catch (err) {
@@ -51,7 +52,15 @@ export async function send(api: IslandApi) {
   }
 }
 
-export function buildVoiceView(_ctx: ViewContext): ViewHost {
+const NAMES: Record<string, string> = { pt: "português", en: "inglês", es: "espanhol", fr: "francês", de: "alemão", it: "italiano" };
+
+/** What to tell the user to speak: the light engine is English-only, whisper follows the chosen language. */
+export function speakHint(engine: string, language: string): string {
+  if (engine !== "whisper") return "Fale em inglês";
+  return NAMES[language] ? `Fale em ${NAMES[language]}` : "Fale no seu idioma";
+}
+
+export function buildVoiceView(ctx: ViewContext): ViewHost {
   const title = h("div", { class: "title" });
   const sub = h("div", { class: "sub" });
   const meter = h("div", { style: "height:4px;width:140px;border-radius:2px;background:rgba(255,255,255,.15);overflow:hidden" },
@@ -67,6 +76,8 @@ export function buildVoiceView(_ctx: ViewContext): ViewHost {
     el,
     sync() {
       clear(actions);
+      const cfg = ctx.api.settings<{ voiceEngine: string; voiceLanguage: string }>();
+      const canSend = !!ctx.api.use<LaunchPrompt>(CLAUDE_SERVICE.launchPrompt);
       meter.style.display = Voice.phase === "listening" ? "" : "none";
       sub.textContent = "";
       const review = Voice.phase === "review";
@@ -76,15 +87,15 @@ export function buildVoiceView(_ctx: ViewContext): ViewHost {
       switch (Voice.phase) {
         case "listening":
           title.textContent = "● Microfone aberto";
-          sub.textContent = "Fale em inglês, sem pressa. Enter ou atalho finaliza · Esc cancela.";
+          sub.textContent = `${speakHint(cfg.voiceEngine, cfg.voiceLanguage)}, sem pressa. Enter ou atalho finaliza · Esc cancela.`;
           actions.append(button("Finalizar", "secondary", () => void VoiceBridge.voiceStop()));
           break;
         case "transcribing":
           title.textContent = "Transcrevendo…";
           break;
         case "review":
-          sub.textContent = "Enter envia · Esc cancela";
-          actions.append(button("Aguardar", "secondary", () => Voice.park()));
+          sub.textContent = `Enter ${canSend ? "envia" : "copia"} · Esc cancela`;
+          actions.append(button(canSend ? "Enviar" : "Copiar", "primary", () => void send(ctx.api)), button("Aguardar", "secondary", () => Voice.park()));
           break;
         case "sending":
           title.textContent = "Enviando…";

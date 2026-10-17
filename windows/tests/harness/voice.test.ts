@@ -1,7 +1,7 @@
-// Voice sends its transcript through the claude.launchPrompt service; without it the card shows an error.
+// Voice sends its transcript through the claude.launchPrompt service; without it the same Enter copies the text.
 import { describe, expect, it, vi } from "vitest";
 import type { IslandApi } from "../../src/core/moduleApi";
-import { send, Voice } from "../../src/modules/voice/view";
+import { send, speakHint, Voice } from "../../src/modules/voice/view";
 
 const apiWith = (impl?: (p: string) => Promise<void>) => {
   const asked: string[] = [];
@@ -23,14 +23,40 @@ describe("voice send", () => {
     expect(Voice.phase).toBe("none");
   });
 
-  it("shows an error when claude is absent", async () => {
+  it("copies the text when claude is absent, without throwing", async () => {
+    Voice.reset();
+    const leave = vi.fn();
+    Voice.leave = leave;
+    Voice.text = "hello";
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    const { api } = apiWith();
+    await send(api);
+    vi.unstubAllGlobals();
+    expect(writeText).toHaveBeenCalledWith("hello");
+    expect(leave).toHaveBeenCalled();
+    expect(Voice.phase).toBe("none");
+    expect(Voice.busy).toBe(false);
+  });
+
+  it("shows the error when the copy is refused", async () => {
     Voice.reset();
     Voice.text = "hello";
+    vi.stubGlobal("navigator", { clipboard: { writeText: async () => { throw new Error("negado"); } } });
     const { api, asked } = apiWith();
     await send(api);
+    vi.unstubAllGlobals();
     expect(Voice.phase).toBe("error");
-    expect(Voice.note).toMatch(/Claude/);
+    expect(Voice.note).toBe("negado");
     expect(asked).toContain("redraw");
     expect(Voice.busy).toBe(false);
+  });
+});
+
+describe("voice hint", () => {
+  it("is English-only for the light engine and follows the language for whisper", () => {
+    expect(speakHint("whistle", "pt")).toBe("Fale em inglês");
+    expect(speakHint("whisper", "pt")).toBe("Fale em português");
+    expect(speakHint("whisper", "auto")).toBe("Fale no seu idioma");
   });
 });
