@@ -711,6 +711,42 @@ describe("aistats", () => {
   });
 });
 
+// ── Clima: no city, Agora, 7 dias, then an error after Atualizar ─────────────────────────────
+
+describe("weather", () => {
+  it("no city, now, the week tab, and a failed refresh", async () => {
+    const settings = State.settings as unknown as Record<string, unknown>;
+    settings.weatherPlace = null;
+    await go("overview");
+    snap("weather-nocity", await showing("weather"));
+    expect(T.hosts.weather.height).toBe(128);
+    const codes = [2, 2, 3, 61, 80, 95, 3, 1, 0, 0, 45, 71];
+    T.answers.weather_forecast = () => ({
+      current: { time: "2026-03-10T12:20", temp: 27.4, feels: 29.1, humidity: 64, wind: 14.2, code: 2, isDay: true, windDir: 48, uv: 6.8 },
+      hours: codes.map((code, i) => ({ time: `2026-03-10T${String(12 + i).padStart(2, "0")}:00`, temp: 27 - i * 0.8, code, rain: [0, 5, 20, 70, 85, 90, 40, 10, 0, 0, 0, 30][i] })),
+      days: [[21, 29, 2, 90], [19, 26, 61, 70], [17, 23, 3, 20], [12, 20, 0, 0], [14, 24, 1, 5], [18, 31, 95, 60], [16, 22, 45, 10]]
+        .map(([min, max, code, rain], i) => ({ date: `2026-03-${10 + i}`, min, max, code, rain })),
+    });
+    settings.weatherPlace = { name: "Campinas", admin: "São Paulo", country: "Brasil", lat: -22.9, lon: -47.06 };
+    T.hosts.weather.sync();
+    await flush();
+    T.hosts.weather.sync();
+    snap("weather-now", T.hosts.weather.el);
+    expect(T.hosts.weather.height).toBe(314);
+    (T.hosts.weather.el.querySelectorAll(".weather-tabs button")[1] as HTMLElement).click();
+    snap("weather-week", T.hosts.weather.el);
+    expect(T.hosts.weather.height).toBe(280);
+    T.answers.weather_forecast = () => { throw new Error("sem conexão com o serviço de clima"); };
+    (T.hosts.weather.el.querySelector(".weather-head .text-link") as HTMLElement).click();
+    await flush();
+    T.hosts.weather.sync();
+    snap("weather-error", T.hosts.weather.el);
+    expect(T.hosts.weather.height).toBe(128);
+    settings.weatherPlace = null;
+    delete T.answers.weather_forecast;
+  });
+});
+
 // ── The board, last: the other modules are stopped to get its empty and plain looks ─────────
 
 describe("board", () => {
