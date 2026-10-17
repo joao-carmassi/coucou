@@ -11,7 +11,7 @@ use std::time::Duration;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter};
 
-use crate::core::archive::{extract_zip, hex, sha256_file};
+use crate::core::archive::{extract_zip_where, hex, sha256_file};
 
 pub struct Pinned {
     pub name: &'static str,
@@ -34,6 +34,8 @@ pub const MODEL: Pinned = Pinned {
     size: 59_707_625,
     sha256: "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898",
 };
+// SHA-256 of Release/whisper-cli.exe inside the pinned zip; checked after extraction and before every run.
+const EXE_SHA256: &str = "331dba46d6427105d2b802cdbc7eae916ea1c5abf9b0d3b5cfe460d8db8e4366";
 const EXE: &str = "Release/whisper-cli.exe"; // the zip keeps everything under Release/
 
 pub fn dir() -> PathBuf {
@@ -50,11 +52,15 @@ pub fn model() -> PathBuf {
 static VERIFIED: AtomicBool = AtomicBool::new(false);
 static DOWNLOADING: AtomicBool = AtomicBool::new(false);
 
+fn exe_ok(p: &Path) -> bool {
+    sha256_file(p).is_ok_and(|h| h == EXE_SHA256)
+}
+
 pub fn ready() -> bool {
     if VERIFIED.load(Ordering::SeqCst) {
         return true;
     }
-    let ok = exe().is_file() && sha256_file(&model()).is_ok_and(|h| h == MODEL.sha256);
+    let ok = exe_ok(&exe()) && sha256_file(&model()).is_ok_and(|h| h == MODEL.sha256);
     VERIFIED.store(ok, Ordering::SeqCst);
     ok
 }
@@ -109,21 +115,23 @@ pub async fn download(app: AppHandle) -> Result<(), String> {
         fetch(&client, &app, &MODEL, &part).await?;
         std::fs::rename(&part, model()).map_err(|e| e.to_string())?;
     }
-    if !exe().is_file() {
+    if !exe_ok(&exe()) {
         let part = d.join(format!("{}.part", BIN.name));
         fetch(&client, &app, &BIN, &part).await?;
         let tmp = d.join("bin.tmp");
         let _ = std::fs::remove_dir_all(&tmp);
         let (zip, out) = (part.clone(), tmp.clone());
-        let unpacked = crate::core::host::blocking(move || extract_zip(&zip, &out)).await?;
+        let unpacked = crate::core::host::blocking(move || extract_zip_where(&zip, &out, |p| {
+            p.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("exe") || e.eq_ignore_ascii_case("dll"))
+        })).await?;
         let _ = std::fs::remove_file(&part);
         if let Err(e) = unpacked {
             let _ = std::fs::remove_dir_all(&tmp);
             return Err(e);
         }
-        if !tmp.join(EXE).is_file() {
+        if !exe_ok(&tmp.join(EXE)) {
             let _ = std::fs::remove_dir_all(&tmp);
-            return Err("o zip não contém o whisper-cli.exe".into());
+            return Err("whisper-cli.exe ausente ou com checksum diferente do esperado".into());
         }
         let fin = d.join("bin");
         let _ = std::fs::remove_dir_all(&fin);

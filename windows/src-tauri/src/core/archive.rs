@@ -29,6 +29,11 @@ pub fn sha256_file(p: &Path) -> std::io::Result<String> {
 
 /// Extracts every entry under `dest`. An entry whose name would leave `dest` (or is absolute) aborts the whole thing.
 pub fn extract_zip(zip_path: &Path, dest: &Path) -> Result<usize, String> {
+    extract_zip_where(zip_path, dest, |_| true)
+}
+
+/// Like `extract_zip`, but writes only the entries whose path `keep` accepts (all entries are still safety-checked).
+pub fn extract_zip_where(zip_path: &Path, dest: &Path, keep: impl Fn(&Path) -> bool) -> Result<usize, String> {
     let mut z = zip::ZipArchive::new(std::fs::File::open(zip_path).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
     if z.len() > MAX_ENTRIES {
         return Err("arquivo zip com entradas demais".into());
@@ -45,6 +50,9 @@ pub fn extract_zip(zip_path: &Path, dest: &Path) -> Result<usize, String> {
     for i in 0..z.len() {
         let mut f = z.by_index(i).map_err(|e| e.to_string())?;
         let rel = f.enclosed_name().ok_or("caminho inseguro no zip")?;
+        if !f.is_dir() && !keep(&rel) {
+            continue;
+        }
         let out = dest.join(rel);
         if f.is_dir() {
             std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
@@ -106,6 +114,16 @@ mod tests {
         assert!(extract_zip(&bad, &d.join("out2")).is_err());
         assert!(!d.join("evil.txt").exists());
         assert!(!d.join("out2/fine.txt").exists(), "nothing is written when any entry is unsafe");
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn filtered_extract_skips_other_entries() {
+        let d = scratch("filter");
+        let z = d.join("f.zip");
+        make_zip(&z, &["a.exe", "b.txt"]);
+        extract_zip_where(&z, &d.join("out"), |p| p.extension().is_some_and(|e| e == "exe")).unwrap();
+        assert!(d.join("out/a.exe").is_file() && !d.join("out/b.txt").exists());
         let _ = std::fs::remove_dir_all(d);
     }
 }
