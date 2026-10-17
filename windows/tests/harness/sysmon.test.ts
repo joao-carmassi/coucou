@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { calls } from "./setup";
 import { dummyModule, dummyProbe } from "./dummyModule";
 
-const SNAP = { cpu: 1, ramUsed: 1, ramTotal: 2, disks: [], diskBusy: null, netDown: null, netUp: null, gpu: null, gpuMem: null, driveTemps: [{ name: "Disco 0", celsius: 99 }] };
+const SNAP = { cpu: 1, ramUsed: 1, ramTotal: 2, disks: [], diskBusy: null, netDown: null, netUp: null, gpu: 36.4, gpuMem: null, driveTemps: [{ name: "Disco 0", celsius: 99 }] };
 const bus = vi.hoisted(() => ({ fns: [] as ((p: unknown) => void)[] }));
 vi.mock("@tauri-apps/api/event", () => ({
   listen: async (name: string, fn: (p: unknown) => void) => {
@@ -16,7 +16,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: async (cmd: string, args?: unknown) => {
     calls.invoke.push({ cmd, args });
     if (cmd === "sysmon_sample") return SNAP;
-    if (cmd === "sysmon_quick") return { cpu: 52.6, ram: 38.2 };
+    if (cmd === "sysmon_quick") return { cpu: 52.6, ram: 38.2, gpu: 36.4 };
     if (cmd === "sysmon_alert_probe") return { cpu: 1, ram: 1, disk: null };
     if (cmd === "sysmon_lhm_info") return { version: "0", url: "https://x.test/a.zip", size: 1, sha256: "", installed: false, dir: "C:/x/LibreHardwareMonitor-0" };
     return null;
@@ -27,6 +27,7 @@ import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
 import { State } from "../../src/core/state";
 import { Compact } from "../../src/core/compact";
+import { Pin } from "../../src/core/pin";
 import { buildCatalog } from "../../src/modules/resolve";
 import { sysmonModule } from "../../src/modules/sysmon";
 import manifest from "../../src/modules/sysmon/manifest.json";
@@ -116,6 +117,28 @@ describe("sysmon module", () => {
     Registry.apply({ sysmon: false });
   });
 
+  it("unpinned: the open view keeps the usage line fresh, it stays after leaving, and nothing polls", async () => {
+    const line = () => Pin.list().find((s) => s.id === "sysmon.usage")?.line?.text ?? null;
+    State.settings.pinnedLine = "";
+    Registry.apply({ sysmon: false });
+    Registry.apply({ sysmon: true });
+    await tick(20);
+    expect(line()).toBeNull();
+    const q = n("sysmon_quick");
+    dummyProbe.api!.island.open("sysmon");
+    await tick(2_500);
+    expect(line()).toBe("CPU 1% · RAM 50% · GPU 36%");
+    expect(n("sysmon_quick")).toBe(q); // the view's own samples, not the quick poll
+    dummyProbe.api!.island.open("dummy");
+    await tick(2_500);
+    dummyProbe.api!.island.hide();
+    await tick(60_000);
+    expect(line()).toBe("CPU 1% · RAM 50% · GPU 36%"); // frozen, there for the core's focus time
+    expect(n("sysmon_quick")).toBe(q);
+    Registry.apply({ sysmon: false });
+    expect(Pin.list().find((s) => s.id === "sysmon.usage")).toBeUndefined();
+  });
+
   it("pinned usage line: one 4 s interval, only while visible; text; unpinned/hidden/disabled arm none", async () => {
     const live = new Set<unknown>();
     const armed: number[] = [];
@@ -141,7 +164,7 @@ describe("sysmon module", () => {
       expect(armed.at(-1)).toBe(4000);
       expect(n("sysmon_quick")).toBe(1);
       expect(calls.invoke.filter((c) => c.cmd === "sysmon_quick")[0].args).toEqual({ fresh: true });
-      expect(Compact.resolve(0)?.text).toBe("CPU 53% · RAM 38%");
+      expect(Compact.resolve(0)?.text).toBe("CPU 53% · RAM 38% · GPU 36%");
       await tick(8_100);
       expect(n("sysmon_quick")).toBe(3);
       island.hide();

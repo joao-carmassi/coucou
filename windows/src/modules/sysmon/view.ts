@@ -53,7 +53,7 @@ const setBar = (b: { el: HTMLElement; fill: HTMLElement }, v: number) => {
 const section = (title: string, ...aside: Node[]) =>
   h("div", { class: "sysmon-sec" }, h("div", { class: "sysmon-sec-head" }, h("span", { class: "sysmon-k", text: title }), ...aside));
 
-export function buildSysmonView(ctx: ViewContext, onTemp: (c: number | null) => void): ViewHost {
+export function buildSysmonView(ctx: ViewContext, onTemp: (c: number | null) => void, onSnap: (s: Snapshot) => void): ViewHost {
   const api = ctx.api;
   const cpu = tile("CPU", "sysmon-cpu"), ram = tile("Memória", "sysmon-ram"), gpu = tile("GPU", "sysmon-gpu");
   const tiles = h("div", { class: "sysmon-tiles" }, cpu.el, ram.el, gpu.el);
@@ -189,6 +189,7 @@ export function buildSysmonView(ctx: ViewContext, onTemp: (c: number | null) => 
         if (!readings) lhmMsg = "";
       }
       onTemp(hottest());
+      onSnap(last);
       redraw();
     } catch (e) {
       api.island.error(msg(e));

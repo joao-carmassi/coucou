@@ -65,24 +65,32 @@ test("a dip resets the streak; an unmeasured round keeps it", () => {
   assert.deepEqual(b.step({ cpu: 95 }, lim), []);
 });
 
-test("fitHeight follows the shown sections and clamps to 160..320", () => {
+test("fitHeight: temps off fits the rest exactly; temps on keeps that height (never taller); only temps shows them", () => {
   const all = showOf(null), f = { drives: 2, chipLines: 1, note: false };
-  const full = fitHeight(all, f);
-  assert.ok(full < 320 && full > 200);
   const noTemp = fitHeight({ ...all, temp: false }, f);
-  assert.ok(noTemp < full, "hiding temperatures shrinks the island");
+  // 56 chrome + 28 body padding + tiles 81 + gap 10 + disk (26 + 2 x 20 - 4)
+  assert.equal(noTemp, 56 + 28 + 81 + 10 + 62);
+  assert.equal(fitHeight(all, f), noTemp, "temperatures on: capped at the temperatures-off height");
+  assert.equal(fitHeight(all, { drives: 2, chipLines: 4, note: true }), noTemp, "more chips or the note only scroll");
   const none = { cpu: false, ram: false, gpu: false, disk: false, net: false, temp: false };
   assert.equal(fitHeight(none, f), FIT_MIN);
   assert.ok(fitHeight({ ...none, cpu: true }, f) < noTemp);
   assert.equal(fitHeight({ ...none, cpu: true, gpu: true }, f), fitHeight({ ...none, ram: true }, f), "tiles are one row");
-  assert.ok(fitHeight({ ...none, disk: true, net: true }, f) < fitHeight({ ...none, disk: true, net: true, temp: true }, f));
-  assert.ok(fitHeight(all, { ...f, note: true }) > full, "the LHM note adds height");
+  assert.equal(fitHeight({ ...none, disk: true, net: true, temp: true }, f), fitHeight({ ...none, disk: true, net: true }, f));
+  const only = { ...none, temp: true };
+  assert.equal(fitHeight(only, f), FIT_MIN, "only temperatures: sized to them (one chip row fits the minimum)");
+  assert.ok(fitHeight(only, { ...f, chipLines: 3 }) > FIT_MIN);
+  assert.ok(fitHeight(only, { ...f, note: true }) > fitHeight(only, f), "the LHM note adds height");
   assert.equal(fitHeight(all, { drives: 9, chipLines: 5, note: true }), 320);
 });
 
 test("usageLine shows only shown metrics that were read", () => {
   const all = showOf(null);
   assert.equal(usageLine({ cpu: 52.6, ram: 38.2 }, all), "CPU 53% · RAM 38%");
+  assert.equal(usageLine({ cpu: 52.6, ram: 38.2, gpu: 36.4 }, all), "CPU 53% · RAM 38% · GPU 36%");
+  assert.equal(usageLine({ cpu: 52.6, ram: 38.2, gpu: 36.4 }, { ...all, gpu: false }), "CPU 53% · RAM 38%", "GPU hidden in sysmonShow");
+  assert.equal(usageLine({ cpu: 5, ram: 38, gpu: null }, all), "CPU 5% · RAM 38%", "no GPU reading: omitted");
+  assert.equal(usageLine({ cpu: null, ram: null, gpu: 9 }, { ...all, cpu: false, ram: false }), "GPU 9%");
   assert.equal(usageLine({ cpu: null, ram: 38 }, all), "RAM 38%");
   assert.equal(usageLine({ cpu: 10, ram: 38 }, { ...all, cpu: false }), "RAM 38%");
   assert.equal(usageLine({ cpu: null, ram: null }, all), null);

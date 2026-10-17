@@ -2,7 +2,7 @@
    island computes nothing here. */
 .sysmon-body {
   height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
-  padding: 36px 16px 14px 84px;
+  padding: 14px 48px 14px 84px; /* 84: Mochi on the left; 48: the pin button (absolute, top right) */
   display: flex; flex-direction: column; gap: 10px;
   font: 400 11.5px var(--font); color: var(--dim);
   scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
