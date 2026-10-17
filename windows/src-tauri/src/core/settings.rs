@@ -14,10 +14,12 @@ pub struct Settings {
     /// "primary" = the main display, "cursor" = whichever display the mouse is on.
     pub screen: String,
     pub autostart: bool,
-    /// Seconds the minimized island waits before hiding. 0 = never hide.
+    /// The "tempo de foco": seconds the minimized island waits before hiding. 0 = never hide.
     pub compact_hide_interval: f64,
-    /// Minutes a held task view stays the reopen target. 0 = off.
+    /// Legacy second focus time: kept in the file for older builds, no longer read (compact_hide_interval rules).
     pub focus_hold_minutes: f64,
+    /// The one pinned compact line, "<moduleId>.<key>"; empty = none.
+    pub pinned_line: String,
     /// Hide the island while a full-screen app or a call is in front.
     pub hide_when_busy: bool,
     /// Module switches by id; a missing id means the module's default.
@@ -60,6 +62,7 @@ impl Default for Settings {
             autostart: false,
             compact_hide_interval: default_compact_hide(),
             focus_hold_minutes: 1.0,
+            pinned_line: String::new(),
             hide_when_busy: true,
             modules_enabled: Default::default(),
             onboarded_version: String::new(),
@@ -198,6 +201,17 @@ mod tests {
         for (k, v) in want.as_object().unwrap() {
             assert_eq!(back.get(k), Some(v), "key {k}");
         }
+    }
+
+    #[test]
+    fn pinned_line_and_legacy_focus_keys_roundtrip() {
+        let old: Settings = serde_json::from_str(r#"{"focusHoldMinutes":5.0,"compactHideInterval":30.0}"#).unwrap();
+        assert_eq!(old.pinned_line, "", "old files have no pin");
+        let merged = merge_patch(&old, serde_json::from_str(r#"{"pinnedLine":"weather.now"}"#).unwrap()).unwrap();
+        let v = serde_json::to_value(&merged).unwrap();
+        assert_eq!(v["pinnedLine"], "weather.now");
+        assert_eq!(v["focusHoldMinutes"], 5.0, "legacy key kept");
+        assert_eq!(v["compactHideInterval"], 30.0);
     }
 
     #[test]

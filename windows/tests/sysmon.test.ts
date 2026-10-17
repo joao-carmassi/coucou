@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { AlertState, bytes, clampInt, COOLDOWN, fitHeight, FIT_MIN, heat, pct, rate, showOf, spark } from "../src/modules/sysmon/logic.ts";
+import { AlertState, bytes, clampInt, COOLDOWN, fitHeight, FIT_MIN, heat, pct, rate, showOf, spark, usageLine, USAGE_MS } from "../src/modules/sysmon/logic.ts";
 
 const lim = { cpu: 90, ram: 90, disk: 95, temp: 85 };
 
@@ -78,4 +78,15 @@ test("fitHeight follows the shown sections and clamps to 160..320", () => {
   assert.ok(fitHeight({ ...none, disk: true, net: true }, f) < fitHeight({ ...none, disk: true, net: true, temp: true }, f));
   assert.ok(fitHeight(all, { ...f, note: true }) > full, "the LHM note adds height");
   assert.equal(fitHeight(all, { drives: 9, chipLines: 5, note: true }), 320);
+});
+
+test("usageLine shows only shown metrics that were read", () => {
+  const all = showOf(null);
+  assert.equal(usageLine({ cpu: 52.6, ram: 38.2 }, all), "CPU 53% · RAM 38%");
+  assert.equal(usageLine({ cpu: null, ram: 38 }, all), "RAM 38%");
+  assert.equal(usageLine({ cpu: 10, ram: 38 }, { ...all, cpu: false }), "RAM 38%");
+  assert.equal(usageLine({ cpu: null, ram: null }, all), null);
+  assert.equal(usageLine({ cpu: 5, ram: 5 }, { ...all, cpu: false, ram: false }), null);
+  assert.equal(usageLine(null, all), null);
+  assert.equal(USAGE_MS, 4000);
 });

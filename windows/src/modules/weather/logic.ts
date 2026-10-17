@@ -60,9 +60,23 @@ export function isFresh(c: Pick<Cache, "at"> | null, now: number): boolean {
   return c !== null && now - c.at >= 0 && now - c.at < CACHE_MS;
 }
 
-/** The status line text while the forecast is cached: "☀️ 23°C". */
+/** The one-line source while a forecast is cached: icon and "23°C". */
+export function statusParts(f: Forecast, units: Units): { icon: string; text: string } {
+  return { icon: describe(f.current.code, f.current.isDay).icon, text: fmtTemp(f.current.temp, units) };
+}
+
+/** The status text, icon first: "☀️ 23°C". */
 export function statusText(f: Forecast, units: Units): string {
-  return `${describe(f.current.code, f.current.isDay).icon} ${fmtTemp(f.current.temp, units)}`;
+  const { icon, text } = statusParts(f, units);
+  return `${icon} ${text}`;
+}
+
+/** While the line is pinned the forecast is refreshed this often (the island visible). */
+export const POLL_MS = 30 * 60_000;
+
+/** The pinned line needs a fetch: nothing cached for this city and units, or the cache is a poll old. */
+export function needsPoll(c: Pick<Cache, "key" | "at"> | null, key: string, now: number): boolean {
+  return !c || c.key !== key || now - c.at < 0 || now - c.at >= POLL_MS;
 }
 
 /** "Cidade, Estado, País" without the empty parts. */

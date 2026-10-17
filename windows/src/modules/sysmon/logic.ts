@@ -69,10 +69,10 @@ export class AlertState {
   }
 }
 
-/** Island height for the shown sections (px estimates of the CSS: tile 79, section head 24, row 16 + gap 4, chip 22, note ~80). */
+/** Island height for the shown sections (px estimates of the CSS: tile 79, section head 24, row 16 + gap 4, chip 22, note ~80; chrome includes the 22 px under the pin button). */
 export interface Fit { drives: number; chipLines: number; note: boolean }
 export const FIT_MIN = 160;
-export function fitHeight(s: Show, f: Fit, chrome = 52, pad = 14, max = 320): number {
+export function fitHeight(s: Show, f: Fit, chrome = 74, pad = 14, max = 320): number {
   const parts: number[] = [];
   if (s.cpu || s.ram || s.gpu) parts.push(79);
   const disk = s.disk ? 24 + Math.max(1, f.drives) * 20 - 4 : 0;
@@ -82,3 +82,15 @@ export function fitHeight(s: Show, f: Fit, chrome = 52, pad = 14, max = 320): nu
   const content = parts.reduce((a, b) => a + b, 0) + 10 * Math.max(0, parts.length - 1);
   return Math.min(max, Math.max(FIT_MIN, chrome + 2 * pad + content));
 }
+
+/** The pinned line "CPU 53% · RAM 38%": only what the user shows (sysmonShow) and the probe could read; null = nothing to say. */
+export function usageLine(p: { cpu: number | null; ram: number | null } | null, show: Show): string | null {
+  if (!p) return null;
+  const parts: string[] = [];
+  if (show.cpu && p.cpu != null) parts.push(`CPU ${pct(p.cpu)}`);
+  if (show.ram && p.ram != null) parts.push(`RAM ${pct(p.ram)}`);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+/** While the usage line is pinned (and the island visible) it is re-read this often. */
+export const USAGE_MS = 4000;

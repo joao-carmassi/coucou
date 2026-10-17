@@ -2,11 +2,12 @@
    island computes nothing here. */
 .sysmon-body {
   height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
-  padding: 14px 16px 14px 84px;
+  padding: 36px 16px 14px 84px;
   display: flex; flex-direction: column; gap: 10px;
   font: 400 11.5px var(--font); color: var(--dim);
   scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
+.sysmon-pin { position: absolute; top: 8px; right: 10px; z-index: 1; }
 .sysmon-body::-webkit-scrollbar { width: 6px; }
 .sysmon-body::-webkit-scrollbar-track { background: transparent; }
 .sysmon-body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 999px; }

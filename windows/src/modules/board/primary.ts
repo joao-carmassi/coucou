@@ -8,7 +8,7 @@ import type { Disposer, IslandApi, Pill } from "../../core/moduleApi";
 import { App } from "../../kit/app";
 import type { BoardFocus } from "./api";
 
-export interface PrimarySettings { boardPrimary: string; focusHoldMinutes: number }
+export interface PrimarySettings { boardPrimary: string }
 
 /** Moods that carry something to read: the user's default never takes the tile from these. */
 const EXPLICIT = new Set(["alert", "ask", "error", "done"]);
@@ -24,8 +24,7 @@ export function startPrimary(api: IslandApi): Disposer {
 
   const settings = () => {
     const s = api.settings<PrimarySettings>();
-    const hold = Number(s.focusHoldMinutes);
-    return { primary: typeof s.boardPrimary === "string" && s.boardPrimary ? s.boardPrimary : "", holdMs: (Number.isFinite(hold) ? hold : 1) * 60_000 };
+    return { primary: typeof s.boardPrimary === "string" && s.boardPrimary ? s.boardPrimary : "", holdMs: api.island.focusMs() };
   };
   const front = () => api.pills.front();
   const put = (id: string) => { for (const f of api.useAll<BoardFocus>("board.focus")) { try { f(id); } catch (err) { console.error("[coucou] pill service failed", err); } } };

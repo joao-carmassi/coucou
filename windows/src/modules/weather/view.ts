@@ -6,6 +6,7 @@ import type { ViewContext, ViewHost } from "../../core/moduleApi";
 import { cacheKey, describe, dayLabel, fmtTemp, hourLabel, placeLabel } from "./logic";
 import type { Forecast, Place, Units } from "./logic";
 import { weatherCfg } from "./store";
+import { pinButton } from "../../kit/pin";
 import type { WeatherStore } from "./store";
 
 /** `onSync` runs on every visible sync (the module refreshes its status line there). */
@@ -13,6 +14,7 @@ export function buildWeatherView(ctx: ViewContext, store: WeatherStore, onSync: 
   const body = h("div", { class: "stack scroll weather-body" });
   const el = view(card(null, body));
   let shown = "";
+  const pin = pinButton(ctx.api, "now");
 
   const refresh = () => {
     const { place, units } = weatherCfg(ctx.api);
@@ -23,7 +25,7 @@ export function buildWeatherView(ctx: ViewContext, store: WeatherStore, onSync: 
     clear(body);
     body.append(h("div", { class: "weather-head" },
       h("span", { class: "title", text: place ? placeLabel(place) : "Clima" }),
-      h("button", { class: "link-btn text-link", text: "Atualizar", onclick: refresh })));
+      h("button", { class: "link-btn text-link", text: "Atualizar", onclick: refresh }), pin.el));
     if (!place) {
       body.append(h("div", { class: "sub", text: "Escolha sua cidade em Configurações › Clima." }));
       return;
@@ -65,6 +67,7 @@ export function buildWeatherView(ctx: ViewContext, store: WeatherStore, onSync: 
       // Nothing is fetched or touched while the view is hidden or the island is folded.
       if (ctx.api.island.view() !== "weather" || ctx.api.island.mode() !== "expanded") return;
       onSync();
+      pin.sync();
       const { place, units } = weatherCfg(ctx.api);
       if (place) store.load(place, units);
       const c = store.cache;

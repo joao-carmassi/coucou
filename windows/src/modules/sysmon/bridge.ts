@@ -7,6 +7,7 @@ export interface Snapshot {
   driveTemps: { name: string; celsius: number }[];
 }
 export interface Probe { cpu: number | null; ram: number | null; disk: number | null }
+export interface Quick { cpu: number | null; ram: number | null }
 export interface LhmInfo { version: string; url: string; size: number; sha256: string; installed: boolean; dir: string }
 export interface Reading { hardware: string; label: string; celsius: number }
 
@@ -14,6 +15,7 @@ export const SysmonBridge = {
   sample: (temps: boolean) => commandOrThrow<Snapshot>("sysmon_sample", { opts: { temps } }),
   release: () => commandOrThrow<void>("sysmon_release"),
   alertProbe: (tick: number) => commandOrThrow<Probe>("sysmon_alert_probe", { tick }),
+  quick: (fresh: boolean) => commandOrThrow<Quick>("sysmon_quick", { fresh }),
   lhmInfo: () => commandOrThrow<LhmInfo>("sysmon_lhm_info"),
   lhmRead: (port: number) => commandOrThrow<Reading[] | null>("sysmon_lhm_read", { port }),
   lhmInstall: () => commandOrThrow<LhmInfo>("sysmon_lhm_install"),

@@ -58,7 +58,7 @@ afterAll(() => vi.useRealTimers());
 beforeEach(() => {
   Registry.apply({ ...ALL, board: false });
   Registry.apply(ALL);
-  Object.assign(State.settings, { boardPrimary: "claude", focusHoldMinutes: 1 });
+  Object.assign(State.settings, { boardPrimary: "claude", compactHideInterval: 60 });
   const s = newSession("s1");
   Object.assign(s, { project: "p", state: "working" });
   cl().store.sessions = [s];

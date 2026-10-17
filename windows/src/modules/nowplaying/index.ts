@@ -1,5 +1,5 @@
-// Tocando agora: the player (Rust: Windows media session) as a tab, a compact card (cover, title, artist, time left) and a
-// peek when the track changes; the spectrum (Rust: loopback + FFT) makes the one Mochi dance and fills the bars, and runs
+// Tocando agora: the player (Rust: Windows media session) as a tab, a one-line source "track" (the compact card: cover, title,
+// artist, time left; shown when pinned from the tab or right after leaving it) and a peek when the track changes; the spectrum (Rust: loopback + FFT) makes the one Mochi dance and fills the bars, and runs
 // only while someone sees it.
 import "./nowplaying.css";
 import { svg } from "../../kit/dom";
@@ -10,19 +10,29 @@ import { compactCard, danceLevel, trackKey, trackLine, wantCapture, wantTick, cl
 import { NP } from "./store";
 import { buildView } from "./view";
 
-// Lowest line above the clock's: any agent / notice / timer line beats it, and a non-ambient pill hides it.
-const LINE_PRIORITY = BAND.AMBIENT + 2;
-
 function start(api: IslandApi): Disposer {
   NP.reset();
   const cfg = () => api.settings<Cfg>();
   let capturing = false;
   let tick: Disposer | null = null;
   let announced = trackKey(null);
+  // The card shows for the focus time after the tab is left (until the island hides): the 1 s tick is for that, or for the pin.
+  let recent = false;
+  let wasOnTab = false;
+  let recentT: Disposer | null = null;
+  const source = api.status.source("track", { label: "Tocando agora", view: "nowplaying" });
 
   // One place decides what runs: the capture and the 1 s progress tick exist only while they have a viewer.
   const reconcile = () => {
     const mode = api.island.mode(), view = api.island.view();
+    const onTab = mode === "expanded" && view === "nowplaying";
+    if (mode === "hidden") { recent = false; recentT?.(); recentT = null; }
+    else if (wasOnTab && !onTab) {
+      recent = true;
+      recentT?.();
+      recentT = api.timeout(() => { recent = false; recentT = null; reconcile(); }, api.island.focusMs());
+    }
+    wasOnTab = onTab;
     const c = cfg();
     NP.sens = clampSens(c.nowplayingSensitivity);
     const capture = wantCapture({ playing: !!NP.track?.playing, paused: api.paused(), mode, view, dance: c.nowplayingDance !== false });
@@ -31,16 +41,16 @@ function start(api: IslandApi): Disposer {
       void Bridge.capture(capture).catch((e) => api.island.error(e));
       if (!capture) { NP.bands = []; api.avatar.level(0); NP.paintBars?.(); }
     }
-    const progress = wantTick({ playing: !!NP.track?.playing, paused: api.paused(), mode, view, hasLength: !!NP.track?.durationMs && NP.track.positionMs !== null });
+    const progress = wantTick({ playing: !!NP.track?.playing, paused: api.paused(), mode, view, cardShown: api.status.pinned("track") || recent, hasLength: !!NP.track?.durationMs && NP.track.positionMs !== null });
     if (progress && !tick) tick = api.interval(() => { NP.paintProgress?.(); publishCard(); }, 1000, { whenVisible: true });
     else if (!progress && tick) { tick(); tick = null; }
     publishCard();
   };
 
-  // The compact island shows cover, title, artist and time left whenever a track is known (dimmed while paused).
+  // The card (cover, title, artist, time left; dimmed while paused) whenever a track is known: the core decides when it is shown.
   const publishCard = () => {
     const t = NP.track;
-    api.status.set(t && !api.paused() ? { priority: LINE_PRIORITY, ...compactCard(t, Date.now()) } : null);
+    source.set(t && !api.paused() ? { priority: BAND.AMBIENT, ...compactCard(t, Date.now()) } : null);
   };
 
   const apply = (t: Track | null, initial = false) => {
@@ -90,7 +100,7 @@ function start(api: IslandApi): Disposer {
     if (capturing) void Bridge.capture(false).catch(() => {});
     capturing = false;
     api.avatar.level(0);
-    api.status.set(null);
+    source.dispose();
     NP.paintProgress = NP.paintBars = null;
     NP.reset();
   };

@@ -3,6 +3,7 @@
 // The DOM is built once and updated in place, so bars glide (CSS transitions, idle while hidden) and nothing jumps.
 import { h, clear } from "../../kit/dom";
 import { card, view } from "../../kit/card";
+import { pinButton } from "../../kit/pin";
 import type { ViewContext, ViewHost } from "../../core/moduleApi";
 import { SysmonBridge, type LhmInfo, type Reading, type Snapshot } from "./bridge";
 import { bytes, clampInt, fitHeight, heat, pct, rate, showOf, spark } from "./logic";
@@ -75,6 +76,9 @@ export function buildSysmonView(ctx: ViewContext, onTemp: (c: number | null) => 
 
   const body = h("div", { class: "sysmon-body" }, tiles, io, temps);
   const el = view(card(null, body));
+  const pin = pinButton(api, "usage");
+  pin.el.classList.add("sysmon-pin");
+  el.append(pin.el);
   let tick: (() => void) | null = null;
   let n = 0;
   let busy = false;
@@ -210,5 +214,5 @@ export function buildSysmonView(ctx: ViewContext, onTemp: (c: number | null) => 
   api.onVisibility((mode) => { if (mode === "hidden") stop(); });
   // Settings may change while the view is open: refit then too (deferred, as the stored settings replace after listeners).
   api.listen("settings-changed", () => void api.timeout(() => { draw(); refit(); }, 0));
-  return { el, get height() { return fitted; }, sync() { if (open()) arm(); } };
+  return { el, get height() { return fitted; }, sync() { pin.sync(); if (open()) arm(); } };
 }

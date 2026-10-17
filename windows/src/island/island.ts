@@ -15,9 +15,10 @@ import { Hooks, emitMode } from "../core/hooks";
 import { glowOf } from "../mochi/moods";
 import { BAND, EXPANDED_W, PANEL_H } from "../core/moduleApi";
 import type { Disposer, IslandHost, Notice, Overlay, StatusCard, StatusLine, TabDef, ViewContext, ViewDef } from "../core/moduleApi";
-import { Holds, Last } from "../core/holds";
+import { Holds, Last, focusMs } from "../core/holds";
 import { Requests, type Req, type RequestSpec } from "../core/requests";
 import { Compact } from "../core/compact";
+import { Pin } from "../core/pin";
 import { NoticeQueue, type NoticeEntry } from "../core/notices";
 import { Sound } from "../core/sound";
 import { Actions, type Entry } from "../core/actions";
@@ -66,6 +67,8 @@ export class Island implements IslandHost {
   private views!: Map<string, ViewHost>;
   /** Views modules registered, by name (tabOf, keyboard). */
   private viewDefs = new Map<string, ViewDef>();
+  /** View name -> id of the module that owns it. */
+  private viewOwner = new Map<string, string>();
   private overlays = new Set<Overlay>();
   private kbFocus = false;
   /** Where the palette came from: Esc and a pick return there (never read while another view is up). */
@@ -267,12 +270,13 @@ export class Island implements IslandHost {
           const target = this.homeTarget;
           this.homeTarget = null;
           // A click on the compact island consumes the notice it shows; its view comes after a waiting request.
+          const lineView = target === null ? this.clickedLineView() : null;
           const noticed = target === null && this.clicked ? this.consumeNotice() : null;
           // Reopened on the waiting request (hover, or opened on its own view): it holds the island again.
           // Opened on some other view, the parked request stays parked.
           if (r && (target === null || target === r.view)) Requests.parked = false;
           this.syncPin();
-          this.expand(target ?? r?.view ?? noticed ?? this.resting() ?? State.defaultView());
+          this.expand(target ?? r?.view ?? noticed ?? lineView ?? this.resting() ?? State.defaultView());
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
         }
@@ -309,6 +313,7 @@ export class Island implements IslandHost {
       void Bridge.focusWindow(false);
     }
     if (mode !== "expanded") this.engine.resetMorph();
+    if (mode === "hidden") Pin.setLast(null); // the focus time is over: the last-opened line ends with the compact island
     this.syncWatch();
     emitMode(mode, prev);
     this.updateWindowCollapsed();
@@ -327,14 +332,16 @@ export class Island implements IslandHost {
     Holds.touch(view, now);
     // Only views reachable from a tab count; a card on top never becomes the focus.
     const tab = this.viewDefs.get(view)?.tabOf ?? view;
+    const owner = this.viewOwner.get(view) ?? this.viewOwner.get(tab);
+    if (owner) Pin.setLast(owner, focusMs(State.settings.compactHideInterval)); // the last-opened line lasts the focus time
     if (State.tabs.some((t) => t.view === tab)) Last.left(view, now);
     else if (closing) Last.refresh(now); // closed on a card: the focus time counts from the close
   }
 
-  /** Where a reopen lands: a live sticky hold, else the last view left within focusHoldMinutes (never home). */
+  /** Where a reopen lands: a live sticky hold, else the last view left within the focus time (never home). */
   private resting(): string | null {
     const now = Date.now(), known = (v: string) => this.known(v);
-    return Holds.front(now, known) ?? Last.front(now, State.settings.focusHoldMinutes * 60_000, State.defaultView(), known);
+    return Holds.front(now, known) ?? Last.front(now, focusMs(State.settings.compactHideInterval), State.defaultView(), known);
   }
 
   private guard(view: string): string {
@@ -563,6 +570,12 @@ export class Island implements IslandHost {
     this.syncNotices();
   }
 
+  /** A click on the compact island opens the view of the line it shows (a source's view). */
+  private clickedLineView(): string | null {
+    const v = this.clicked && State.mode === "compact" ? State.statusLine?.view : undefined;
+    return v && this.known(v) ? v : null;
+  }
+
   /** Takes the notice the compact island is showing off the queue; returns its view (if it has a known one). */
   private consumeNotice(): string | null {
     const e = this.noticeEntry;
@@ -681,7 +694,8 @@ export class Island implements IslandHost {
 
   /** The one-line status the compact island says: the strongest module line. */
   private compactLine(): string {
-    return State.statusLine?.text ?? "";
+    const l = State.statusLine;
+    return l ? (l.icon ? `${l.icon} ${l.text}` : l.text) : "";
   }
 
   /** The line takes the place of the mini grid. */
@@ -722,7 +736,7 @@ export class Island implements IslandHost {
   /** Paints the card of the status line (cover, two lines, trailing text); each part only when it changed. */
   private syncCard(c: StatusCard | undefined, text: string) {
     const on = !!c && State.mode === "compact";
-    this.cardEl.style.opacity = on ? (c!.dim ? "0.55" : "1") : "0";
+    this.cardEl.style.opacity = on ? (c!.dim || State.statusLine?.dim ? "0.55" : "1") : "0";
     if (!on) return;
     const p = this.cardParts;
     const set = (el: HTMLElement, v: string) => { if (el.textContent !== v) el.textContent = v; };
@@ -1320,7 +1334,7 @@ export class Island implements IslandHost {
     const line = State.mode === "compact" ? this.compactLine() : "";
     const card = line ? State.statusLine?.card : undefined;
     const plain = card ? "" : line; // a card has no shimmer: the frame loop stays idle for it
-    this.activityEl.style.opacity = plain ? "1" : "0";
+    this.activityEl.style.opacity = plain ? (State.statusLine?.dim ? "0.55" : "1") : "0";
     this.activityEl.classList.toggle("on", !!plain);
     if (plain) this.setActivityText(plain);
     this.activityShown = !!plain;
@@ -1382,12 +1396,14 @@ export class Island implements IslandHost {
     const offLayout = registerLayout(def.name, def.layout);
     this.views.set(def.name, host);
     this.viewDefs.set(def.name, def);
+    this.viewOwner.set(def.name, ctx.api.id);
     this.viewsEl.append(host.el);
     return () => {
       offLayout();
       host.el.remove();
       this.views.delete(def.name);
       this.viewDefs.delete(def.name);
+      this.viewOwner.delete(def.name);
       State.tabs = State.tabs.filter((t) => t.view !== def.name); // setTabs comes after the stop
       if (State.view === def.name) {
         if (State.mode === "expanded") this.setView(State.defaultView());
@@ -1460,6 +1476,7 @@ export class Island implements IslandHost {
     Sound.setVolume(State.settings.soundVolume);
     this.fsm.homeToPetitDelay = State.settings.autoCloseInterval;
     this.fsm.petitToHiddenDelay = State.settings.compactHideInterval;
+    Pin.sync(); // the settings window may have pinned or released a line
     // Re-arm with the new delay (or cancel it, for "never") if already minimized.
     if (this.fsm.state === "petit" && !this.wasInIsland) this.fsm.mouseLeft();
     syncMiniBotStates(State.pills); // a changed colour map reaches the minis now

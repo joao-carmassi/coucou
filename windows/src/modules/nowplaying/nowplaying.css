@@ -25,3 +25,5 @@
 .np-vol { width: 90px; accent-color: var(--amber); }
 .np-hint { font: 400 10.5px var(--font); color: var(--dim); }
 @media (prefers-reduced-motion: reduce) { .np-eq > i, .np-bar > i { transition: none; } }
+.np-body { position: relative; }
+.np-pin { position: absolute; top: 6px; right: 8px; }

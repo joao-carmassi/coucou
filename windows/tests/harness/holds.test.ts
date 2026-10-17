@@ -88,13 +88,13 @@ describe("implicit focus (no hold call)", () => {
     lastHome();
   });
 
-  it("0 turns it off; unknown view skipped; a home visit lands home", () => {
-    State.settings.focusHoldMinutes = 0;
+  it("a tiny focus time turns it off; unknown view skipped; a home visit lands home", () => {
+    State.settings.compactHideInterval = 0.001;
     visit("dummy-b");
     reopen();
     expect(State.view).toBe(State.defaultView());
     folded();
-    State.settings.focusHoldMinutes = 1;
+    State.settings.compactHideInterval = 60;
     visit(State.defaultView());
     reopen();
     expect(State.view).toBe(State.defaultView());

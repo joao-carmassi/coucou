@@ -16,6 +16,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: async (cmd: string, args?: unknown) => {
     calls.invoke.push({ cmd, args });
     if (cmd === "sysmon_sample") return SNAP;
+    if (cmd === "sysmon_quick") return { cpu: 52.6, ram: 38.2 };
     if (cmd === "sysmon_alert_probe") return { cpu: 1, ram: 1, disk: null };
     if (cmd === "sysmon_lhm_info") return { version: "0", url: "https://x.test/a.zip", size: 1, sha256: "", installed: false, dir: "C:/x/LibreHardwareMonitor-0" };
     return null;
@@ -25,6 +26,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
 import { State } from "../../src/core/state";
+import { Compact } from "../../src/core/compact";
 import { buildCatalog } from "../../src/modules/resolve";
 import { sysmonModule } from "../../src/modules/sysmon";
 import manifest from "../../src/modules/sysmon/manifest.json";
@@ -112,5 +114,56 @@ describe("sysmon module", () => {
     await tick(60_000);
     expect(n("sysmon_alert_probe")).toBe(p1);
     Registry.apply({ sysmon: false });
+  });
+
+  it("pinned usage line: one 4 s interval, only while visible; text; unpinned/hidden/disabled arm none", async () => {
+    const live = new Set<unknown>();
+    const armed: number[] = [];
+    const si = window.setInterval, ci = window.clearInterval;
+    window.setInterval = ((fn: () => void, ms: number) => { const id = si(fn, ms); live.add(id); armed.push(ms); return id; }) as typeof window.setInterval;
+    window.clearInterval = ((id: number) => { live.delete(id); ci(id); }) as typeof window.clearInterval;
+    try {
+      State.settings.pinnedLine = "";
+      Registry.apply({ sysmon: false });
+      Registry.apply({ sysmon: true });
+      await tick(20_000);
+      expect(live.size).toBe(0);
+      expect(n("sysmon_quick")).toBe(0);
+      Registry.apply({ sysmon: false });
+      State.settings.pinnedLine = "sysmon.usage";
+      State.settings.compactHideInterval = 0;
+      island.reveal();
+      await tick(20);
+      expect(live.size).toBe(0); // pinned but the module is disabled
+      Registry.apply({ sysmon: true });
+      await tick(20);
+      expect(live.size).toBe(1);
+      expect(armed.at(-1)).toBe(4000);
+      expect(n("sysmon_quick")).toBe(1);
+      expect(calls.invoke.filter((c) => c.cmd === "sysmon_quick")[0].args).toEqual({ fresh: true });
+      expect(Compact.resolve(0)?.text).toBe("CPU 53% · RAM 38%");
+      await tick(8_100);
+      expect(n("sysmon_quick")).toBe(3);
+      island.hide();
+      await tick(20);
+      expect(live.size).toBe(0);
+      const q = n("sysmon_quick");
+      await tick(60_000);
+      expect(n("sysmon_quick")).toBe(q);
+      island.reveal();
+      await tick(20);
+      expect(live.size).toBe(1);
+      State.settings.pinnedLine = "";
+      island.applySettings();
+      await tick(20);
+      Registry.apply({ sysmon: false });
+      expect(live.size).toBe(0);
+    } finally {
+      State.settings.pinnedLine = "";
+      State.settings.compactHideInterval = 60;
+      window.setInterval = si;
+      window.clearInterval = ci;
+      Registry.apply({ sysmon: false });
+    }
   });
 });

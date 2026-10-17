@@ -5,6 +5,7 @@ import { NowPlayingBridge as Bridge, type Control } from "./bridge";
 import { ICONS } from "./icons";
 import { clock, fraction, positionAt, shapeBands, trackKey } from "./logic";
 import { NP } from "./store";
+import { pinButton } from "../../kit/pin";
 
 const BARS = 16;
 
@@ -38,7 +39,9 @@ export function buildView(ctx: ViewContext): ViewHost {
   const empty = h("div", { class: "np-empty" },
     h("div", { class: "title", text: "Nada tocando agora" }),
     h("div", { class: "sub", text: "Toque algo no Spotify, no navegador ou em outro player." }));
-  const body = h("div", { class: "stack np-body" }, empty, player);
+  const pin = pinButton(api, "track");
+  pin.el.classList.add("np-pin");
+  const body = h("div", { class: "stack np-body" }, empty, player, pin.el);
   body.style.padding = "14px 16px 14px 84px"; // room for the Mochi on the left (botX 54)
   const el = view(card(null, body));
 
@@ -88,6 +91,7 @@ export function buildView(ctx: ViewContext): ViewHost {
     el,
     sync() {
       if (!visible()) { volFor = ""; return; }
+      pin.sync();
       const t = NP.track;
       empty.hidden = !!t;
       player.hidden = !t;
