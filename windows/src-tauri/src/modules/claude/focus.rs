@@ -11,7 +11,7 @@ use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoUninitiali
 use windows::Win32::System::Variant::VARIANT;
 use windows::Win32::UI::Accessibility::{
     CUIAutomation, IUIAutomation, IUIAutomation6, IUIAutomationSelectionItemPattern, TreeScope_Descendants,
-    UIA_ControlTypePropertyId, UIA_SelectionItemPatternId, UIA_TabItemControlTypeId,
+    UIA_ControlTypePropertyId, UIA_NamePropertyId, UIA_SelectionItemPatternId, UIA_TabItemControlTypeId,
 };
 use windows::Win32::Foundation::{HWND, LPARAM};
 use windows::Win32::System::Console::{
@@ -147,9 +147,13 @@ fn tab_hints(title: Option<&str>, cwd: Option<&str>) -> Vec<String> {
 
 /// The first tab whose name holds a hint, hints in order of trust, case-insensitive. No hints, no pick.
 fn pick_tab(names: &[String], hints: &[String]) -> Option<usize> {
-    hints.iter().filter(|h| !h.trim().is_empty()).find_map(|hint| {
-        let hint = hint.to_lowercase();
-        names.iter().position(|n| n.to_lowercase().contains(&hint))
+    let lower: Vec<String> = names.iter().map(|n| n.trim().to_lowercase()).collect();
+    let hints: Vec<String> = hints.iter().map(|h| h.trim().to_lowercase()).filter(|h| !h.is_empty()).collect();
+    // Hints in order of trust; for each, an exact name beats a partial one, and short hints (1-2 chars) only match exactly.
+    hints.iter().find_map(|h| {
+        lower.iter().position(|n| n == h).or_else(|| {
+            (h.chars().count() >= 3).then(|| lower.iter().position(|n| n.contains(h.as_str()))).flatten()
+        })
     })
 }
 
@@ -161,6 +165,8 @@ fn is_terminal_window(hwnd: HWND) -> bool {
 
 /// Budget for each UIA call; past it the call fails and the plain window focus stands.
 const UIA_BUDGET_MS: u32 = 300;
+/// Budget for the whole search; past it the plain window focus stands.
+const UIA_TOTAL: std::time::Duration = std::time::Duration::from_millis(300);
 
 /// Selects the Windows Terminal tab that matches a hint. UI Automation, read plus Select only
 /// (never keystrokes), on the click's own thread. False on any failure, e.g. an elevated terminal.
@@ -171,6 +177,7 @@ fn select_wt_tab(hwnd: HWND, hints: Vec<String>) -> bool {
 unsafe fn select_tab(hwnd: HWND, hints: &[String]) -> Option<()> {
     // The thread may already be COM-initialised in another mode: that is fine, UIA works in either.
     let inited = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
+    let started = std::time::Instant::now();
     let done = (|| {
         let ui: IUIAutomation = CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok()?;
         if let Ok(ui6) = ui.cast::<IUIAutomation6>() {
@@ -178,12 +185,23 @@ unsafe fn select_tab(hwnd: HWND, hints: &[String]) -> Option<()> {
             let _ = ui6.SetTransactionTimeout(UIA_BUDGET_MS);
         }
         let cond = ui.CreatePropertyCondition(UIA_ControlTypePropertyId, &VARIANT::from(UIA_TabItemControlTypeId.0)).ok()?;
-        let tabs = ui.ElementFromHandle(hwnd).ok()?.FindAll(TreeScope_Descendants, &cond).ok()?;
-        let names: Vec<String> = (0..tabs.Length().ok()?)
-            .map(|i| tabs.GetElement(i).and_then(|e| e.CurrentName()).map(|n| n.to_string()).unwrap_or_default())
-            .collect();
+        // One round trip: the names come cached with the tabs, not one cross-process call each.
+        let cache = ui.CreateCacheRequest().ok()?;
+        cache.AddProperty(UIA_NamePropertyId).ok()?;
+        let tabs = ui.ElementFromHandle(hwnd).ok()?.FindAllBuildCache(TreeScope_Descendants, &cond, &cache).ok()?;
+        let mut names = Vec::new();
+        for i in 0..tabs.Length().ok()? {
+            // Overall guard: the per-call timeouts add up over many tabs.
+            if started.elapsed() > UIA_TOTAL {
+                return None;
+            }
+            names.push(tabs.GetElement(i).and_then(|e| e.CachedName()).map(|n| n.to_string()).unwrap_or_default());
+        }
         let tab = tabs.GetElement(pick_tab(&names, hints)? as i32).ok()?;
         let pattern: IUIAutomationSelectionItemPattern = tab.GetCurrentPatternAs(UIA_SelectionItemPatternId).ok()?;
+        if started.elapsed() > UIA_TOTAL {
+            return None;
+        }
         pattern.Select().ok()
     })();
     if inited {
@@ -211,6 +229,14 @@ mod tests {
         assert_eq!(pick_tab(&v(&["a"]), &[]), None);
         assert_eq!(pick_tab(&v(&["a"]), &v(&["", "  "])), None);
         assert_eq!(pick_tab(&v(&["a"]), &v(&["z"])), None);
+    }
+
+    #[test]
+    fn exact_beats_partial_and_short_hints_only_exact() {
+        let names = v(&["coucou-old", "Coucou"]);
+        assert_eq!(pick_tab(&names, &v(&["coucou"])), Some(1));
+        assert_eq!(pick_tab(&v(&["abc", "a"]), &v(&["a"])), Some(1));
+        assert_eq!(pick_tab(&v(&["abc"]), &v(&["ab"])), None);
     }
 
     #[test]

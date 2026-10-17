@@ -44,13 +44,17 @@ function sessionChips(s: ClaudeSession): string[] {
   return [s.client === "desktop" ? "Desktop" : null, s.mode ? modeName(s.mode) : null, s.effort, s.model ? shortModel(s.model) : null].filter((t): t is string => !!t);
 }
 
-/** The last lines of the edit that just landed, while the turn goes on: the card shows it live. */
-function liveDiff(session: ClaudeSession): HTMLElement | null {
+/** The edit that just landed while the turn goes on: the card shows it live. Cheap: no parsing. */
+function liveStep(session: ClaudeSession): SessionStep | null {
   if (session.state !== "working") return null;
   const last = turnSteps(session).at(-1);
-  if (!last || last.kind !== "edit" || last.patch == null || Date.now() - last.at >= LIVE_FRESH_MS) return null;
-  const kind = fileKind(last.target ?? "");
-  const rows = [...readPatch(last.patch)].flatMap((l) => ("hunk" in l ? [] : [l])).slice(-LIVE_LINES);
+  return last && last.kind === "edit" && last.patch != null && Date.now() - last.at < LIVE_FRESH_MS ? last : null;
+}
+
+/** Its last lines as a diff block; built only when the box is redrawn. */
+function liveDiff(step: SessionStep): HTMLElement | null {
+  const kind = fileKind(step.target ?? "");
+  const rows = [...readPatch(step.patch ?? "")].flatMap((l) => ("hunk" in l ? [] : [l])).slice(-LIVE_LINES);
   return rows.length ? diffBlock("live-diff", ...rows.map((l) => diffLine(l.new ?? l.old, l.sign, l.text, kind))) : null;
 }
 
@@ -271,15 +275,15 @@ function boardCardOf(c: Claude): BoardCardOf {
       nowLine.append(icon, label, h("span", { class: now.color ? "said" : "at", text: now.detail, title: now.detail }));
       replay(nowLine, "now-in");
     }
-    const live = liveDiff(session);
+    const liveOf = liveStep(session);
     const nextBox = [
       session.id, step?.tool, step?.target, step?.at, step?.state,
-      step?.result?.text.length, step?.patch?.length, step ? "" : now.words, live ? "live" : "",
+      step?.result?.text.length, step?.patch?.length, step ? "" : now.words, liveOf ? "live" : "",
     ].join("~");
     if (nextBox === boxKey) return;
     boxKey = nextBox;
     clear(nowBox);
-    const preview = live ?? (step ? stepPreview(step, NOW_LINES) : null);
+    const preview = (liveOf && liveDiff(liveOf)) ?? (step ? stepPreview(step, NOW_LINES) : null);
     if (preview) nowBox.append(preview);
     else if (now.words) nowBox.append(h("div", { class: "now-words", text: now.words.trim() }));
     nowBox.style.display = nowBox.firstChild ? "" : "none";
