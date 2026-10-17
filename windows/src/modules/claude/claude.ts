@@ -246,7 +246,7 @@ export class Claude {
   openClient() {
     const s = this.store.session;
     if (s.client === "desktop") void ClaudeBridge.openClaudeApp();
-    else void ClaudeBridge.openTerminal(s.cwd, s.wslDistro, s.terminalPids);
+    else void ClaudeBridge.openTerminal(s.cwd, s.wslDistro, s.terminalPids, s.title, s.cwd);
     // The window is in front now: fold the island back.
     this.api.island.close();
   }

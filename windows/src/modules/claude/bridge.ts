@@ -5,8 +5,9 @@ export const ClaudeBridge = {
   openInVSCode: (path: string | null, wslDistro: string | null = null) =>
     command<boolean>("claude_open_in_vscode", { path, wslDistro }),
   openClaudeApp: () => command<void>("claude_open_app"),
-  openTerminal: (path: string | null, wslDistro: string | null, terminalPids: number[]) =>
-    command<boolean>("claude_open_terminal", { path, wslDistro, terminalPids }),
+  /** `title` and `cwd` let a Windows Terminal tab be picked; the window comes forward either way. */
+  openTerminal: (path: string | null, wslDistro: string | null, terminalPids: number[], title: string | null = null, cwd: string | null = null) =>
+    command<boolean>("claude_open_terminal", { path, wslDistro, terminalPids, title, cwd }),
   startClaudeTerminal: () => command<boolean>("claude_start_terminal"),
   hooksStatus: (configDir?: string) => command<HookStatus>("claude_hooks_status", { configDir }),
   hooksPreview: (install: boolean, configDir?: string) =>
