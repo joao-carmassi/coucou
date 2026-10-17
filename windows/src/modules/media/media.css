@@ -115,7 +115,10 @@
   background: var(--card);
   border: 1px solid var(--surface-edge);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  overflow-y: auto;
 }
+
+.media-submenu { z-index: 6; }
 
 .media-menu-row {
   border: 0;
@@ -128,7 +131,8 @@
   cursor: default;
 }
 
-.media-menu-row:hover {
+.media-menu-row:hover,
+.media-menu-row:focus-visible {
   background: var(--surface-hover);
 }
 
