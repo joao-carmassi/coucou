@@ -2,6 +2,7 @@
 //
 // Privacy: only executable file names (never window titles, URLs or paths) and whole seconds per local day,
 // kept in %LOCALAPPDATA%\Coucou\eyecare.json for `eyecareKeepDays` days. Nothing leaves the machine.
+// Break rounds are two counters per local day plus the time of the last break, in eyecare-breaks.json, same retention.
 //
 // Cost: no thread and no timer of its own. The shared foreground hook (core/presence) calls `on_fg` at every
 // foreground change; the open segment is closed there. The frontend's single reminder timeout calls
@@ -23,6 +24,7 @@ use crate::core::settings::Settings;
 pub const PREFIXES: &[&str] = &["eyecare_"];
 
 const FILE: &str = "eyecare.json";
+const BREAKS_FILE: &str = "eyecare-breaks.json";
 /// Input idle time that is not counted (reading, thinking).
 const IDLE_GRACE_MS: u64 = 60_000;
 /// Most one segment may credit when no checkpoint cut it.
@@ -33,6 +35,25 @@ const DEFAULT_EXCLUDED: &[&str] = &["lockapp.exe"];
 
 type Days = BTreeMap<String, BTreeMap<String, u64>>;
 
+/// Reminder rounds per local day as `[due, taken]`, and the unix ms of the last break taken (0 = none).
+#[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct Breaks {
+    days: BTreeMap<String, [u32; 2]>,
+    last: u64,
+}
+
+impl Breaks {
+    fn record(&mut self, day: String, today: i64, keep: i64, taken: bool, now_ms: u64) {
+        let d = self.days.entry(day).or_default();
+        d[0] = d[0].saturating_add(1);
+        if taken {
+            d[1] = d[1].saturating_add(1);
+            self.last = now_ms;
+        }
+        prune(&mut self.days, today, keep);
+    }
+}
+
 struct Cfg {
     excluded: Vec<String>,
     keep_days: i64,
@@ -42,6 +63,7 @@ struct Acc {
     days: Days,
     cur: Option<(String, Instant)>,
     cfg: Cfg,
+    breaks: Breaks,
     dirty: bool,
     written: Instant,
 }
@@ -79,7 +101,7 @@ fn parse_day(k: &str) -> Option<i64> {
 }
 
 /// Drops days older than `keep` days counting `today` (and keys that are not dates).
-fn prune(days: &mut Days, today: i64, keep: i64) {
+fn prune<V>(days: &mut BTreeMap<String, V>, today: i64, keep: i64) {
     days.retain(|k, _| parse_day(k).is_some_and(|n| n > today - keep && n <= today + 1));
 }
 
@@ -119,7 +141,7 @@ impl Acc {
     fn flush(&mut self) {
         if self.dirty {
             self.dirty = false;
-            let _ = write(&self.days);
+            let _ = write(&path(), &self.days);
         }
         self.written = Instant::now();
     }
@@ -131,18 +153,25 @@ fn path() -> std::path::PathBuf {
     platform::local_dir().join(FILE)
 }
 
-fn read() -> Days {
-    std::fs::read_to_string(path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+fn breaks_path() -> std::path::PathBuf {
+    platform::local_dir().join(BREAKS_FILE)
 }
 
-fn write(days: &Days) -> std::io::Result<()> {
-    let p = path();
+fn read<T: serde::de::DeserializeOwned + Default>(p: &std::path::Path) -> T {
+    std::fs::read_to_string(p).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+}
+
+fn write<T: serde::Serialize>(p: &std::path::Path, v: &T) -> std::io::Result<()> {
     if let Some(dir) = p.parent() {
         platform::ensure_private_dir(dir)?;
     }
     let tmp = p.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_string(days).unwrap_or_default())?;
+    std::fs::write(&tmp, serde_json::to_string(v).unwrap_or_default())?;
     std::fs::rename(tmp, p)
+}
+
+fn unix_ms() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
 }
 
 // ── Module ────────────────────────────────────────────────────────────────────
@@ -176,9 +205,12 @@ impl Module for EyecareModule {
 
     fn start(&self, ctx: &ModuleCtx, s: &Settings) {
         let cfg = cfg_of(s);
-        let mut days = read();
-        prune(&mut days, today_key().1, cfg.keep_days);
-        let mut acc = Acc { days, cur: None, cfg, dirty: false, written: Instant::now() };
+        let today = today_key().1;
+        let mut days: Days = read(&path());
+        prune(&mut days, today, cfg.keep_days);
+        let mut breaks: Breaks = read(&breaks_path());
+        prune(&mut breaks.days, today, cfg.keep_days);
+        let mut acc = Acc { days, cur: None, cfg, breaks, dirty: false, written: Instant::now() };
         forget_excluded(&mut acc);
         acc.flush();
         acc.switch(Instant::now(), 0, Some(presence::foreground_now().exe));
@@ -225,15 +257,33 @@ pub fn eyecare_usage() -> Days {
     lock().as_ref().map(|a| a.days.clone()).unwrap_or_default()
 }
 
-/// "Apagar dados": forgets everything, memory and file.
+/// One reminder round came due (reminders on, kinds enabled, not paused); `taken` = the user was already away.
+#[tauri::command]
+pub fn eyecare_break(taken: bool) {
+    if let Some(acc) = lock().as_mut() {
+        let (day, n) = today_key();
+        acc.breaks.record(day, n, acc.cfg.keep_days, taken, unix_ms());
+        let _ = write(&breaks_path(), &acc.breaks);
+    }
+}
+
+/// The break rounds kept. Empty while the module is off.
+#[tauri::command]
+pub fn eyecare_breaks() -> Breaks {
+    lock().as_ref().map(|a| a.breaks.clone()).unwrap_or_default()
+}
+
+/// "Apagar dados": forgets everything, memory and files.
 #[tauri::command]
 pub fn eyecare_clear() {
     if let Some(acc) = lock().as_mut() {
         acc.days.clear();
+        acc.breaks = Breaks::default();
         acc.dirty = false;
         acc.cur = acc.cur.take().map(|(e, _)| (e, Instant::now()));
     }
     let _ = std::fs::remove_file(path());
+    let _ = std::fs::remove_file(breaks_path());
 }
 
 pub fn modules() -> Vec<Box<dyn Module>> {
@@ -241,7 +291,7 @@ pub fn modules() -> Vec<Box<dyn Module>> {
 }
 
 pub fn handler() -> crate::core::host::Handler {
-    crate::core::host::handler(tauri::generate_handler![eyecare_checkpoint, eyecare_usage, eyecare_clear])
+    crate::core::host::handler(tauri::generate_handler![eyecare_checkpoint, eyecare_usage, eyecare_break, eyecare_breaks, eyecare_clear])
 }
 
 #[cfg(test)]
@@ -251,7 +301,7 @@ mod tests {
 
     fn acc(excluded: &[&str]) -> Acc {
         let cfg = Cfg { excluded: excluded.iter().map(|e| e.to_string()).collect(), keep_days: 30 };
-        Acc { days: Days::new(), cur: None, cfg, dirty: false, written: Instant::now() }
+        Acc { days: Days::new(), cur: None, cfg, breaks: Breaks::default(), dirty: false, written: Instant::now() }
     }
 
     #[test]
@@ -295,6 +345,19 @@ mod tests {
         a.switch(t0, 0, Some("code.exe".into()));
         a.switch(t0 + Duration::from_secs(600), 3_600_000, Some("code.exe".into()));
         assert!(a.days.is_empty());
+    }
+
+    #[test]
+    fn breaks_count_rounds_and_keep_the_window() {
+        let mut b = Breaks::default();
+        let today = day_number(2026, 3, 10);
+        b.days.insert("2026-01-01".into(), [3, 1]);
+        b.record("2026-03-10".into(), today, 30, false, 5);
+        b.record("2026-03-10".into(), today, 30, true, 7);
+        assert_eq!(b.days.len(), 1, "old day pruned");
+        assert_eq!(b.days["2026-03-10"], [2, 1]);
+        assert_eq!(b.last, 7);
+        assert_eq!(serde_json::to_string(&b).unwrap(), r#"{"days":{"2026-03-10":[2,1]},"last":7}"#);
     }
 
     #[test]

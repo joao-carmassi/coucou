@@ -68,6 +68,50 @@ export function fmtDur(secs: number): string {
 /** "code.exe" -> "code". */
 export const appName = (exe: string): string => exe.replace(/\.exe$/i, "");
 
+/** Reminder rounds per local day as [due, taken], and the unix ms of the last break taken (0 = none). Same shape as Rust. */
+export interface Breaks { days: Record<string, [number, number]>; last: number }
+export const NO_BREAKS: Breaks = { days: {}, last: 0 };
+
+/** [due, taken] summed over the given days. */
+export function breaksOf(b: Breaks, keys: readonly string[]): [number, number] {
+  return keys.reduce<[number, number]>((a, k) => [a[0] + (b.days[k]?.[0] ?? 0), a[1] + (b.days[k]?.[1] ?? 0)], [0, 0]);
+}
+
+/** Days in a row with at least one break, ending today (or yesterday, while today has none yet). */
+export function streak(b: Breaks, now: Date): number {
+  const taken = (i: number) => (b.days[dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - i))]?.[1] ?? 0) > 0;
+  const from = taken(0) ? 0 : 1;
+  let n = 0;
+  while (n < 366 && taken(from + n)) n++;
+  return n;
+}
+
+/** "agora", "há 42 min", "há 2 h 05", "há 3 dias"; null when no break was seen. */
+export function since(lastMs: number, nowMs: number): string | null {
+  if (!lastMs) return null;
+  const s = Math.max(0, (nowMs - lastMs) / 1000);
+  if (s < 60) return "agora";
+  if (s < 86_400) return `há ${fmtDur(s)}`;
+  const d = Math.floor(s / 86_400);
+  return d === 1 ? "há 1 dia" : `há ${d} dias`;
+}
+
+const date = (k: string, o: Intl.DateTimeFormatOptions) => new Date(`${k}T12:00:00`).toLocaleDateString("pt-BR", o).replace(/\./g, "");
+/** "ter, 10 de mar", or "10 de mar" without the weekday. */
+export const dayLabel = (k: string, weekday = true): string =>
+  date(k, weekday ? { weekday: "short", day: "numeric", month: "short" } : { day: "numeric", month: "short" });
+/** "ter". */
+export const weekdayLabel = (k: string): string => date(k, { weekday: "short" });
+
+// Fixed heights of the view's parts (eyecare.css), so the island fits its content without measuring. chrome 56 =
+// #content padding + header + card border (as sysmon); body padding 12 + 12; head 22; tiles 54; two gaps of 10.
+const FIT_BASE = 56 + 24 + 22 + 10 + 54 + 10;
+const CHART_H = 96, ROW_H = 16, ROW_GAP = 4;
+/** Island height for a tab: "today" lists `rows` apps (or one "nothing yet" line) under a 14 px heading + 6 gap; "week" holds the chart. */
+export function fitHeight(tab: "today" | "week", rows: number): number {
+  return FIT_BASE + (tab === "week" ? CHART_H : 20 + (rows ? rows * ROW_H + (rows - 1) * ROW_GAP : ROW_H));
+}
+
 /** Exe list typed in the settings: split on commas/spaces/newlines, lowercase, deduplicated. */
 export function parseExcluded(text: string): string[] {
   return [...new Set(text.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter(Boolean))];

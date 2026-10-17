@@ -54,6 +54,7 @@ describe("eyecare module", () => {
     await tick(61_000);
     expect(calls.invoke.filter((c) => c.cmd === "eyecare_checkpoint")).toHaveLength(1);
     expect(notice()).toContain("Descanse os olhos");
+    expect(calls.invoke.filter((c) => c.cmd === "eyecare_break")).toEqual([{ cmd: "eyecare_break", args: { taken: false } }]);
     expect(vi.getTimerCount()).toBeGreaterThanOrEqual(1);
   });
 
@@ -64,6 +65,7 @@ describe("eyecare module", () => {
     await tick(20 * 60_000 + 100);
     expect(calls.invoke.slice(n).filter((c) => c.cmd === "eyecare_checkpoint")).toHaveLength(1);
     expect(notice()).not.toContain("Beba");
+    expect(calls.invoke.slice(n).filter((c) => c.cmd === "eyecare_break")).toEqual([{ cmd: "eyecare_break", args: { taken: true } }]);
     Registry.apply({ eyecare: false });
     const after = eye();
     await tick(3 * 3600_000);

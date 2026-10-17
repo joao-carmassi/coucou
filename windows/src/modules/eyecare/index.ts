@@ -1,4 +1,4 @@
-// Pausas: break reminders (one scoped api.timeout, no polling) + a view with screen time per app.
+// Pausas: break reminders (one scoped api.timeout, no polling) + a view with breaks and screen time per app.
 // Screen time is counted in Rust from the shared foreground hook; this side only asks for numbers.
 import "./eyecare.css";
 import { svg } from "../../kit/dom";
@@ -31,6 +31,8 @@ function start(api: IslandApi): Disposer {
     if (!alive) return;
     if (!intervalMin(api.settings<Cfg>().eyecareInterval)) { arm(); return; } // switched off while waiting
     const kind = pickKind(enabledKinds(api.settings<Cfg>().eyecareKinds), n);
+    // A round counts only when a reminder could fire; an away user (5 min+) already took that break.
+    if (kind && !api.paused()) void EyecareBridge.mark(!shouldNotify(idle));
     if (kind && shouldNotify(idle) && !api.paused()) {
       n++;
       const b = BREAKS[kind];
