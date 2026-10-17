@@ -1,15 +1,87 @@
-/* Clima: current conditions, hour strip and day strip. Prefix weather-; kit classes are reused, never redefined. */
-.weather-body { position: relative; padding: 14px 48px 14px 84px; gap: 8px; } /* right room for the corner pin button */
-.weather-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
-.weather-head .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.weather-now { display: flex; align-items: center; gap: 10px; }
-.weather-icon { font-size: 30px; line-height: 1; }
-.weather-main { display: flex; flex-direction: column; min-width: 0; }
-.weather-temp { font-size: 24px; font-weight: 600; line-height: 1.1; }
-.weather-detail { margin-left: auto; text-align: right; white-space: nowrap; }
-.weather-hours, .weather-days { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: 4px; overflow: hidden; }
-.weather-hours { --cols: 6; }
-.weather-days { --cols: 5; }
-.weather-cell { display: flex; flex-direction: column; align-items: center; min-width: 0; font-size: 12px; white-space: nowrap; overflow: hidden; }
-.weather-swap { animation: weather-swap 0.2s ease-out; }
-@keyframes weather-swap { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+/* Clima: this module's classes, all prefixed "weather-". Reuse kit classes; never redefine them.
+   Heights are fixed (logic.ts fitHeight adds them up), nothing animates. The strips are grids fitted to the width:
+   no inner scrollbar. Temperatures tint from cyan (cold) through green and amber to red (hot). */
+.weather-body {
+  --weather-cold: var(--cyan); --weather-cool: var(--green-2); --weather-warm: var(--amber); --weather-hot: var(--red);
+  padding: 12px 16px 12px 84px; gap: 10px; font: 400 11.5px var(--font); color: var(--dim);
+}
+
+/* Head: city, read time, Atualizar, Agora / 7 dias (the settings' .seg on a track); room on the right for the pin */
+.weather-head { display: flex; align-items: center; gap: 10px; height: 22px; flex: none; min-width: 0; }
+.weather-head [hidden] { display: none; }
+.weather-title { font: 600 12.5px var(--font); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.weather-head .weather-foot { flex: none; }
+.weather-head .text-link { flex: none; font-size: 10.5px; }
+.weather-head .text-link:disabled { color: var(--dim-4); }
+.weather-tabs { flex: none; margin-left: 0; padding: 2px; gap: 2px; border-radius: 999px; background: var(--surface-track); }
+.weather-tabs button { cursor: pointer; }
+
+.weather-panel { display: flex; flex-direction: column; gap: 10px; flex: none; min-width: 0; }
+.weather-k { font: 600 9.5px/11px var(--font); text-transform: uppercase; letter-spacing: 0.6px; color: var(--dim-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.weather-foot { font-size: 10.5px; line-height: 12px; color: var(--dim-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.weather-note { height: 16px; line-height: 16px; font-size: 10.5px; color: var(--dim-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Drawn skies: stroked parts, each its own colour; a cloud in front of a sun or moon is filled to hide it */
+.weather-sky { flex: none; fill: none; stroke: var(--dim); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.weather-sky .sun { stroke: var(--amber); }
+.weather-sky .moon { stroke: var(--ink-2); }
+.weather-sky .cloud, .weather-sky .front { stroke: var(--surface-text); }
+.weather-sky .front { fill: var(--card); }
+.weather-sky .wet { stroke: var(--cyan); }
+.weather-sky .snow { stroke: var(--ink); }
+.weather-sky .bolt { stroke: var(--amber); }
+
+/* Hero: sky, big temperature, condition and feels-like */
+.weather-hero { display: flex; align-items: center; gap: 14px; height: 56px; min-width: 0; }
+.weather-temp { font: 600 38px/40px var(--font); color: var(--ink); letter-spacing: -1.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.weather-unit { margin-left: 2px; font-size: 15px; font-weight: 600; letter-spacing: 0; vertical-align: 18px; }
+.weather-temp.cold .weather-unit { color: var(--weather-cold); }
+.weather-temp.cool .weather-unit { color: var(--weather-cool); }
+.weather-temp.warm .weather-unit { color: var(--weather-warm); }
+.weather-temp.hot .weather-unit { color: var(--weather-hot); }
+.weather-cond { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.weather-cond-text { font: 600 13px/15px var(--font); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Tiles: vento, umidade, chuva, UV */
+.weather-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; height: 54px; }
+.weather-tile {
+  display: flex; flex-direction: column; justify-content: space-between; min-width: 0;
+  padding: 6px 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.035); border: 1px solid var(--surface-edge);
+}
+.weather-v { font: 600 15px/17px var(--font); color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.weather-tile .weather-bar { margin: 4px 0 3px; }
+.weather-foot.uv-low { color: var(--green-2); }
+.weather-foot.uv-mid { color: var(--amber); }
+.weather-foot.uv-high { color: var(--red-text); }
+
+/* Bars */
+.weather-bar { display: block; height: 3px; border-radius: 999px; background: var(--surface-track); overflow: hidden; flex: none; }
+.weather-bar > i { display: block; height: 100%; border-radius: inherit; background: var(--cyan); }
+.weather-bar.damp > i { background: var(--indigo); }
+
+/* Next 12 hours: one column each, fitted to the width (rows 12 + 18 + 15 + 12 + 3, gaps 3 = 72) */
+.weather-hours { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 2px; height: 72px; overflow: hidden; }
+.weather-hour {
+  display: grid; grid-template-rows: 12px 18px 15px 12px 3px; row-gap: 3px; justify-items: center; align-items: center; min-width: 0;
+  padding: 0 3px; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.weather-hour-at { font-size: 10px; line-height: 12px; color: var(--dim-3); }
+.weather-hour:first-child .weather-hour-at { color: var(--ink); font-weight: 600; }
+.weather-hour-temp { font: 600 12px/15px var(--font); color: var(--ink); }
+.weather-hour-rain, .weather-day-rain { font-size: 10px; line-height: 12px; color: var(--cyan); }
+.weather-hour-rain.dry, .weather-day-rain.dry { color: var(--dim-4); }
+.weather-hour .weather-bar { width: 100%; }
+
+/* 7 days: name, sky, rain, min, range bar on the week's scale, max (today brighter, with a dot at the temperature now) */
+.weather-sec { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.weather-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; height: 14px; }
+.weather-days { display: flex; flex-direction: column; gap: 6px; }
+.weather-day { display: grid; grid-template-columns: 40px 16px 34px 30px minmax(40px, 1fr) 30px; align-items: center; column-gap: 10px; height: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.weather-day-name { color: var(--surface-text); overflow: hidden; text-overflow: ellipsis; }
+.weather-day.today .weather-day-name { color: var(--ink); font-weight: 600; }
+.weather-day-rain { text-align: right; }
+.weather-day-min { text-align: right; color: var(--dim-3); }
+.weather-day-max { color: var(--ink); font-weight: 600; }
+.weather-range { position: relative; display: block; height: 5px; border-radius: 999px; background: var(--surface-track); }
+.weather-range-fill { position: absolute; top: 0; bottom: 0; border-radius: inherit; }
+.weather-range-now { position: absolute; top: 50%; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 2px var(--card); }

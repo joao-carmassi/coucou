@@ -3,7 +3,8 @@
 
 export type Units = "C" | "F";
 export interface Place { name: string; admin: string; country: string; lat: number; lon: number }
-export interface Current { time: string; temp: number; feels: number; humidity: number; wind: number; code: number; isDay: boolean }
+/** `windDir` (degrees the wind comes from) and `uv` may be null: the service can leave them out. */
+export interface Current { time: string; temp: number; feels: number; humidity: number; wind: number; code: number; isDay: boolean; windDir?: number | null; uv?: number | null }
 export interface Hour { time: string; temp: number; code: number; rain: number }
 export interface Day { date: string; min: number; max: number; code: number; rain: number }
 export interface Forecast { current: Current; hours: Hour[]; days: Day[] }
@@ -84,9 +85,62 @@ export function placeLabel(p: Place): string {
   return [p.name, p.admin, p.country].filter(Boolean).join(", ");
 }
 
-/** How many cells each strip of the Clima view shows (they are fitted to the width, never scrolled). */
-export const HOURS_SHOWN = 6;
-export const DAYS_SHOWN = 5;
+/** The Clima view shows the next 12 hours (one row of columns fitted to the width, never scrolled) and 7 days. */
+export const HOURS_SHOWN = 12;
+export const DAYS_SHOWN = 7;
+
+/** Which drawn sky a WMO code gets (icons.ts SKY). */
+export type Sky = "clear" | "night" | "partly" | "partlyNight" | "cloud" | "fog" | "drizzle" | "rain" | "snow" | "storm";
+export function sky(code: number, isDay = true): Sky {
+  if (code === 0 || code === 1) return isDay ? "clear" : "night";
+  if (code === 2) return isDay ? "partly" : "partlyNight";
+  if (code === 45 || code === 48) return "fog";
+  if (code >= 51 && code <= 57) return "drizzle";
+  if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return "rain";
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "snow";
+  if (code >= 95 && code <= 99) return "storm";
+  return "cloud";
+}
+
+/** Colour band of a temperature, judged in Celsius whatever the units: cold < 12, cool < 22, warm < 30, hot. */
+export type Tone = "cold" | "cool" | "warm" | "hot";
+export function tone(v: number, units: Units): Tone {
+  const c = units === "F" ? ((v - 32) * 5) / 9 : v;
+  return c < 12 ? "cold" : c < 22 ? "cool" : c < 30 ? "warm" : "hot";
+}
+
+/** WHO UV bands in pt-BR. */
+export function uvLevel(uv: number): { text: string; level: "low" | "mid" | "high" } {
+  if (uv < 3) return { text: "baixo", level: "low" };
+  if (uv < 6) return { text: "moderado", level: "mid" };
+  if (uv < 8) return { text: "alto", level: "high" };
+  return { text: uv < 11 ? "muito alto" : "extremo", level: "high" };
+}
+
+const POINTS = ["N", "NE", "L", "SE", "S", "SO", "O", "NO"];
+/** Degrees -> one of 8 pt-BR compass points (L = leste, O = oeste). */
+export function compass(deg: number): string {
+  return POINTS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+}
+
+/** The common scale of the 7-day range bars: lowest min and highest max (a 1-degree span at least). */
+export function span(days: readonly Pick<Day, "min" | "max">[]): { lo: number; hi: number } {
+  const lo = Math.min(...days.map((d) => d.min)), hi = Math.max(...days.map((d) => d.max));
+  return days.length ? { lo, hi: Math.max(hi, lo + 1) } : { lo: 0, hi: 1 };
+}
+
+// Fixed heights of the view's parts (weather.css), so the island fits its content without measuring. chrome 56 =
+// #content padding + header + card border (as eyecare); body padding 12 + 12; head row 22.
+const FIT_BASE = 56 + 24 + 22;
+const NOTE = 10 + 16, HERO = 10 + 56, TILES = 10 + 54, HOURS = 10 + 72, ROW = 16, ROW_GAP = 6, SEC_HEAD = 10 + 14 + 6;
+/** Island height: a one-line note (no city, loading, error), "Agora" (hero, tiles, the hours or a note when there are none),
+ *  or "7 dias" (a heading and `days` rows, a note line when 0). Never above 320 (PANEL_H). */
+export function fitHeight(tab: "now" | "week" | "note", hours = 0, days = 0): number {
+  const need = FIT_BASE + (tab === "note" ? NOTE
+    : tab === "now" ? HERO + TILES + (hours ? HOURS : NOTE)
+    : SEC_HEAD + (days ? days * ROW + (days - 1) * ROW_GAP : ROW));
+  return Math.min(320, need);
+}
 
 /** `weatherGlanceEvery` (minutes; 0 or anything invalid = off) -> whole minutes, at most one day. */
 export function glanceMinutes(v: unknown): number {
