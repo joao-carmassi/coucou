@@ -84,8 +84,10 @@ pub fn claude_open_terminal(
     path: Option<String>,
     wsl_distro: Option<String>,
     terminal_pids: Option<Vec<u32>>,
+    title: Option<String>,
+    cwd: Option<String>,
 ) -> bool {
-    if focus::existing_terminal(&terminal_pids.unwrap_or_default()) {
+    if focus::existing_terminal(&terminal_pids.unwrap_or_default(), title.as_deref(), cwd.as_deref()) {
         return true;
     }
     let path = path.filter(|p| !p.is_empty());

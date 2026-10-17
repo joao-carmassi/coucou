@@ -253,6 +253,29 @@
   flex: 0 0 auto;
 }
 
+/* How a session ran, and what Claude said, whole, as Markdown: scrolls inside the card. */
+.fin-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.fin-chip {
+  font: 500 10px/14px var(--font);
+  padding: 0 6px;
+  border-radius: 7px;
+  background: var(--card-flat);
+  color: var(--dim);
+}
+
+.fin-md {
+  font: 400 12px/1.4 var(--font);
+  max-height: 72px;
+  overflow-y: auto;
+  flex: 0 1 auto;
+}
+
 /* Options that explain themselves: one to a line, its name then what it means,
    always on show — a choice is read before it is made. */
 .q-options.q-list {
