@@ -16,7 +16,7 @@ pub const LABEL: &str = "companion";
 /// Logical px (square).
 const SIZE: f64 = 180.0;
 /// Body hit area inside the window, logical px: x, y, w, h (the ellipse the mouse can grab).
-const HIT: (f64, f64, f64, f64) = (15.0, 45.0, 150.0, 130.0);
+const HIT: (f64, f64, f64, f64) = (5.0, 0.0, 170.0, 180.0);
 /// Dropping the companion this close to the island's top centre docks it back (logical px).
 const DOCK_RADIUS: f64 = 80.0;
 
@@ -77,6 +77,18 @@ fn page_url(app: &AppHandle) -> WebviewUrl {
     WebviewUrl::App("companion.html".into())
 }
 
+/// Sizes the window and its hit region for the display it is on now; returns the physical side.
+fn fit_scale(win: &tauri::WebviewWindow) -> i32 {
+    let scale = win.scale_factor().unwrap_or(1.0);
+    let px = |v: f64| (v * scale).round() as i32;
+    let side = px(SIZE);
+    if win.outer_size().is_ok_and(|s| s.width as i32 != side || s.height as i32 != side) {
+        let _ = win.set_size(tauri::PhysicalSize::new(side as u32, side as u32));
+    }
+    platform::set_hit_ellipse(win, px(HIT.0), px(HIT.1), px(HIT.2), px(HIT.3));
+    side
+}
+
 /// Builds the window hidden (the page shows it once it has something to draw: no white flash).
 fn build(app: &AppHandle, pos: &BTreeMap<String, f64>) {
     // Turned off while this build waited for the main thread: build nothing.
@@ -100,11 +112,8 @@ fn build(app: &AppHandle, pos: &BTreeMap<String, f64>) {
         Err(err) => return log::line(format!("companion window failed: {err}")),
     };
     platform::make_non_activating(&win);
-    let scale = win.scale_factor().unwrap_or(1.0);
-    let px = |v: f64| (v * scale).round() as i32;
-    platform::set_hit_ellipse(&win, px(HIT.0), px(HIT.1), px(HIT.2), px(HIT.3));
+    let size = fit_scale(&win);
     let mons = monitors(app);
-    let size = px(SIZE);
     let want = match (pos.get("x"), pos.get("y"), mons.first()) {
         (Some(&x), Some(&y), _) if x.is_finite() && y.is_finite() => (x as i32, y as i32),
         (_, _, Some(p)) => default_pos(p, size),
@@ -129,6 +138,10 @@ pub fn sync(app: &AppHandle, s: &Settings) {
     } else if !s.companion_enabled && exists {
         let a = app.clone();
         let _ = app.run_on_main_thread(move || {
+            // Turned on again while this waited for the main thread: keep the window.
+            if a.state::<crate::Shared>().settings.lock().unwrap().companion_enabled {
+                return;
+            }
             if let Some(w) = a.get_webview_window(LABEL) {
                 let _ = w.destroy();
             }
@@ -147,6 +160,7 @@ pub fn companion_visible(app: AppHandle, visible: bool) {
 #[tauri::command]
 pub fn companion_moved(app: AppHandle, shared: State<crate::Shared>) {
     let Some(w) = app.get_webview_window(LABEL) else { return };
+    fit_scale(&w); // dropped on a display with another scale
     let (Ok(p), Ok(sz)) = (w.outer_position(), w.outer_size()) else { return };
     let docked = island::window(&app).is_some_and(|i| {
         let (Ok(ip), Ok(isz)) = (i.outer_position(), i.outer_size()) else { return false };

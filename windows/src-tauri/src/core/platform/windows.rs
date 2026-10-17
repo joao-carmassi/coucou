@@ -238,8 +238,15 @@ pub fn make_non_activating(win: &WebviewWindow) {
 pub fn set_hit_ellipse(win: &WebviewWindow, x: i32, y: i32, w: i32, h: i32) {
     let Some(hwnd) = hwnd_of(win) else { return };
     unsafe {
-        let rgn = ::windows::Win32::Graphics::Gdi::CreateEllipticRgn(x, y, x + w, y + h);
-        ::windows::Win32::Graphics::Gdi::SetWindowRgn(hwnd, Some(rgn), true); // the system owns the region from here
+        use ::windows::Win32::Graphics::Gdi::{CreateEllipticRgn, DeleteObject, SetWindowRgn, HGDIOBJ};
+        let rgn = CreateEllipticRgn(x, y, x + w, y + h);
+        if rgn.is_invalid() {
+            return;
+        }
+        // The system owns the region once SetWindowRgn succeeds; on failure it is ours to free.
+        if SetWindowRgn(hwnd, Some(rgn), true) == 0 {
+            let _ = DeleteObject(HGDIOBJ(rgn.0));
+        }
     }
 }
 

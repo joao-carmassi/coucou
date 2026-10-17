@@ -1154,6 +1154,7 @@ export class Island implements IslandHost {
 
     const greetingActive = State.mode === "expanded" && State.view === "greeting";
     this.botCanvas.style.opacity = p.opacity > 0 && !greetingActive && !this.link.on ? "1" : "0";
+    this.botCanvas.style.pointerEvents = this.link.on ? "none" : "";
 
     if (State.mode === "expanded" && !greetingActive && viewLayout(State.view).glow !== false) {
       const d = p.diameter;

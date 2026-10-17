@@ -31,6 +31,7 @@ export function startCompanion(canvas: HTMLCanvasElement) {
   let running = false;
   let last = 0;
   let timer = 0;
+  let raf = 0;
 
   const draw = () => {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -40,13 +41,14 @@ export function startCompanion(canvas: HTMLCanvasElement) {
 
   const frame = (nowMs: number) => {
     timer = 0;
+    raf = 0;
     const dt = Math.min(0.05, (nowMs - last) / 1000);
     last = nowMs;
     engine.update(dt);
     draw();
     const mode = frameMode({ hidden, active: engine.animating || engine.level > 0.001 || dragging, busy: engine.busy });
-    if (mode === "raf") requestAnimationFrame(frame);
-    else if (mode === "tick") timer = window.setTimeout(() => requestAnimationFrame(frame), IDLE_TICK_MS);
+    if (mode === "raf") raf = requestAnimationFrame(frame);
+    else if (mode === "tick") timer = window.setTimeout(() => { raf = requestAnimationFrame(frame); }, IDLE_TICK_MS);
     else running = false;
   };
 
@@ -55,7 +57,7 @@ export function startCompanion(canvas: HTMLCanvasElement) {
     if (running || hidden) return;
     running = true;
     last = performance.now();
-    requestAnimationFrame(frame);
+    raf = requestAnimationFrame(frame);
   };
 
   void onEvent<AvatarMsg>("companion-avatar", (m) => {
@@ -66,7 +68,7 @@ export function startCompanion(canvas: HTMLCanvasElement) {
     if (m.hidden !== undefined && m.hidden !== hidden) {
       hidden = m.hidden;
       void command("companion_visible", { visible: !hidden });
-      if (hidden) { window.clearTimeout(timer); timer = 0; running = false; }
+      if (hidden) { window.clearTimeout(timer); cancelAnimationFrame(raf); timer = 0; raf = 0; running = false; }
     }
     if (!hidden) { draw(); kick(); }
   });
