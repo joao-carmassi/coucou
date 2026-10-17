@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.0
+
+Wave 2: other agents, usage, statistics, richer Claude cards.
+
+- New module **Agentes** (off by default): Codex, Cursor, Gemini CLI, Copilot CLI and OpenCode on the island. Hook installer per agent with backup, diff and an explicit click; removal only touches Coucou's own entries. Approval (allow/deny) only for Codex and Cursor shell, and only with the approve switch on. Cursor asks before every shell command once installed.
+- New module **Uso do plano** (off by default): Codex limits read locally; Claude limits are opt-in (network + the Claude Code token, never refreshed). Pinnable line, notice at 90%.
+- New module **Estatísticas** (off by default): tokens and estimated cost per day/model/project from local logs, counters only, read on demand when the view is open.
+- Claude: finished card shows mode/effort/model chips and the full answer as safe Markdown; board card shows a live diff of the last edit; Windows Terminal tab is selected by UI Automation when possible; Claude Desktop chip.
+- Board: two-face cards, "Utilidades" view with every action, "Último" chip; core gains `actions.all()` / `actions.run()`.
+- Core: `core/cfgfile` (checked config edits) and `relay::ensure_client_exe` shared by modules.
+
 ## 0.11.1
 
 - Pinned/last-opened lines are plain text: no shimmer, no slide-in; width changes in 16 px steps with hysteresis.
