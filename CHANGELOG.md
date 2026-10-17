@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.1
+
+- Pinned/last-opened lines are plain text: no shimmer, no slide-in; width changes in 16 px steps with hysteresis.
+- Pin button sits at the top-right corner of the view (no longer pushes content down; views reserve room with `.pin-room`).
+- Clima: taller view, hours and days strips without inner scrollbars; new setting to show the weather on the island every 15/30/60/120 min (even with the island hidden; skips on Pause or when busy).
+- Sistema: height fits the content without scroll when temperatures are off (with temperatures: same height plus scroll); the usage line also shows after leaving the view during the focus time; GPU % added to the line (one PDH query, only while pinned).
+- Fix: timer-glance test flake (timer clock read at call time).
+
 ## 0.11.0
 
 One-line island feedback, reworked.
