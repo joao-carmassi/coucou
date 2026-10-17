@@ -168,4 +168,18 @@ describe("weather module", () => {
     expect(Compact.resolve(0)).toBeNull();
     expect(State.settings.pinnedLine).toBe("weather.now");
   });
+
+  it("pinned with no city: a dim placeholder keeps the pin past the 5-minute release", async () => {
+    vi.useFakeTimers();
+    try {
+      settings().weatherPlace = null;
+      State.settings.pinnedLine = "weather.now";
+      Registry.apply({ weather: true });
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(State.settings.pinnedLine).toBe("weather.now");
+      expect(Compact.resolve(0)).toMatchObject({ text: "Clima: sem cidade", dim: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -332,7 +332,8 @@ export class Island implements IslandHost {
     Holds.touch(view, now);
     // Only views reachable from a tab count; a card on top never becomes the focus.
     const tab = this.viewDefs.get(view)?.tabOf ?? view;
-    Pin.setLast(this.viewOwner.get(view) ?? this.viewOwner.get(tab) ?? null);
+    const owner = this.viewOwner.get(view) ?? this.viewOwner.get(tab);
+    if (owner) Pin.setLast(owner, focusMs(State.settings.compactHideInterval)); // the last-opened line lasts the focus time
     if (State.tabs.some((t) => t.view === tab)) Last.left(view, now);
     else if (closing) Last.refresh(now); // closed on a card: the focus time counts from the close
   }

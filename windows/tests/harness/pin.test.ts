@@ -7,6 +7,7 @@ import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
 import { State } from "../../src/core/state";
 import { PIN_RELEASE_MS } from "../../src/core/sources";
+import { moduleSettings } from "../../src/core/moduleSettings";
 import { buildCatalog } from "../../src/modules/resolve";
 
 const P: { a: IslandApi | null; b: IslandApi | null; sa: StatusSource | null; sb: StatusSource | null } = { a: null, b: null, sa: null, sb: null };
@@ -141,6 +142,58 @@ describe("pinned line", { timeout: 30_000 }, () => {
     Registry.apply(ON);
     P.sa!.set({ priority: 1, text: "A again" });
     expect(line()?.text).toBe("A again");
+  });
+});
+
+describe("with real pills", () => {
+  const addPills = () => {
+    P.a!.pills.set({ id: "pa", label: "A", color: "#88aaff", mood: "alert", badge: { text: "1" } as never });
+    P.b!.pills.set({ id: "pb", label: "B", color: "#ffaa88", mood: "idle" });
+    P.b!.pills.focus("pb"); // another pill is in front: the alert one is "other"
+  };
+  it("an approval / question / finished line shows over the pinned line even beside other non-ambient pills", () => {
+    addPills();
+    expect(State.otherPills.some((p) => !p.ambient)).toBe(true);
+    P.sa!.set({ priority: 1, text: "A pinned" });
+    P.a!.status.pin("line", true);
+    expect(line()?.text).toBe("A pinned");
+    const d = dummyProbe.api!;
+    d.status.set({ priority: 100, text: "Aprovar?", urgent: true });
+    expect(line()?.text).toBe("Aprovar?");
+    d.status.set({ priority: 90, text: "Pergunta", urgent: true });
+    expect(line()?.text).toBe("Pergunta");
+    d.status.set({ priority: 60, text: "pronto" });
+    expect(line()?.text).toBe("pronto");
+    d.status.set({ priority: 40, text: "voz" });
+    expect(line()?.text).toBe("voz");
+    d.status.set({ priority: BAND.ACTIVE, text: "dummy status" });
+    expect(line()?.text).toBe("A pinned");
+    P.a!.pills.remove("pa");
+    P.b!.pills.remove("pb");
+  });
+});
+
+describe("last-opened line and the focus time", () => {
+  it("ends after the focus time even when the island never hides", () => {
+    dummyProbe.api!.status.set(null);
+    State.settings.compactHideInterval = 0; // never hides: focus time 60 s
+    island.applySettings();
+    P.sa!.set({ priority: 1, text: "A last" });
+    island.open("sa-view"); tick(10);
+    fold();
+    expect(line()?.text).toBe("A last");
+    tick(59_000);
+    expect(line()?.text).toBe("A last");
+    tick(2_000);
+    expect(line()).toBeNull();
+    State.settings.compactHideInterval = 60;
+    island.applySettings();
+  });
+});
+
+describe("core keys", () => {
+  it("a module cannot write pinnedLine through its settings", async () => {
+    await expect(moduleSettings("x", { pinnedLine: "" }).save({ pinnedLine: "x.y" })).rejects.toThrow(/read-only/);
   });
 });
 

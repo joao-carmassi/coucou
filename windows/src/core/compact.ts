@@ -25,9 +25,11 @@ export const Compact = {
   resolve(otherPills: number, now = performance.now()): StatusLine | null {
     let best: Entry | null = null;
     let bestOwner = "";
+    // A pinned line shows beside other pills, so anything stronger than it must show there too (it passes over the pinned one).
+    const pinned = lines.get("#pin")?.line.priority ?? Infinity;
     for (const [owner, e] of lines) {
       if (e.line.ttlMs != null && now - e.at > e.line.ttlMs) continue;
-      if (otherPills > 0 && !e.line.overGrid) continue;
+      if (otherPills > 0 && !e.line.overGrid && !e.line.urgent && e.line.priority <= pinned) continue;
       // A tie goes to the newest, except that the core's own notice beats a plain status line.
       const tie = best && e.line.priority === best.line.priority;
       if (!best || e.line.priority > best.line.priority ||

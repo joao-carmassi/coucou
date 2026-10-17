@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- One "Tempo de foco": `compactHideInterval` now also times the board's primary pick and the implicit tab focus (the separate "Voltar à aba" control is gone; `focusHoldMinutes` stays in settings.json, unused).
+- One "Tempo de foco": `compactHideInterval` now also times the board's primary pick and the implicit tab focus (the separate "Voltar à aba" control is gone and its value is not migrated: the reopen window is now the hide interval; `focusHoldMinutes` stays in settings.json, unused).
 - Pinned line: new generic `api.status.source(key, { label, view? })`, setting `pinnedLine` (one at a time), `BAND.PINNED = 35`, last-opened module line for the focus time, auto-release after 5 min without content, `StatusLine.icon`/`dim`/`view` drawn, kit pin button, Hub section "Linha da ilha".
 - Tocando and Clima publish their compact line as sources with a pin button in their views (they no longer show it unprompted). A pinned Clima refreshes every 30 min while the island is visible.
 - Timer: optional glance (`timerGlance`) shows the remaining time every focus time, even when the island is hidden.

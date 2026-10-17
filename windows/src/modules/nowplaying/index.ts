@@ -16,11 +16,23 @@ function start(api: IslandApi): Disposer {
   let capturing = false;
   let tick: Disposer | null = null;
   let announced = trackKey(null);
+  // The card shows for the focus time after the tab is left (until the island hides): the 1 s tick is for that, or for the pin.
+  let recent = false;
+  let wasOnTab = false;
+  let recentT: Disposer | null = null;
   const source = api.status.source("track", { label: "Tocando agora", view: "nowplaying" });
 
   // One place decides what runs: the capture and the 1 s progress tick exist only while they have a viewer.
   const reconcile = () => {
     const mode = api.island.mode(), view = api.island.view();
+    const onTab = mode === "expanded" && view === "nowplaying";
+    if (mode === "hidden") { recent = false; recentT?.(); recentT = null; }
+    else if (wasOnTab && !onTab) {
+      recent = true;
+      recentT?.();
+      recentT = api.timeout(() => { recent = false; recentT = null; reconcile(); }, api.island.focusMs());
+    }
+    wasOnTab = onTab;
     const c = cfg();
     NP.sens = clampSens(c.nowplayingSensitivity);
     const capture = wantCapture({ playing: !!NP.track?.playing, paused: api.paused(), mode, view, dance: c.nowplayingDance !== false });
@@ -29,7 +41,7 @@ function start(api: IslandApi): Disposer {
       void Bridge.capture(capture).catch((e) => api.island.error(e));
       if (!capture) { NP.bands = []; api.avatar.level(0); NP.paintBars?.(); }
     }
-    const progress = wantTick({ playing: !!NP.track?.playing, paused: api.paused(), mode, view, hasLength: !!NP.track?.durationMs && NP.track.positionMs !== null });
+    const progress = wantTick({ playing: !!NP.track?.playing, paused: api.paused(), mode, view, cardShown: api.status.pinned("track") || recent, hasLength: !!NP.track?.durationMs && NP.track.positionMs !== null });
     if (progress && !tick) tick = api.interval(() => { NP.paintProgress?.(); publishCard(); }, 1000, { whenVisible: true });
     else if (!progress && tick) { tick(); tick = null; }
     publishCard();

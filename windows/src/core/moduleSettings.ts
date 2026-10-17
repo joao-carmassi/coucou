@@ -10,7 +10,7 @@ export interface ModuleSettings {
 }
 
 /** Core-owned keys a module may read (declared in its manifest) but never write. */
-const CORE_KEYS = new Set(["focusHoldMinutes", "modulesEnabled"]);
+const CORE_KEYS = new Set(["focusHoldMinutes", "modulesEnabled", "pinnedLine"]);
 
 export function moduleSettings(id: string, defaults: Readonly<Record<string, unknown>> = {}): ModuleSettings {
   return {
