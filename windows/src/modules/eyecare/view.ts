@@ -38,6 +38,13 @@ function apps(list: { exe: string; secs: number }[], empty: string) {
     h("span", { class: "eyecare-name", text: appName(a.exe), title: a.exe }), bar(pct(a.secs, list[0].secs)), h("span", { class: "eyecare-dur", text: dur(a.secs) }))));
 }
 
+/** Restarts the one-shot CSS fade-in of the panel (a tab switch only, not a data refresh). */
+function fade(el: HTMLElement) {
+  el.classList.remove("fade");
+  void el.offsetWidth;
+  el.classList.add("fade");
+}
+
 export function buildView(ctx: ViewContext): ViewHost {
   let tab: Tab = "today";
   let days: Days = {};
@@ -45,7 +52,7 @@ export function buildView(ctx: ViewContext): ViewHost {
   let rows = 0;
   let busy = false;
 
-  const tabBtn = (t: Tab, text: string) => h("button", { type: "button", role: "tab", text, onclick: () => { tab = t; draw(); } });
+  const tabBtn = (t: Tab, text: string) => h("button", { type: "button", role: "tab", text, onclick: () => { tab = t; draw(); fade(panel); } });
   const tabs: Record<Tab, HTMLButtonElement> = { today: tabBtn("today", "Hoje"), week: tabBtn("week", "7 dias") };
   const when = h("span", { class: "eyecare-when" });
   // Second click confirms, as in the settings section.
@@ -134,13 +141,15 @@ export function buildView(ctx: ViewContext): ViewHost {
   };
   draw(false);
   let shown = false;
+  // The tiles read the settings (reminder interval): redraw when they change (a tick later, the core stores them after us).
+  ctx.api.listen("settings-changed", () => void ctx.api.timeout(() => draw(), 0));
   return {
     el,
     get height() { return fitHeight(tab, rows); },
     // Nothing is fetched while the tab is hidden; one fetch each time it comes up.
     sync() {
       const on = ctx.api.island.view() === "eyecare";
-      if (on && !shown) void load();
+      if (on && !shown) { draw(); void load(); } // draw now: the fetch is async and the tile must not show a stale interval
       shown = on;
     },
   };

@@ -3,7 +3,7 @@ import { card, view } from "../../kit/card";
 import type { ViewContext, ViewHost } from "../../core/moduleApi";
 import { NowPlayingBridge as Bridge, type Control } from "./bridge";
 import { ICONS } from "./icons";
-import { clock, fraction, positionAt, shapeBands, trackKey } from "./logic";
+import { clock, fitHeight, fraction, positionAt, shapeBands, trackKey } from "./logic";
 import { NP } from "./store";
 import { pinButton } from "../../kit/pin";
 
@@ -47,7 +47,9 @@ export function buildView(ctx: ViewContext): ViewHost {
     const t = NP.track;
     if (!t || !visible()) return;
     const f = fraction(t, Date.now());
+    const was = progress.hidden;
     progress.hidden = f === null; // browsers often give no length
+    if (was !== progress.hidden) ctx.onResize();
     if (f === null) return;
     fill.style.width = `${Math.max(1.5, f * 100)}%`;
     cur.textContent = clock(positionAt(t, Date.now()) ?? 0);
@@ -74,6 +76,7 @@ export function buildView(ctx: ViewContext): ViewHost {
   };
   return {
     el,
+    get height() { return fitHeight(!!NP.track && !progress.hidden); },
     sync() {
       if (!visible()) return;
       pin.sync();

@@ -47,3 +47,8 @@
 .eyecare-days { margin-top: 3px; }
 .eyecare-brk { color: var(--dim-4); }
 .eyecare-brk .today { color: var(--green-2); }
+
+/* Tab switch: 160 ms fade-in of the new panel; one-shot CSS, paused with the rest while the island is away. */
+.eyecare-panel.fade { animation: eyecare-fade 160ms ease-out; }
+@keyframes eyecare-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .eyecare-panel.fade { animation: none; } }
