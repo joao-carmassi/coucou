@@ -118,7 +118,7 @@ export interface ActionDef {
   run(): void | Promise<void>;
 }
 /** A read-only view of a registered action: no `run` closure leaves its module. */
-export interface ActionInfo { key: string; title: string; owner: string; keyHint?: string }
+export interface ActionInfo { key: string; title: string; owner: string; keyHint?: string; keywords?: readonly string[] }
 /** Where home is (hover / click on the compact island); to hold the island open on a card use api.island.request. */
 export interface HomeRequest { view: string; priority: number }
 export interface IslandHooks {
@@ -290,6 +290,8 @@ export interface IslandApi {
     add(def: ActionDef): Disposer;
     /** Every action allowed now, any owner. */
     all(): readonly ActionInfo[];
+    /** Runs an allowed action by its stamped key (a throw goes to island.error); false when unknown or not allowed now. */
+    run(key: string): boolean;
   };
   provide<K extends keyof IslandHooks>(hook: K, fn: IslandHooks[K]): Disposer;
   /** Offers a service under a namespaced key ("<module>.<name>"; the types live in that module's api.ts). Removed when this module stops. */

@@ -1,8 +1,10 @@
-// Voice input (English): a global hotkey toggles the microphone, the recording is transcribed on the
-// device and shown on a card; "Enviar" (in the UI) launches a Claude session with it.
+// Voice input: a global hotkey toggles the microphone, the recording is transcribed on the
+// device (English engine, or whisper.cpp for several languages) and shown on a card; "Enviar" (in the UI) launches a Claude session with it.
 
 pub mod cfg;
+pub mod flow;
 pub mod voice;
+pub mod whisper;
 
 use tauri::AppHandle;
 
@@ -18,7 +20,9 @@ impl Module for Voice {
     }
 
     fn start(&self, ctx: &ModuleCtx, s: &Settings) {
+        voice::configure(s);
         set_hotkey(&ctx.app, s);
+        flow::set(ctx, cfg::flow_enabled(s));
     }
 
     fn migrate(&self, s: &mut Settings) -> bool {
@@ -30,11 +34,15 @@ impl Module for Voice {
     }
 
     fn apply(&self, ctx: &ModuleCtx, s: &Settings) {
+        voice::configure(s);
         set_hotkey(&ctx.app, s);
+        flow::set(ctx, cfg::flow_enabled(s));
     }
 
     fn stop(&self, ctx: &ModuleCtx) {
         hotkeys::clear(&ctx.app, "voice");
+        hotkeys::clear(&ctx.app, "voice-assist");
+        flow::set(ctx, false); // removes the keyboard hook
         voice::stop(); // the capture loop ends within 30 ms and closes the microphone
     }
 }
@@ -42,6 +50,9 @@ impl Module for Voice {
 fn set_hotkey(app: &AppHandle, s: &Settings) {
     let combo = hotkeys::clean(&cfg::hotkey(s), cfg::DEFAULT_HOTKEY);
     hotkeys::set(app, "voice", "Voz", &combo, voice::on_hotkey);
+    // "" = the assistant is off (no default combo). An invalid combo is dropped, not replaced.
+    let assist = hotkeys::clean(&cfg::assist_hotkey(s), "");
+    hotkeys::set(app, "voice-assist", "Assistente de voz", &assist, voice::on_assist_hotkey);
 }
 
 pub const PREFIXES: &[&str] = &["voice_"];
@@ -52,5 +63,5 @@ pub fn modules() -> Vec<Box<dyn Module>> {
 
 pub fn handler() -> crate::core::host::Handler {
     use voice::*;
-    crate::core::host::handler(tauri::generate_handler![voice_start, voice_stop, voice_cancel, voice_model_status, voice_download_model])
+    crate::core::host::handler(tauri::generate_handler![voice_start, voice_stop, voice_cancel, voice_model_status, voice_download_model, voice_download_whisper, voice_speak])
 }

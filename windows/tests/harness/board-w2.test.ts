@@ -57,6 +57,18 @@ describe("actions.all", () => {
   });
 });
 
+describe("actions.run", () => {
+  it("runs an allowed action by key, routes a throw to island.error, refuses unknown and stopped ones", () => {
+    const err = vi.spyOn(island, "error").mockImplementation(() => {});
+    expect(probe.beta!.actions.run("alpha.zeta")).toBe(true);
+    expect(err).not.toHaveBeenCalled();
+    expect(probe.beta!.actions.run("alpha.boom")).toBe(true);
+    expect(err).toHaveBeenCalledTimes(1);
+    expect(probe.beta!.actions.run("alpha.nope")).toBe(false);
+    err.mockRestore();
+  });
+});
+
 describe("board chip", () => {
   it("the chip shows the last action run, and clears when that action goes", async () => {
     const { last } = await import("../../src/modules/board/last");
@@ -67,6 +79,7 @@ describe("board chip", () => {
     show("overview");
     expect(q(".board-last")!.style.display).toBe("none");
     expect(probe.beta!.actions.all().some((a) => a.owner === "alpha")).toBe(false);
+    expect(probe.beta!.actions.run("alpha.zeta")).toBe(false);
   });
 
   it("the card has no arrow, flip or utilities buttons", () => {

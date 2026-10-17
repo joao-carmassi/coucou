@@ -468,12 +468,12 @@ mod tests {
         // Free function, not ModuleHost: building a host in a test links all of tauri, which needs a manifest the test exe lacks.
         let mut s = Settings::default();
         s.modules_enabled.insert("claude".into(), false);
-        s.modules_enabled.insert("voice".into(), true);
+        s.modules_enabled.insert("upload".into(), true);
         let m = resolve(crate::modules::CATALOG, &s);
-        assert!(!m["claude"] && !m["voice"] && !m["upload"]);
+        assert!(!m["claude"] && !m["upload"]);
         assert!(m["media"]);
         s.modules_enabled.insert("claude".into(), true);
         let m = resolve(crate::modules::CATALOG, &s);
-        assert!(m["voice"] && m["upload"]);
+        assert!(m["upload"]);
     }
 }

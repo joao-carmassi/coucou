@@ -1,6 +1,7 @@
-// Voice input (English): a global hotkey toggles the microphone; the recording runs through silence until
-// the user ends it (hotkey again or Enter on the card; Esc cancels) or the 10-minute safety cap hits, then is transcribed on-device by Cactus' `needle.exe` + `whistle.cact` (child process on a temp WAV,
-// telemetry off), and the text goes to the island, which shows it on a card. Nothing is sent anywhere by
+// Voice input: a global hotkey toggles the microphone; the recording runs through silence until
+// the user ends it (hotkey again or Enter on the card; Esc cancels) or the 10-minute safety cap hits, then is transcribed on-device
+// by Cactus' `needle.exe` + `whistle.cact` (English) or whisper.cpp's `whisper-cli` (several languages, see whisper.rs); both run as a child process on a temp WAV
+// (telemetry off), and the text goes to the island, which shows it on a card. Nothing is sent anywhere by
 // this module; the model files are fetched only on the Settings button, pinned and SHA-256 checked.
 //
 // shortcut: a fixed loudness threshold (QUIET) only decides "was anything said at all"; a noisy room
@@ -11,7 +12,7 @@ use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
@@ -20,8 +21,11 @@ use tauri::{AppHandle, Emitter, Manager};
 use windows::Win32::Media::Audio::*;
 use windows::Win32::System::Com::*;
 
+use super::cfg::Engine;
+use super::whisper;
 use crate::core::host::{blocking, ModuleCtx, ModuleHost};
 use crate::core::hotkeys;
+use crate::core::settings::Settings;
 
 const RATE: usize = 16_000;
 /// Hard safety cap so a forgotten recording cannot grow forever (~38 MB of f32); the only automatic stop.
@@ -33,6 +37,8 @@ const ENGINE_TIMEOUT: Duration = Duration::from_secs(180); // up to 10 min of au
 #[serde(rename_all = "camelCase")]
 pub struct VoiceStatus {
     pub ready: bool,
+    /// whisper.cpp binary + model are installed and verified.
+    pub whisper_ready: bool,
     pub listening: bool,
     /// Why a hotkey could not be registered ("" = fine).
     pub hotkey_error: String,
@@ -84,8 +90,42 @@ fn emit_state(app: &AppHandle, state: &str, message: &str) {
 // ── Commands ─────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn voice_start(app: AppHandle) -> Result<(), String> {
-    start(&app)
+pub fn voice_start(app: AppHandle, mode: Option<String>) -> Result<(), String> {
+    start(&app, if mode.as_deref() == Some("assist") { Mode::Assist } else { Mode::Card })
+}
+
+/// Speaks a short confirmation with the system default voice (Settings → Voz → "Falar a confirmação").
+/// One utterance at a time; stopped when the module stops.
+#[tauri::command]
+pub fn voice_speak(app: AppHandle, text: String) -> Result<(), String> {
+    let host = app.state::<ModuleHost>();
+    host.require("voice")?;
+    let ctx: Arc<ModuleCtx> = host.ctx("voice").ok_or("O módulo Voz está desligado nas Configurações.")?;
+    let text: String = text.chars().take(200).collect(); // a confirmation, never a reading of long text
+    ctx.spawn(move |module_stop| speak(&text, &module_stop));
+    Ok(())
+}
+
+fn speak(text: &str, module_stop: &AtomicBool) {
+    use windows::core::HSTRING;
+    use windows::Win32::Media::Speech::{ISpVoice, SpVoice, SPF_ASYNC, SPF_PURGEBEFORESPEAK, SPVOICESTATUS};
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        let Ok(v) = CoCreateInstance::<_, ISpVoice>(&SpVoice, None, CLSCTX_ALL) else { return };
+        if v.Speak(&HSTRING::from(text), (SPF_ASYNC.0 | SPF_PURGEBEFORESPEAK.0) as u32, None).is_err() {
+            return;
+        }
+        let deadline = Instant::now() + Duration::from_secs(20);
+        // shortcut: polls every 50 ms while it speaks (a few seconds at most); upgrade to the voice's notify event if it ever matters.
+        while Instant::now() < deadline && !module_stop.load(Ordering::SeqCst) {
+            let mut st = SPVOICESTATUS::default();
+            if v.GetStatus(&mut st, std::ptr::null_mut()).is_err() || st.dwRunningState & 2 == 0 {
+                return; // 2 = SPRS_IS_SPEAKING
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let _ = v.Speak(windows::core::PCWSTR::null(), SPF_PURGEBEFORESPEAK.0 as u32, None);
+    }
 }
 
 #[tauri::command]
@@ -96,19 +136,26 @@ pub fn voice_stop() {
 /// Esc while listening: stop and throw the audio away (no transcription).
 #[tauri::command]
 pub fn voice_cancel() {
-    CANCEL.store(true, Ordering::SeqCst);
-    stop()
+    cancel()
 }
 
 #[tauri::command]
 pub async fn voice_model_status() -> VoiceStatus {
     blocking(|| VoiceStatus {
         ready: ready(&dir()),
+        whisper_ready: whisper::ready(),
         listening: CAPTURING.load(Ordering::SeqCst),
         hotkey_error: hotkeys::error(),
     })
     .await
     .unwrap_or_default()
+}
+
+/// Settings → "Baixar Whisper". Emits `voice-download` {file, received, total}.
+#[tauri::command]
+pub async fn voice_download_whisper(app: AppHandle) -> Result<(), String> {
+    app.state::<ModuleHost>().require("voice")?;
+    whisper::download(app).await
 }
 
 /// Settings → "Baixar modelo". Emits `voice-download` {file, received, total} as it goes.
@@ -120,12 +167,64 @@ pub async fn voice_download_model(app: AppHandle) -> Result<(), String> {
 
 // ── Capture + transcription ──────────────────────────────────────────────────
 
+/// Engine + language, copied from the settings by `configure` (module start and every apply).
+static CFG: Mutex<(Engine, &'static str)> = Mutex::new((Engine::Whistle, "auto"));
+
+pub fn configure(s: &Settings) {
+    *CFG.lock().unwrap_or_else(PoisonError::into_inner) = (super::cfg::engine(s), super::cfg::language(s));
+}
+fn current() -> (Engine, &'static str) {
+    *CFG.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 static CAPTURING: AtomicBool = AtomicBool::new(false);
 static STOP: AtomicBool = AtomicBool::new(false);
 static CANCEL: AtomicBool = AtomicBool::new(false);
 
 pub fn stop() {
     STOP.store(true, Ordering::SeqCst);
+}
+
+/// Stop and throw the audio away (no transcription).
+pub fn cancel() {
+    CANCEL.store(true, Ordering::SeqCst);
+    stop()
+}
+
+/// Who asked for the take: the card (hotkey), or Flow (dictate into the window `target` that was in front).
+#[derive(Clone, Copy, PartialEq)]
+pub enum Mode {
+    Card,
+    /// The assistant hotkey: the text is matched against the registered actions (in the island), not sent to Claude.
+    Assist,
+    Flow { target: isize },
+}
+
+/// Flow's status line and meter: `voice-flow` {state: listening|transcribing|pasted|moved|error|idle, chars, message}.
+fn emit_flow(app: &AppHandle, state: &str, chars: usize, message: &str) {
+    let _ = app.emit("voice-flow", serde_json::json!({ "state": state, "chars": chars, "message": message }));
+}
+
+/// The assistant hotkey: ends the recording in progress; otherwise the island starts an `assist` take.
+pub fn on_assist_hotkey(app: &AppHandle) {
+    if CAPTURING.load(Ordering::SeqCst) {
+        return stop();
+    }
+    let _ = app.emit("voice-assist-hotkey", ());
+}
+
+/// Called from the Flow key thread. Flow never opens the card and never takes focus.
+pub fn start_flow(app: &AppHandle, target: isize) -> Result<(), String> {
+    if CAPTURING.load(Ordering::SeqCst) {
+        return Err("ocupado".into()); // a card take (or a Flow take) is running: say nothing
+    }
+    super::flow::ACTIVE.store(true, Ordering::SeqCst);
+    let r = start(app, Mode::Flow { target });
+    if let Err(m) = &r {
+        super::flow::ACTIVE.store(false, Ordering::SeqCst);
+        emit_flow(app, "error", 0, m);
+    }
+    r
 }
 
 /// The hotkey: ends the recording in progress; otherwise the island decides (`voice-hotkey`): it reopens
@@ -137,12 +236,13 @@ pub fn on_hotkey(app: &AppHandle) {
     let _ = app.emit("voice-hotkey", ());
 }
 
-fn start(app: &AppHandle) -> Result<(), String> {
+fn start(app: &AppHandle, mode: Mode) -> Result<(), String> {
     let host = app.state::<ModuleHost>();
     host.require("voice")?;
     let ctx: Arc<ModuleCtx> = host.ctx("voice").ok_or("O módulo Voz está desligado nas Configurações.")?;
     let d = dir();
-    if !ready(&d) {
+    let (engine, lang) = current();
+    if !(if engine == Engine::Whisper { whisper::ready() } else { ready(&d) }) {
         return Err("Modelo de voz ausente: baixe em Configurações → Voz.".into());
     }
     if CAPTURING.swap(true, Ordering::SeqCst) {
@@ -152,21 +252,45 @@ fn start(app: &AppHandle) -> Result<(), String> {
     CANCEL.store(false, Ordering::SeqCst);
     let app = app.clone();
     ctx.spawn(move |module_stop| {
-        emit_state(&app, "listening", "");
-        let result = record(&app, &module_stop).and_then(|pcm| match pcm {
+        let state = |s: &str| match mode {
+            Mode::Card | Mode::Assist => emit_state(&app, s, ""),
+            Mode::Flow { .. } => emit_flow(&app, s, 0, ""),
+        };
+        state("listening");
+        let max = if matches!(mode, Mode::Flow { .. }) { super::flow::MAX_SECS * RATE } else { MAX_RECORD };
+        let recorded = record(&app, &module_stop, max);
+        super::flow::ACTIVE.store(false, Ordering::SeqCst); // Esc is Esc again
+        let result = recorded.and_then(|pcm| match pcm {
             Some(pcm) if !CANCEL.load(Ordering::SeqCst) => {
-                emit_state(&app, "transcribing", "");
-                transcribe(&d, &pcm, &module_stop).map(Some)
+                state("transcribing");
+                transcribe(engine, lang, &d, &pcm, &module_stop).map(Some)
             }
             _ => Ok(None),
         });
+        if let Mode::Flow { target } = mode {
+            match result {
+                Ok(Some((text, language))) if !text.is_empty() && !module_stop.load(Ordering::SeqCst) => match super::flow::paste(&text, target) {
+                    Ok(()) => emit_flow(&app, "pasted", text.chars().count(), ""),
+                    Err(m) => {
+                        // Not pasted (another window is in front, or the clipboard refused): the text waits on the card.
+                        let _ = app.emit("voice-text", serde_json::json!({ "text": text, "language": language }));
+                        if m == "moved" { emit_flow(&app, "moved", 0, "") } else { emit_flow(&app, "error", 0, &m) }
+                    }
+                },
+                Err(m) => emit_flow(&app, "error", 0, &m),
+                _ => emit_flow(&app, "idle", 0, ""),
+            }
+            CAPTURING.store(false, Ordering::SeqCst);
+            return;
+        }
         CAPTURING.store(false, Ordering::SeqCst);
         if module_stop.load(Ordering::SeqCst) {
             return; // the module went off: the card is gone too
         }
         match result {
             Ok(Some(t)) if !t.0.is_empty() => {
-                let _ = app.emit("voice-text", serde_json::json!({ "text": t.0, "language": t.1 }));
+                let kind = if mode == Mode::Assist { "assist" } else { "card" };
+                let _ = app.emit("voice-text", serde_json::json!({ "text": t.0, "language": t.1, "mode": kind }));
                 emit_state(&app, "idle", "");
             }
             Ok(_) => emit_state(&app, "idle", ""),
@@ -176,9 +300,9 @@ fn start(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Records until the user stops it or MAX_RECORD. None = nothing said.
+/// Records until the user stops it or `max` samples. None = nothing said.
 /// The microphone is open (and the 30 ms loop runs) only inside this function.
-fn record(app: &AppHandle, module_stop: &AtomicBool) -> Result<Option<Vec<f32>>, String> {
+fn record(app: &AppHandle, module_stop: &AtomicBool, max: usize) -> Result<Option<Vec<f32>>, String> {
     let werr = |e: windows::core::Error| format!("Microfone: {}", e.message());
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
@@ -241,7 +365,7 @@ fn record(app: &AppHandle, module_stop: &AtomicBool) -> Result<Option<Vec<f32>>,
                 peak = peak.max(rms);
                 spoke |= rms >= QUIET;
                 phrase.extend(chunk);
-                if phrase.len() >= MAX_RECORD {
+                if phrase.len() >= max {
                     break 'run;
                 }
             }
@@ -280,21 +404,9 @@ impl Drop for Temp {
     }
 }
 
-/// (text, language). The clip lives in a temp file only while the engine runs.
-fn transcribe(dir: &Path, pcm: &[f32], module_stop: &AtomicBool) -> Result<(String, String), String> {
-    if !ready(dir) {
-        return Err("Modelo de voz ausente ou corrompido.".into());
-    }
-    let tmp = Temp(std::env::temp_dir().join(format!("coucou-voice-{}.wav", std::process::id())));
-    std::fs::write(&tmp.0, wav(pcm)).map_err(|e| e.to_string())?;
-    let mut child = Command::new(dir.join("needle.exe"))
-        .arg("--model")
-        .arg(dir.join("whistle.cact"))
-        .arg("--audio")
-        .arg(&tmp.0)
-        .env("NEEDLE_TELEMETRY", "0")
-        .env("DO_NOT_TRACK", "1")
-        .current_dir(dir)
+/// Runs the engine to completion with stdout captured. Err on timeout or module stop (the child is killed).
+fn run(mut cmd: Command, module_stop: &AtomicBool) -> Result<(Option<i32>, Vec<u8>), String> {
+    let mut child = cmd
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -329,6 +441,31 @@ fn transcribe(dir: &Path, pcm: &[f32], module_stop: &AtomicBool) -> Result<(Stri
         (code, reader.join().unwrap_or_default())
     });
     let Some(code) = code else { return Err("O motor de voz não respondeu a tempo.".into()) };
+    Ok((code, out))
+}
+
+/// (text, language). The clip lives in a temp file only while the engine runs.
+fn transcribe(engine: Engine, lang: &str, dir: &Path, pcm: &[f32], module_stop: &AtomicBool) -> Result<(String, String), String> {
+    let whisper_on = engine == Engine::Whisper;
+    if !(if whisper_on { whisper::ready() } else { ready(dir) }) {
+        return Err("Modelo de voz ausente ou corrompido.".into());
+    }
+    let tmp = Temp(std::env::temp_dir().join(format!("coucou-voice-{}.wav", std::process::id())));
+    std::fs::write(&tmp.0, wav(pcm)).map_err(|e| e.to_string())?;
+    if whisper_on {
+        let mut cmd = Command::new(whisper::exe());
+        cmd.args(whisper::args(lang, &tmp.0, &whisper::model(), whisper::threads())).current_dir(whisper::dir().join("bin").join("Release"));
+        let (code, out) = run(cmd, module_stop)?;
+        drop(tmp);
+        if code != Some(0) {
+            return Err(format!("O motor de voz falhou (código {code:?})."));
+        }
+        let text = whisper::parse_stdout(&String::from_utf8_lossy(&out));
+        return Ok((text, if lang == "auto" { String::new() } else { lang.to_string() }));
+    }
+    let mut cmd = Command::new(dir.join("needle.exe"));
+    cmd.arg("--model").arg(dir.join("whistle.cact")).arg("--audio").arg(&tmp.0).env("NEEDLE_TELEMETRY", "0").env("DO_NOT_TRACK", "1").current_dir(dir);
+    let (code, out) = run(cmd, module_stop)?;
     drop(tmp);
     let stdout = String::from_utf8_lossy(&out).into_owned();
     let v = stdout

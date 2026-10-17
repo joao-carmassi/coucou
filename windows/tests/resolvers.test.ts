@@ -50,8 +50,7 @@ test("resolveEnabled: defaults and requirements", () => {
   const defaults = resolveEnabled(MODULE_INFO, {});
   assert.deepEqual(Object.keys(defaults).filter((id) => defaults[id]), ["board", "claude", "media", "upload"]);
   assert.deepEqual(Object.keys(defaults), MODULE_INFO.map((m) => m.id));
-  const r = resolveEnabled(MODULE_INFO, { claude: false, voice: true });
-  assert.equal(r.voice, false);
+  const r = resolveEnabled(MODULE_INFO, { claude: false, upload: true });
   assert.equal(r.upload, false);
 });
 
