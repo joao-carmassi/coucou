@@ -44,6 +44,8 @@ export interface StatusLine {
   view?: string;
   /** Dimmed (paused). Cards dim through `card.dim`. */
   dim?: boolean;
+  /** Plain text: no shimmer, no entrance animation, no idle frames. Set by the core on source lines; the text swaps instantly. */
+  still?: boolean;
 }
 
 /** A one-line source a module registers (api.status.source): shown when the user pinned it, or while it is the last module opened. */

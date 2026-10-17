@@ -82,3 +82,20 @@ test("releaseCandidate: only a pinned source that exists without content", () =>
   assert.equal(releaseCandidate([], "w.now"), null);
   assert.equal(releaseCandidate([src("w", "now", null)], ""), null);
 });
+
+test("source lines are still (plain); other lines are not", () => {
+  const { pin, last } = sourceLines([src("w", "now", "x"), src("o", "k", "y")], "w.now", "o");
+  assert.equal(pin?.still, true);
+  assert.equal(last?.still, true);
+  assert.equal(Compact.set("a", { priority: 30, text: "t" }) && Compact.resolve(0)?.still, undefined);
+});
+
+test("pin button is absolute at the top right; .pin-room leaves room", async () => {
+  const { readFileSync } = await import("node:fs");
+  const ui = readFileSync(new URL("../src/style/ui.css", import.meta.url), "utf8");
+  const core = readFileSync(new URL("../src/style/core.css", import.meta.url), "utf8");
+  const btn = ui.match(/\.pin-btn \{[^}]*\}/)![0];
+  assert.match(btn, /position: absolute; top: 10px; right: 12px/);
+  assert.match(btn, /width: 24px; height: 24px/);
+  assert.match(core, /\.pin-room \{ padding-right: 48px; \}/);
+});

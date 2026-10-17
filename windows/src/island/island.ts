@@ -686,7 +686,7 @@ export class Island implements IslandHost {
     const fitted = this.views?.get(State.view)?.height ?? null;
     const line = this.compactLine();
     const others = this.textOverGrid() ? 0 : State.gridPills.length;
-    const cw = compactWidth(others, line ? this.lineWidth(line) : 0);
+    const cw = compactWidth(others, line ? this.lineWidth(line) : 0, State.statusLine?.still ? 16 : 8);
     const { w, h } = islandSize(State.mode, State.view, fitted, cw);
     const r = State.mode === "expanded" ? EXPANDED_CORNER : ROUNDED_CORNER;
     return { w, h, r };
@@ -709,7 +709,7 @@ export class Island implements IslandHost {
     if (cur?.textContent === line) return;
     const next = h("span", { text: line });
     this.activityEl.append(next);
-    if (!cur || !this.activityShown) {
+    if (!cur || !this.activityShown || State.statusLine?.still) {
       this.activityEl.querySelectorAll("span").forEach((s) => s !== next && s.remove());
       return;
     }
@@ -1123,7 +1123,7 @@ export class Island implements IslandHost {
       : settling ||
         !this.botCx.settled || !this.botCy.settled || !this.botSize.settled ||
         greetingActive || this.engine.busy || this.tintSettling || overlayBusy ||
-        (State.mode === "compact" && this.activityShown) ||
+        (State.mode === "compact" && this.activityShown && !State.statusLine?.still) ||
         // The auto-close countdown bar is only redrawn here; a stopped loop froze
         // it and it caught up in jumps whenever something else animated.
         (State.mode === "expanded" && !State.isPinned && this.homeCollapseAt != null);
@@ -1140,7 +1140,7 @@ export class Island implements IslandHost {
    *  is drawn in: a CSS animation of its own presented a second frame to the GPU process, at the same
    *  rate, out of phase (60 presents/s instead of 30, ~4 ms of GPU-process CPU each). */
   private shimmer(nowMs: number) {
-    if (State.mode !== "compact" || !this.activityShown) return;
+    if (State.mode !== "compact" || !this.activityShown || State.statusLine?.still) return;
     const span = this.activityEl.lastElementChild as HTMLElement | null;
     if (!span) return;
     const pos = `${100 - Math.floor((nowMs % 2000) / 33.34) * (100 / 60)}% center, 0 0`;
@@ -1336,6 +1336,7 @@ export class Island implements IslandHost {
     const plain = card ? "" : line; // a card has no shimmer: the frame loop stays idle for it
     this.activityEl.style.opacity = plain ? (State.statusLine?.dim ? "0.55" : "1") : "0";
     this.activityEl.classList.toggle("on", !!plain);
+    this.activityEl.classList.toggle("still", !!plain && !!State.statusLine?.still);
     if (plain) this.setActivityText(plain);
     this.activityShown = !!plain;
     this.syncCard(card, line);

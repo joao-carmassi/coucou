@@ -11,7 +11,7 @@ export const LAST_OPENED_PRIORITY = BAND.AMBIENT + 2;
 export interface Src { id: string; owner: string; def: SourceDef; line: StatusLine | null }
 
 const own = (s: Src, priority: number, overGrid: boolean): StatusLine | null =>
-  s.line && { ...s.line, ttlMs: undefined, priority, overGrid, view: s.line.view ?? s.def.view };
+  s.line && { ...s.line, ttlMs: undefined, still: true, priority, overGrid, view: s.line.view ?? s.def.view };
 
 /** The two lines the sources contribute: the pinned one, and the last-opened module's first source with content. */
 export function sourceLines(srcs: Iterable<Src>, pinned: string, lastOwner: string | null): { pin: StatusLine | null; last: StatusLine | null } {
