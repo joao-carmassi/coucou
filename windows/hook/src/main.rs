@@ -469,15 +469,20 @@ struct Event {
 /// Reads stdin and returns the payload to forward plus the event name.
 fn read_event(args: &Args, format: Format) -> Option<Event> {
     let mut raw = Vec::new();
-    if std::io::stdin().read_to_end(&mut raw).is_err() || raw.is_empty() {
+    if std::io::stdin().read_to_end(&mut raw).is_err() {
         return None;
     }
-    // Some shells hand us a UTF-8 BOM; serde_json would choke on it.
-    if raw.starts_with(&[0xEF, 0xBB, 0xBF]) {
-        raw.drain(..3);
-    }
+    build(&raw, args, format)
+}
 
-    let mut payload = serde_json::from_slice::<serde_json::Value>(&raw).ok()?;
+/// The stdin bytes of one hook call as the event to forward. None: nothing usable.
+fn build(raw: &[u8], args: &Args, format: Format) -> Option<Event> {
+    // Some shells hand us a UTF-8 BOM; serde_json would choke on it.
+    let raw = raw.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(raw);
+    if raw.is_empty() {
+        return None;
+    }
+    let mut payload = serde_json::from_slice::<serde_json::Value>(raw).ok()?;
     let map = payload.as_object_mut()?;
 
     // argv: "coucou-hook.exe [--channel <c>] [--agent <n>] [--format <f>] [--entry <e>] [<EventName>]"
@@ -729,6 +734,55 @@ mod tests {
         // missing value
         assert_eq!(args(&["Stop", "--agent"]).agent, "");
         assert_eq!(args(&[]), Args::default());
+    }
+
+    /// The line without what depends on the machine running the test.
+    fn stable(line: &str) -> serde_json::Value {
+        let mut v: serde_json::Value = serde_json::from_str(line).unwrap();
+        for k in ["terminal_pids", "term_program", "wt_session", "term_session_id", "vscode_pid", "session_pid", "entrypoint", "wsl_distro", "config_dir"] {
+            v.as_object_mut().unwrap().remove(k);
+        }
+        v
+    }
+
+    #[test]
+    fn claude_line_is_what_it_always_was() {
+        let raw = br#"{"hook_event_name":"PermissionRequest","session_id":"s1","cwd":"C:/p","tool_name":"Bash","tool_input":{"command":"ls"},"tool_response":"x","transcript_path":"t"}"#;
+        let a = args(&["--channel", "agents", "--agent", "x"]);
+        let e = build(raw, &a, Format::Claude).unwrap();
+        assert!(e.waits && e.event == "PermissionRequest" && e.line.ends_with('\n'));
+        assert_eq!(
+            stable(&e.line),
+            serde_json::json!({
+                "hook_event_name": "PermissionRequest", "session_id": "s1", "cwd": "C:/p", "tool_name": "Bash",
+                "tool_input": { "command": "ls" }, "coucou_agent": "x", "coucou_channel": "agents", "coucou_wait": true
+            })
+        );
+        // The event name may come from argv, a BOM is skipped, and a fire-and-forget event does not wait.
+        let e = build(b"\xEF\xBB\xBF{\"session_id\":\"s\",\"cwd\":\"C:/p\"}", &args(&["Stop"]), Format::Claude).unwrap();
+        assert!(!e.waits);
+        assert_eq!(stable(&e.line), serde_json::json!({ "session_id": "s", "cwd": "C:/p", "hook_event_name": "Stop" }));
+        for bad in [&b""[..], b"\xEF\xBB\xBF", b"nope", b"[1]"] {
+            assert!(build(bad, &a, Format::Claude).is_none());
+        }
+    }
+
+    #[test]
+    fn cursor_shell_line_waits_and_without_a_pipe_still_answers_ask() {
+        let raw = br#"{"hook_event_name":"beforeShellExecution","conversation_id":"c","workspace_roots":["C:/w"],"command":"ls","user_email":"a@b.c"}"#;
+        let e = build(raw, &args(&["--channel", "agents", "--agent", "cursor", "--format", "cursor"]), Format::Cursor).unwrap();
+        assert!(e.waits);
+        assert_eq!(
+            stable(&e.line),
+            serde_json::json!({
+                "hook_event_name": "PermissionRequest", "session_id": "c", "cwd": "C:/w", "workspace_roots": ["C:/w"],
+                "tool_name": "Shell", "tool_input": { "command": "ls" },
+                "coucou_agent": "cursor", "coucou_channel": "agents", "coucou_wait": true
+            })
+        );
+        // No usable stdin: no event, and main prints the ask reply so Cursor never blocks.
+        assert!(build(b"", &args(&[]), Format::Cursor).is_none());
+        assert_eq!(formats::fallback(Format::Cursor, "").as_deref(), Some(r#"{"continue":true,"permission":"ask"}"#));
     }
 
     #[test]

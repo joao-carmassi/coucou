@@ -80,3 +80,5 @@ Approval needs the "Aprovar permissões pela ilha" switch. The only answers sent
 ### Dialects
 
 The hook exe takes `--format <codex|gemini|cursor|copilot|opencode>` and renames the agent's events to the ones above (no `--format` = Claude, unchanged): Gemini `BeforeAgent`/`BeforeTool`/`AfterTool`/`AfterAgent` become `UserPromptSubmit`/`PreToolUse`/`PostToolUse`/`Stop`; Cursor `sessionStart`/`postToolUse`/`stop`/`sessionEnd` map the same way, `beforeShellExecution` becomes a `PermissionRequest` for the tool `Shell`, `conversation_id` becomes `session_id`, and `user_email` is dropped. Other tools can still send the events above with `--agent <name>` (legacy channel).
+
+NOTE (verify live): the Cursor reply carries `"continue":true` next to `"permission"`. It follows the documented shape but has not been seen accepted by a real Cursor. If Cursor rejects it, drop `continue` in `hook/src/formats.rs` (`cursor_json`) and keep `permission`.

@@ -117,10 +117,20 @@ async fn agents_apply(app: AppHandle, agent: String, install: bool, fingerprint:
     blocking(move || install::apply(def, install, &fingerprint, &relay::client_exe_path())).await?
 }
 
+/// Only requests that came in on our channel can be answered here; another module's never.
+fn own_request(request_id: &str) -> Result<(), String> {
+    if relay::is_pending_on(request_id, CHANNEL.name) {
+        Ok(())
+    } else {
+        Err("Pedido desconhecido.".into())
+    }
+}
+
 /// The island has the card on screen; the long wait may begin.
 #[tauri::command]
 fn agents_ack(app: AppHandle, host: State<ModuleHost>, request_id: String) -> Result<(), String> {
     host.require("agents")?;
+    own_request(&request_id)?;
     relay::ack(&app, &request_id);
     Ok(())
 }
@@ -129,6 +139,7 @@ fn agents_ack(app: AppHandle, host: State<ModuleHost>, request_id: String) -> Re
 #[tauri::command]
 fn agents_decline(app: AppHandle, host: State<ModuleHost>, request_id: String) -> Result<(), String> {
     host.require("agents")?;
+    own_request(&request_id)?;
     relay::decline(&app, &request_id);
     Ok(())
 }
@@ -137,6 +148,7 @@ fn agents_decline(app: AppHandle, host: State<ModuleHost>, request_id: String) -
 #[tauri::command]
 fn agents_decide(app: AppHandle, host: State<ModuleHost>, request_id: String, word: String) -> Result<(), String> {
     host.require("agents")?;
+    own_request(&request_id)?;
     match decision_word(&word) {
         Some(w) => {
             log::line(format!("agents decision id={request_id} {w}"));

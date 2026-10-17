@@ -27,26 +27,26 @@ pub fn command_line(exe: &str, id: &str) -> String {
     format!("{exe} {CHANNEL} --agent {id} --format {id}")
 }
 
-/// Does a path need quoting in PowerShell, cmd and sh alike?
-fn needs_quote(s: &str) -> bool {
-    s.chars().any(|c| c.is_whitespace() || "&()^%!;,'\"`$".contains(c))
+/// Safe bare in PowerShell, cmd and sh alike: only ASCII letters, digits and `\:._-~`.
+fn is_plain(s: &str) -> bool {
+    s.chars().all(|c| c.is_ascii_alphanumeric() || "\\:._-~".contains(c))
 }
 
-/// The relay's path as it goes into a command line: the 8.3 form of its folder when the plain
-/// path needs quoting (the file name stays, the marker keeps matching), quoted as a last
-/// resort. The flag says the quoted form was needed and should be checked by hand.
-pub fn exe_for_command(exe: &Path) -> (String, bool) {
+/// The relay's path as it goes into a command line: as it is when plain, else the 8.3 form of
+/// its folder (the file name stays, so the marker keeps matching). No quoted fallback: quotes
+/// break in PowerShell and `$ ` % are expanded, so without a plain path nothing is written.
+pub fn exe_for_command(exe: &Path) -> Result<String, String> {
     let plain = exe.to_string_lossy().to_string();
-    if !needs_quote(&plain) {
-        return (plain, false);
+    if is_plain(&plain) {
+        return Ok(plain);
     }
     if let (Some(dir), Some(name)) = (exe.parent().and_then(short_dir), exe.file_name()) {
         let short = dir.join(name).to_string_lossy().to_string();
-        if !needs_quote(&short) {
-            return (short, false);
+        if is_plain(&short) {
+            return Ok(short);
         }
     }
-    (format!("\"{plain}\""), true)
+    Err("O caminho do relay tem espaços ou caracteres especiais e o Windows não tem nome curto (8.3) para ele. Nada foi gravado: ative nomes curtos no volume ou mova a pasta de dados do Coucou.".into())
 }
 
 fn short_dir(dir: &Path) -> Option<PathBuf> {
@@ -234,8 +234,6 @@ pub struct HookPreview {
     pub settings_path: String,
     /// Identifies the bytes the diff was computed from; handed back to `apply`.
     pub fingerprint: String,
-    /// The command had to be quoted: check it by hand once.
-    pub manual: bool,
 }
 
 /// What the file is now and what it would become (None = the file goes).
@@ -243,7 +241,6 @@ struct Plan {
     path: PathBuf,
     before: String,
     after: Option<String>,
-    manual: bool,
 }
 
 fn pretty(v: &Value) -> String {
@@ -254,12 +251,11 @@ fn pretty(v: &Value) -> String {
 
 fn plan(def: &AgentDef, install: bool, exe: &Path) -> Result<Plan, String> {
     let path = def.path();
-    let (exe_text, manual) = exe_for_command(exe);
     match def.kind {
         Kind::JsonMerge { .. } => {
             let current = cfgfile::read_json_strict(&path)?;
-            let next = if install { merged(def, &current, &command_line(&exe_text, def.id))? } else { without_ours(def, &current)? };
-            Ok(Plan { path, before: pretty(&current), after: Some(pretty(&next)), manual })
+            let next = if install { merged(def, &current, &command_line(&exe_for_command(exe)?, def.id))? } else { without_ours(def, &current)? };
+            Ok(Plan { path, before: pretty(&current), after: Some(pretty(&next)) })
         }
         Kind::OwnFile { body, .. } => {
             let before = match std::fs::read_to_string(&path) {
@@ -267,12 +263,12 @@ fn plan(def: &AgentDef, install: bool, exe: &Path) -> Result<Plan, String> {
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
                 Err(e) => return Err(format!("Não consegui ler {}: {e}", path.display())),
             };
-            if !install && !before.is_empty() && !own_text_is_ours(&before) {
-                return Err(format!("{} não foi escrito pelo Coucou — nada será removido.", path.display()));
+            if !before.is_empty() && !own_text_is_ours(&before) {
+                return Err(format!("{} não foi escrito pelo Coucou — nada será alterado.", path.display()));
             }
             // Copilot's file holds the exe as a plain JSON string; opencode's too. Neither goes through a shell.
             let exe_plain = exe.to_string_lossy();
-            Ok(Plan { path, before, after: install.then(|| body(&exe_plain, def.id)), manual: false })
+            Ok(Plan { path, before, after: install.then(|| body(&exe_plain, def.id)) })
         }
     }
 }
@@ -284,7 +280,6 @@ pub fn preview(def: &AgentDef, install: bool, exe: &Path) -> Result<HookPreview,
         backup: cfgfile::backup_path(&p.path).to_string_lossy().to_string(),
         settings_path: p.path.to_string_lossy().to_string(),
         fingerprint: cfgfile::fingerprint_of(&p.path),
-        manual: p.manual,
     })
 }
 
@@ -408,11 +403,13 @@ mod tests {
 
     #[test]
     fn a_path_with_spaces_is_not_left_bare() {
-        assert!(!needs_quote(EXE));
-        assert!(needs_quote(r"C:\Users\João Vitor\x.exe"));
-        // Quoted as the last resort, flagged for a manual check.
-        let (s, manual) = exe_for_command(Path::new(r"Z:\no such dir\coucou-hook.exe"));
-        assert!(s == r#""Z:\no such dir\coucou-hook.exe""# && manual);
-        assert_eq!(exe_for_command(Path::new(EXE)), (EXE.to_string(), false));
+        assert!(is_plain(EXE));
+        for bad in [r"C:\Users\João Vitor\x.exe", r"C:\a$b\x.exe", r"C:\a`b\x.exe", r"C:\100%\x.exe", "C:\\a'b\\x.exe", r"C:\a{b}\x.exe", r"C:\a=b\x.exe"] {
+            assert!(!is_plain(bad), "{bad}");
+        }
+        // No short name and not plain: refused, never quoted.
+        let err = exe_for_command(Path::new(r"Z:\no such dir\coucou-hook.exe")).unwrap_err();
+        assert!(err.contains("Nada foi gravado"));
+        assert_eq!(exe_for_command(Path::new(EXE)).unwrap(), EXE);
     }
 }

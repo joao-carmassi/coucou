@@ -45,6 +45,12 @@ class Agents {
   async onHook(p: HookPayload) {
     const id = p.coucou_agent ?? "";
     let row = this.rows.find((r) => r.id === id);
+    // The relay's ack window is short: no waiting for the list to load.
+    if (!row && p.hook_event_name === "PermissionRequest") {
+      if (p.request_id) void AgentsBridge.decline(p.request_id);
+      void this.refresh();
+      return;
+    }
     if (!row && this.alive) {
       await this.refresh();
       row = this.rows.find((r) => r.id === id);

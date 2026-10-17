@@ -85,7 +85,7 @@ const CURSOR_EVENTS: &[(&str, u64)] = &[
     ("sessionEnd", 10),
 ];
 // No PreToolUse (Copilot fails closed on it) and no PermissionRequest (observe only).
-pub const COPILOT_EVENTS: &[&str] = &["SessionStart", "SessionEnd", "UserPromptSubmit", "PostToolUse", "Stop", "Notification"];
+pub const COPILOT_EVENTS: &[&str] = &["SessionStart", "SessionEnd", "UserPromptSubmit", "PostToolUse", "Stop"];
 
 fn copilot_path() -> PathBuf {
     copilot_dir().join("hooks").join("coucou.json")

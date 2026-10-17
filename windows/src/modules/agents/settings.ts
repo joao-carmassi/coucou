@@ -64,7 +64,6 @@ function agentsSection(ms: ModuleSettings, ui: SettingsUi): { el: HTMLElement } 
       });
       list.append(
         h("div", { class: "hint", text: install ? `É exatamente isto que vai mudar em ${p.settingsPath}. O que não é do Coucou fica intacto.` : "Isso remove só o que é do Coucou. O resto fica intacto." }),
-        h("div", { class: "agents-note", style: p.manual ? "" : "display:none", text: "O caminho do relay precisou de aspas. Confira no agente se o hook roda." }),
         renderDiff(p.diff),
         h("div", { class: "row" }, h("span", { class: "path", text: `Backup → ${p.backup}` })),
         h("div", { class: "row" }, confirm, h("button", { text: "Cancelar", onclick: back })),

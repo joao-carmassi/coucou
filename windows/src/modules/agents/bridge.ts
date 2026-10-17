@@ -3,7 +3,7 @@ import type { AgentInfo } from "./api";
 
 /** What Rust says about an agent, plus where its hook file is. */
 export interface AgentRow extends AgentInfo { configPath: string }
-export interface HookPreview { diff: string; backup: string; settingsPath: string; fingerprint: string; manual: boolean }
+export interface HookPreview { diff: string; backup: string; settingsPath: string; fingerprint: string }
 
 export const AgentsBridge = {
   list: async (): Promise<AgentRow[]> => (await command<AgentRow[]>("agents_list")) ?? [],
