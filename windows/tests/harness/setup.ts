@@ -1,7 +1,7 @@
 // Environment for the island harness: canvas, Tauri bridge and recorded calls.
 import { vi } from "vitest";
 
-export const calls = { invoke: [] as { cmd: string; args?: unknown }[], listen: [] as string[] };
+export const calls = { invoke: [] as { cmd: string; args?: unknown }[], listen: [] as string[], emit: [] as { event: string; payload: unknown }[] };
 
 /** Looks like a 2d context for anything the code calls: functions are no-ops, props are 0/settable. */
 const ctx2d: unknown = new Proxy({}, {
@@ -25,6 +25,9 @@ vi.mock("@tauri-apps/api/core", () => ({
   },
 }));
 vi.mock("@tauri-apps/api/event", () => ({
+  emitTo: async (_target: string, event: string, payload?: unknown) => {
+    calls.emit.push({ event, payload });
+  },
   listen: async (name: string) => {
     calls.listen.push(name);
     return () => {};

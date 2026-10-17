@@ -233,6 +233,23 @@ pub fn make_non_activating(win: &WebviewWindow) {
     }
 }
 
+/// Only the ellipse `(x, y, w, h)` (physical px, window coordinates) takes the mouse: the rest of the
+/// window is click-through at the OS level, with no polling and no event needed.
+pub fn set_hit_ellipse(win: &WebviewWindow, x: i32, y: i32, w: i32, h: i32) {
+    let Some(hwnd) = hwnd_of(win) else { return };
+    unsafe {
+        use ::windows::Win32::Graphics::Gdi::{CreateEllipticRgn, DeleteObject, SetWindowRgn, HGDIOBJ};
+        let rgn = CreateEllipticRgn(x, y, x + w, y + h);
+        if rgn.is_invalid() {
+            return;
+        }
+        // The system owns the region once SetWindowRgn succeeds; on failure it is ours to free.
+        if SetWindowRgn(hwnd, Some(rgn), true) == 0 {
+            let _ = DeleteObject(HGDIOBJ(rgn.0));
+        }
+    }
+}
+
 /// The window that had the focus when the palette hotkey fired (0 = none).
 static PRIOR_FOREGROUND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
 

@@ -35,6 +35,10 @@ pub struct Settings {
     pub palette_hotkey: String,
     /// Island offset from the centre of each display (key = `island::monitor_key`, value = logical px).
     pub island_placement: BTreeMap<String, f64>,
+    /// The floating Mochi window: while on, the island draws no Mochi of its own.
+    pub companion_enabled: bool,
+    /// Last position of that window in physical screen px ("x", "y"); empty = default corner.
+    pub companion_pos: BTreeMap<String, f64>,
     /// Keys this build no longer knows (the removed chat's `model`, `chatBackend`…):
     /// kept so saving never drops them from an installed settings.json.
     #[serde(flatten)]
@@ -70,6 +74,8 @@ impl Default for Settings {
             mochi_sleep_minutes: 10.0,
             palette_hotkey: DEFAULT_PALETTE_HOTKEY.into(),
             island_placement: Default::default(),
+            companion_enabled: false,
+            companion_pos: Default::default(),
             extra: Default::default(),
         }
     }
@@ -242,6 +248,18 @@ mod tests {
         assert!(!old.onboarded_version.is_empty(), "upgrading user is not onboarded again");
         let set: Settings = serde_json::from_str(r#"{"onboardedVersion":"0.1.0"}"#).unwrap();
         assert_eq!(set.onboarded_version, "0.1.0");
+    }
+
+    #[test]
+    fn companion_keys_round_trip_and_an_old_file_loads() {
+        let old: Settings = serde_json::from_str(r#"{"soundVolume":0.3}"#).unwrap();
+        assert!(!old.companion_enabled, "default off");
+        assert!(old.companion_pos.is_empty());
+        let merged = merge_patch(&old, serde_json::from_str(r#"{"companionEnabled":true,"companionPos":{"x":10.0,"y":20.0}}"#).unwrap()).unwrap();
+        let back: Settings = serde_json::from_str(&serde_json::to_string(&merged).unwrap()).unwrap();
+        assert!(back.companion_enabled);
+        assert_eq!(back.companion_pos.get("y"), Some(&20.0));
+        assert!(back.extra.get("companionEnabled").is_none(), "known keys never land in extra");
     }
 
     #[test]

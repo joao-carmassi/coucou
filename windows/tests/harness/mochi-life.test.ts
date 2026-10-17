@@ -49,8 +49,9 @@ describe("level and rest", () => {
     const { Island } = await import("../../src/island/island");
     const { State } = await import("../../src/core/state");
     State.mode = "hidden";
-    const isl = Object.create(Island.prototype) as { avatarLevel(v: number): void; engine: BotEngine };
+    const isl = Object.create(Island.prototype) as { avatarLevel(v: number): void; engine: BotEngine; link: { on: boolean } };
     isl.engine = new BotEngine();
+    isl.link = { on: false };
     raf.mockClear();
     for (let i = 0; i < 5; i++) isl.avatarLevel(0.8);
     expect(raf).not.toHaveBeenCalled();

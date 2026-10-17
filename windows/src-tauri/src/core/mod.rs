@@ -4,6 +4,7 @@
 pub mod archive;
 pub mod b64;
 pub mod cfgfile;
+pub mod companion;
 pub mod drop_target;
 pub mod fswatch;
 pub mod host;
