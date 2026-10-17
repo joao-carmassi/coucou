@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.4
+
+- Clima redesigned (Agora / 7 dias tabs; hero, wind/humidity/rain/UV tiles, 12-hour grid, 7-day range bars; forecast now 7 days with wind direction and UV).
+- Inner tabs (Pausas, Estatísticas de IA) fade between panels.
+- Pausas: the reminder tile follows the interval setting right away.
+- Tocando: height fits the content (no dead space under the controls).
+
 ## 0.12.3
 
 - Estatísticas de IA and Uso do plano redesigned in the Pausas style (period tabs, tiles, bars, daily chart; plan windows with colour thresholds and reset countdown).

@@ -592,7 +592,7 @@ dependencies = [
 
 [[package]]
 name = "coucou"
-version = "0.12.3"
+version = "0.12.4"
 dependencies = [
  "hmac",
  "image",
@@ -618,7 +618,7 @@ dependencies = [
 
 [[package]]
 name = "coucou-hook"
-version = "0.12.3"
+version = "0.12.4"
 dependencies = [
  "serde_json",
  "windows 0.61.3",
