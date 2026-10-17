@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.12.2
+
+- Uso do plano: its own tab icon; the view sizes itself to its content (no scroll with two providers, scroll only past the panel limit).
+- Pausas redesigned: Hoje / 7 dias tabs, break counters (taken of due), time since the last break, streak, per-app bars and a 7-day chart. Breaks are now recorded locally (counters only, `eyecare-breaks.json`, cleared by "Apagar dados").
+
 ## 0.12.1
 
 - Removed the three buttons on the home card (open, flip, Utilidades) and the Utilidades view; the whole card still opens on click.
