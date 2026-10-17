@@ -58,8 +58,9 @@ describe("actions.all / run", () => {
     expect(Object.keys(z)).not.toContain("run");
     expect(probe.beta!.actions.run("alpha.zeta")).toBe(true);
     expect(ran).toEqual(["alpha.zeta"]);
-    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const err = vi.spyOn(island, "error");
     expect(probe.beta!.actions.run("alpha.boom")).toBe(true);
+    expect(err).toHaveBeenCalledTimes(1);
     expect(probe.beta!.actions.run("nope.x")).toBe(false);
     err.mockRestore();
   });

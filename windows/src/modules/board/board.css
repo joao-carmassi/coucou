@@ -100,3 +100,5 @@
 .board-util span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .board-util kbd { font: 600 9px var(--font); color: var(--dim-4); }
 .board-utils-empty { grid-column: 1 / -1; font: 11px var(--font); color: var(--dim-3); padding: 8px; }
+.home .left .tile-head { padding-right: 66px; }
+.left .board-last { right: 70px; text-align: left; }

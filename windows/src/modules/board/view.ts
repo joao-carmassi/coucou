@@ -162,6 +162,7 @@ export function buildBoard(ctx: ViewContext): ViewHost {
       const others = api.pills.others().slice(0, 6);
       // Nothing else active: the left card takes the full width. Few others: a narrow right column, one per row.
       setSolo(el, others.length === 0);
+      (others.length === 0 ? left : right).prepend(chip); // solo hides the right column
       setSlim(el, others.length > 0 && others.length <= 3);
       pills.dataset.cols = others.length > 3 ? "2" : "1";
       const nextPills = others.map((t) => { const look = askLook(t.id); return `${t.id}:${look?.badge ?? t.badge ?? ""}:${look?.label ?? t.label}`; }).join("|");
