@@ -33,6 +33,7 @@ vi.mock("../../src/modules/timer/timer", async (orig) => {
 });
 import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
+import { State } from "../../src/core/state";
 import { MODULES as REAL } from "../../src/modules/index";
 import { MODULE_INFO } from "../../src/modules/catalog";
 import { info, steps, PROVIDERS } from "../../src/modules/integrations/store";
@@ -648,6 +649,32 @@ describe("eyecare", () => {
     snap("eyecare-week", T.hosts.eyecare.el);
     expect(T.hosts.eyecare.height).toBe(272);
     delete T.answers.eyecare_usage; delete T.answers.eyecare_breaks;
+  });
+});
+
+// ── Uso do plano: Claude off, on (with a model weekly), then an error after Atualizar ────────
+
+describe("planusage", () => {
+  const at = NOW.getTime();
+  const win = (label: string, usedPct: number | null, inMin: number | null) => ({ label, usedPct, resetsAt: inMin == null ? null : at + inMin * MIN });
+  it("Claude off, on, and failing", async () => {
+    const settings = State.settings as unknown as Record<string, unknown>;
+    settings.planusageClaudeNet = false;
+    T.handlers["planusage-changed"].forEach((fn) => fn({ payload: [{ agent: "codex", source: "local", at, windows: [win("5 h", 82.4, 130), win("semana", 31, 4 * 1440 + 200)] }] }));
+    snap("planusage-claude-off", await showing("planusage"));
+    expect(T.hosts.planusage.height).toBe(278);
+    settings.planusageClaudeNet = true;
+    T.answers.planusage_claude = () => ({ agent: "claude", source: "network", at, windows: [win("5 h", 12, 40), win("semana", 57, 2 * 1440), win("weekly_opus", 93, 2 * 1440)] });
+    const again = async () => { (T.hosts.planusage.el.querySelector(".planusage-head .text-link") as HTMLElement).click(); await flush(); };
+    await again();
+    snap("planusage-claude-on", T.hosts.planusage.el);
+    expect(T.hosts.planusage.height).toBe(300);
+    T.answers.planusage_claude = () => { throw new Error("Login do Claude Code não encontrado"); };
+    await again();
+    snap("planusage-claude-error", T.hosts.planusage.el);
+    expect(T.hosts.planusage.height).toBe(256);
+    settings.planusageClaudeNet = false;
+    delete T.answers.planusage_claude;
   });
 });
 

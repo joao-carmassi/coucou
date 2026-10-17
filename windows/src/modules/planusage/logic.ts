@@ -30,13 +30,26 @@ export function lineText(codex: AgentUsage | null, claude: AgentUsage | null, no
   return parts.length ? parts.join(" | ") : null;
 }
 
-/** "reinicia em 2 h 10 min", "reinicia em 3 d 4 h"; "" when unknown or past. */
+/** "zera em 2 h 10 min", "zera em 3 d 4 h"; "" when unknown or past. */
 export function resetText(resetsAt: number | null, now: number): string {
   if (resetsAt == null || resetsAt <= now) return "";
   const min = Math.ceil((resetsAt - now) / 60_000);
-  if (min < 60) return `reinicia em ${min} min`;
-  if (min < 2880) return `reinicia em ${Math.floor(min / 60)} h ${min % 60} min`;
-  return `reinicia em ${Math.floor(min / 1440)} d ${Math.floor((min % 1440) / 60)} h`;
+  if (min < 60) return `zera em ${min} min`;
+  if (min < 2880) return `zera em ${Math.floor(min / 60)} h ${min % 60} min`;
+  return `zera em ${Math.floor(min / 1440)} d ${Math.floor((min % 1440) / 60)} h`;
+}
+
+/** Bar colour: calm under 70 %, amber from 70 %, red from 90 % (where the notice fires). */
+export const level = (p: number): "calm" | "warm" | "high" => (p >= NOTICE_PCT ? "high" : p >= 70 ? "warm" : "calm");
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** Row label: "5 horas", "Semana", "Opus · semana" (weekly_opus), "Sonnet 5"; "N min" as is. */
+export function windowLabel(label: string): string {
+  if (label === "5 h") return "5 horas";
+  if (label === "semana") return "Semana";
+  const s = label.replace(/[_-]+/g, " ").trim();
+  const model = /opus|sonnet|haiku/i.exec(s)?.[0];
+  return model && /week|seven/i.test(s) ? `${cap(model.toLowerCase())} · semana` : cap(s);
 }
 
 export const noticeKey = (agent: string, label: string) => `plan-${agent}-${label}`;
@@ -58,9 +71,13 @@ export function dueNotices(u: AgentUsage, seen: Map<string, number>, now: number
 /** Claude's answer is reused for 5 minutes (errors included), as on the Rust side. */
 export const claudeFresh = (at: number | null, now: number) => at != null && now - at < CLAUDE_MS;
 
-/** Island height for what the view shows: `windows` = bar rows per block (0 = a one-line note instead). Scrolls only past `max`. */
-export function fitPlan(blocks: number[], max = 320, chrome = 56, pad = 14): { height: number; scroll: boolean } {
-  const parts = [...blocks.map((w) => (w ? 14 + w * 35 : 31)), 30]; // block = title + rows (or title + note); last = "Atualizar"
-  const need = chrome + 2 * pad + parts.reduce((a, b) => a + b, 0) + 10 * (parts.length - 1);
-  return { height: Math.min(max, Math.max(160, need)), scroll: need > max };
+// Fixed heights of the view's parts (planusage.css), so the island fits its content without measuring. chrome 56 =
+// #content padding + header + card border (as eyecare); body padding 12 + 12; head row 22.
+const FIT_BASE = 56 + 24 + 22;
+// Per block: gap 10 above, border 2, padding 8 + 8, block head 14, gap 8; then lines of 16 with 6 between.
+const BLOCK = 10 + 2 + 16 + 14 + 8, LINE = 16, LINE_GAP = 6;
+/** Island height for the blocks shown: `lines` per block (a bar row or a note line, at least 1). Scrolls only past `max`. */
+export function fitPlan(lines: number[], max = 320): { height: number; scroll: boolean } {
+  const need = FIT_BASE + lines.reduce((a, n) => a + BLOCK + Math.max(1, n) * LINE + (Math.max(1, n) - 1) * LINE_GAP, 0);
+  return { height: Math.min(max, need), scroll: need > max };
 }

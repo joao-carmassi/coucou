@@ -23,9 +23,9 @@ test("a window past its reset shows a dash, not a stale number", () => {
 });
 
 test("reset text", () => {
-  assert.equal(resetText(NOW + 5 * 60_000, NOW), "reinicia em 5 min");
-  assert.equal(resetText(NOW + 130 * 60_000, NOW), "reinicia em 2 h 10 min");
-  assert.equal(resetText(NOW + 3 * 86_400_000 + 4 * 3_600_000, NOW), "reinicia em 3 d 4 h");
+  assert.equal(resetText(NOW + 5 * 60_000, NOW), "zera em 5 min");
+  assert.equal(resetText(NOW + 130 * 60_000, NOW), "zera em 2 h 10 min");
+  assert.equal(resetText(NOW + 3 * 86_400_000 + 4 * 3_600_000, NOW), "zera em 3 d 4 h");
   assert.equal(resetText(null, NOW), "");
   assert.equal(resetText(NOW, NOW), "");
 });
@@ -52,13 +52,18 @@ test("line takes Claude's window labelled 5 h wherever it is", () => {
   assert.equal(lineText(null, c, NOW), "Claude 5 h 23%");
 });
 
-test("fitPlan: Codex + Claude (2 windows each) fit without scroll; many blocks scroll at the cap", async () => {
+test("fitPlan: Codex + Claude (2 windows each) fit without scroll; past PANEL_H it scrolls at the cap", async () => {
   const { fitPlan } = await import("../src/modules/planusage/logic.ts");
-  const two = fitPlan([2, 2]);
-  assert.equal(two.scroll, false);
-  assert.ok(two.height <= 320);
-  assert.ok(fitPlan([1, 1]).height < two.height);
-  const many = fitPlan([2, 2, 2, 2]);
-  assert.equal(many.scroll, true);
-  assert.equal(many.height, 320);
+  assert.deepEqual(fitPlan([2, 2]), { height: 278, scroll: false });
+  assert.deepEqual(fitPlan([2, 3]), { height: 300, scroll: false }, "a model weekly still fits");
+  assert.deepEqual(fitPlan([1, 1]), { height: 234, scroll: false });
+  assert.deepEqual(fitPlan([0, 1]), fitPlan([1, 1]), "an empty block still holds one note line");
+  assert.deepEqual(fitPlan([2, 4]), { height: 320, scroll: true });
+});
+
+test("level thresholds and window labels", async () => {
+  const { level, windowLabel } = await import("../src/modules/planusage/logic.ts");
+  assert.deepEqual([0, 69.4, 70, 89.9, 90, 100].map(level), ["calm", "calm", "warm", "warm", "high", "high"]);
+  assert.deepEqual(["5 h", "semana", "weekly_opus", "sonnet 5", "seven_day_sonnet", "90 min"].map(windowLabel),
+    ["5 horas", "Semana", "Opus · semana", "Sonnet 5", "Sonnet · semana", "90 min"]);
 });
