@@ -111,6 +111,17 @@ describe("nowplaying lifecycle", () => {
     expect(State.statusLine?.card?.sub).toBe("Artista");
   });
 
+  it("a non-ambient pill (another task) hides the card; an ambient one does not", () => {
+    const own = { owner: "x", label: "l", color: "#fff", mood: "idle" as const };
+    const before = State.pills.length;
+    State.pills.push({ ...own, id: "t1" }, { ...own, id: "t2", ambient: true });
+    expect(State.statusLine?.card?.sub).toBe("Artista"); // t1 is the front pill; t2 is ambient
+    State.pills.push({ ...own, id: "t3" });
+    expect(State.statusLine).toBeNull(); // t3 is a real second task
+    State.pills.length = before;
+    State.focusId = State.focusId && State.pills.some((p) => p.id === State.focusId) ? State.focusId : null;
+  });
+
   it("paused or hidden island stops the capture; the same state twice does not repeat the call", async () => {
     const n0 = captures().length;
     emit("nowplaying-state", track(true)); // unchanged

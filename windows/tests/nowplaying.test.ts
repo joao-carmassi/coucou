@@ -81,6 +81,7 @@ test("wantTick: only while playing and the time is on screen", () => {
   assert.equal(wantTick({ ...b, hasLength: false }), false);
   assert.equal(wantTick({ ...b, playing: false }), false);
   assert.equal(wantTick({ ...b, mode: "hidden" }), false);
+  assert.equal(wantTick({ ...b, paused: true }), false);
   assert.equal(wantTick({ ...b, mode: "expanded" }), false);
   assert.equal(wantTick({ ...b, mode: "expanded", view: "nowplaying", hasLength: false }), true);
 });

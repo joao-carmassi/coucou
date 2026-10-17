@@ -31,7 +31,7 @@ function start(api: IslandApi): Disposer {
       void Bridge.capture(capture).catch((e) => api.island.error(e));
       if (!capture) { NP.bands = []; api.avatar.level(0); NP.paintBars?.(); }
     }
-    const progress = wantTick({ playing: !!NP.track?.playing, mode, view, hasLength: !!NP.track?.durationMs });
+    const progress = wantTick({ playing: !!NP.track?.playing, paused: api.paused(), mode, view, hasLength: !!NP.track?.durationMs && NP.track.positionMs !== null });
     if (progress && !tick) tick = api.interval(() => { NP.paintProgress?.(); publishCard(); }, 1000, { whenVisible: true });
     else if (!progress && tick) { tick(); tick = null; }
     publishCard();
@@ -63,7 +63,7 @@ function start(api: IslandApi): Disposer {
       if (!capturing) return; // a late event after the capture was switched off
       NP.bands = p.bands;
       NP.paintBars?.();
-      if (cfg().nowplayingDance !== false) api.avatar.level(danceLevel(p.level, NP.sens));
+      if (cfg().nowplayingDance !== false) api.avatar.level(danceLevel(p.level, NP.sens), { dance: true });
     }),
     // The settings window saved: the core updates State after its own listener, so look one tick later.
     api.listen("settings-changed", () => { api.timeout(reconcile, 0); }),

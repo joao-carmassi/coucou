@@ -710,8 +710,13 @@ export class Island implements IslandHost {
     const c = State.statusLine?.card;
     if (!c) return this.textWidth(line);
     const m = (s: string) => (s ? this.measureCtx.measureText(s).width : 0);
-    this.textWidth(line); // sets the measuring font
-    return (c.art !== undefined ? CARD_ART + 8 : 0) + Math.max(m(line), m(c.sub ?? "")) + (c.trail ? 10 + m(c.trail) : 0);
+    const cs = getComputedStyle(this.cardParts.title);
+    this.measureCtx.font = `600 11px ${cs.fontFamily}`; // the title's own font (bold)
+    const t = m(line);
+    this.measureCtx.font = `400 10px ${cs.fontFamily}`;
+    const s = m(c.sub ?? "");
+    this.measureCtx.font = `400 11px ${cs.fontFamily}`;
+    return (c.art !== undefined ? CARD_ART + 8 : 0) + Math.max(t, s) + (c.trail ? 10 + m(c.trail) : 0) + 2;
   }
 
   /** Paints the card of the status line (cover, two lines, trailing text); each part only when it changed. */
@@ -1433,9 +1438,9 @@ export class Island implements IslandHost {
     this.ensureRunning();
   }
 
-  avatarLevel(v: number) {
+  avatarLevel(v: number, opts?: { dance?: boolean }) {
     // Hidden: nothing is drawn, so no frame is requested; the value just decays.
-    if (this.engine.setLevel(v) && v > 0.02 && State.mode !== "hidden") this.ensureRunning();
+    if (this.engine.setLevel(v, performance.now(), !!opts?.dance) && v > 0.02 && State.mode !== "hidden") this.ensureRunning();
   }
 
   /** Body color the island Mochi is currently drawn with (#rrggbb), or null for the default. */

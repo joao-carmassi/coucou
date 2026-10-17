@@ -139,7 +139,7 @@ export interface IslandHost {
   avatarGulp(): void;
   avatarTint(color: string | null): void;
   avatarBodyColor(): string | null;
-  avatarLevel(v: number): void;
+  avatarLevel(v: number, opts?: { dance?: boolean }): void;
 }
 
 export interface IslandApi {
@@ -166,7 +166,8 @@ export interface IslandApi {
     /** The glow behind Mochi for a mood (colour and opacity); idle's for an unknown name. */
     glow(mood: string): { color: string; opacity: number }; emote(e: BotEmoteName): void; morph(v: number): void; gulp(): void; tint(color: string | null): void; bodyColor(): string | null;
     /** Loudness 0..1 (squash <= 6 %); calls under 33 ms apart are dropped, it decays to 0 in 300 ms. 0 / never = inert. */
-    level(v: number): void;
+    /** Loudness 0..1 squashes Mochi a little; {dance:true} also hops and sways it (a beat-driven bounce). */
+    level(v: number, opts?: { dance?: boolean }): void;
     /**
      * Defines a Mochi mood of this module and returns its name, "<moduleId>.<local>": use that name in avatar.publish,
      * pills.set and mochi.free/sprite. Removed when the module stops (anything still wearing it draws as idle).

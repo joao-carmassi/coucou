@@ -85,8 +85,8 @@ export function compactCard(t: Track, now: number) {
 }
 
 /** The 1 s tick is needed only while the playing track's time (compact) or progress bar (open player) is on screen. */
-export function wantTick(o: { playing: boolean; mode: string; view: string; hasLength: boolean }): boolean {
-  if (!o.playing) return false;
+export function wantTick(o: { playing: boolean; paused?: boolean; mode: string; view: string; hasLength: boolean }): boolean {
+  if (!o.playing || o.paused) return false;
   return (o.mode === "compact" && o.hasLength) || (o.mode === "expanded" && o.view === "nowplaying");
 }
 
