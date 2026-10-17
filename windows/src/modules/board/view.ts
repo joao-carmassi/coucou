@@ -6,9 +6,10 @@ import type { Pill } from "../../core/state";
 import { askPill } from "../../kit/ask";
 import { clear, h, svg } from "../../kit/dom";
 import { card } from "../../kit/card";
+import { last } from "./last";
 import { homeBody, homeLayout, setSlim, setSolo } from "../../kit/home";
 import { ICONS } from "../../kit/icons";
-import { tile } from "../../kit/tile";
+import { tile, tileActions, tileCard, tileHead } from "../../kit/tile";
 import { rt } from "./primary";
 import type { BoardCard, BoardCardOf, BoardFocus, BoardPillOf } from "./api";
 
@@ -46,9 +47,21 @@ export function buildBoard(ctx: ViewContext): ViewHost {
     },
     svg(ICONS.arrowUpRight, 8),
   );
-  const left = card(null, leftBody, jump);
+  // Flip: the left card's other face (face state per pill id, memory only, reset when the pill changes).
+  const flipBtn = h("button", { class: "icon-btn jump flip", title: "Virar o cartão", onclick: () => { actions.blip(); flip.on = !flip.on; sync(); } }, svg(ICONS.chevronLeft, 8));
+  const utilBtn = h("button", { class: "icon-btn jump utils", title: "Utilidades", onclick: () => { actions.blip(); api.island.open("utilities"); } }, svg(ICONS.ellipsis, 8));
+  const left = card(null, leftBody, jump, flipBtn, utilBtn);
   const pills = h("div", { class: "pills" });
-  const right = card(null, pills);
+  const chip = h("div", { class: "board-last" });
+  const right = card(null, chip, pills);
+  const flip = { id: "", on: false };
+  const ownerActions = (task: Pill) => api.actions.all().filter((a) => a.owner === task.owner);
+
+  /** The default back: the pill owner's actions as buttons. */
+  function defaultBack(task: Pill): HTMLElement {
+    return tileCard("back", tileHead({ dot: task.color, title: "Ações" }), tileActions(...ownerActions(task).map((a) =>
+      h("button", { class: "btn", text: a.title, onclick: () => { actions.blip(); last.key = a.key; api.actions.run(a.key); } }))));
+  }
   const el = homeLayout({ left, right });
 
   let shown: BoardCard | null = null;
@@ -58,7 +71,7 @@ export function buildBoard(ctx: ViewContext): ViewHost {
 
   // A session-like card is clickable as a whole; the arrow and other buttons keep their own click.
   left.addEventListener("click", (e) => {
-    if (!shown?.open || (e.target as Element).closest("button")) return;
+    if (!shown?.open || flip.on || (e.target as Element).closest("button")) return;
     actions.blip();
     shown.open();
   });
@@ -111,17 +124,30 @@ export function buildBoard(ctx: ViewContext): ViewHost {
     get height() {
       return room ? BOARD_H + room : undefined;
     },
-    sync() {
+    sync,
+  };
+
+  function sync() {
       const task = api.pills.front();
       const next = task ? (askCard(task.id) ?? plainCard(task)) : null;
-      const key = next ? `${task!.id}~${next.key}` : "";
+      if (flip.id !== (task?.id ?? "")) { flip.id = task?.id ?? ""; flip.on = false; }
+      const mine = task ? ownerActions(task) : [];
+      const canFlip = !!next && (!!next.back || mine.length > 0);
+      if (!canFlip) flip.on = false;
+      flipBtn.style.display = canFlip ? "" : "none";
+      const key = next ? `${task!.id}~${next.key}~${flip.on ? "b" + (next.back ? "" : mine.map((a) => a.key + a.title).join()) : "f"}` : "";
       if (key !== cardKey || (!shown && !next && !leftBody.firstChild)) {
         cardKey = key;
         clear(leftBody);
-        leftBody.append(next ? next.build(actions) : emptyCard());
+        leftBody.append(!next ? emptyCard() : flip.on ? (next.back?.(actions) ?? defaultBack(task!)) : next.build(actions));
       }
       shown = next;
-      shown?.sync?.();
+      if (!flip.on) shown?.sync?.();
+      // The "Último" chip: the last action run from the board, until that action disappears.
+      const lastInfo = last.key ? api.actions.all().find((a) => a.key === last.key) : undefined;
+      if (!lastInfo) last.key = null;
+      chip.textContent = lastInfo ? `Último: ${lastInfo.title}` : "";
+      chip.style.display = lastInfo ? "" : "none";
 
       jump.style.display = shown?.target ? "" : "none";
       const nextRoom = shown?.room ?? 0;
@@ -129,8 +155,9 @@ export function buildBoard(ctx: ViewContext): ViewHost {
         room = nextRoom;
         onResize();
       }
-      left.classList.toggle("opens", !!shown?.open);
-      left.title = shown?.open ? (shown.hint ?? "") : "";
+      const opens = !!shown?.open && !flip.on;
+      left.classList.toggle("opens", opens);
+      left.title = opens ? (shown!.hint ?? "") : "";
 
       const others = api.pills.others().slice(0, 6);
       // Nothing else active: the left card takes the full width. Few others: a narrow right column, one per row.
@@ -143,8 +170,7 @@ export function buildBoard(ctx: ViewContext): ViewHost {
         clear(pills);
         for (const t of others) pills.append(buildPill(t));
       }
-    },
-  };
+  }
 }
 
 function lighten(hex: string, amount: number): string {

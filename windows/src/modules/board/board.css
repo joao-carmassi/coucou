@@ -76,3 +76,27 @@
 .card.opens:hover {
   background: color-mix(in srgb, var(--card), #fff 2.5%);
 }
+
+/* Flip, Utilidades button and the "Último" chip (home) */
+.jump.flip { right: 30px; }
+.jump.utils { right: 50px; }
+.tile-card.back { animation: board-flip 0.18s ease-out; }
+@keyframes board-flip { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+.board-last {
+  position: absolute; top: 4px; left: 8px; right: 8px; z-index: 2;
+  font: 600 9px var(--font); color: var(--dim-3); text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;
+}
+
+/* Utilidades view */
+.board-utils-head { font: 700 12px var(--font); color: var(--dim-2, #ddd); padding: 4px 4px 8px; }
+.board-utils { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; overflow-y: auto; max-height: 250px; }
+.board-util {
+  display: flex; justify-content: space-between; align-items: center; gap: 6px;
+  padding: 7px 10px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 10px;
+  background: var(--card-flat); color: inherit; font: 600 11px var(--font); cursor: default;
+}
+.board-util:hover { background: color-mix(in srgb, var(--card-flat), #fff 6%); }
+.board-util span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-util kbd { font: 600 9px var(--font); color: var(--dim-4); }
+.board-utils-empty { grid-column: 1 / -1; font: 11px var(--font); color: var(--dim-3); padding: 8px; }
