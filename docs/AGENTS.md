@@ -37,7 +37,7 @@ Send newline-terminated JSON to the pipe if you skip the relay.
 
 ## Events
 
-All standard Claude Code hook events are handled, except `PermissionRequest`: only Claude Code gets an approval card. A `PermissionRequest` from another agent is answered with no decision, so the agent asks in its own terminal.
+All standard Claude Code hook events are handled, except `PermissionRequest`: on this legacy channel only Claude Code gets an approval card, and a `PermissionRequest` from another agent is answered with no decision, so the agent asks in its own terminal. The built-in agents below have their own channel.
 
 | Event | Effect |
 |---|---|
@@ -63,6 +63,22 @@ With Coucou running:
 
 A "demo" pill should appear.
 
-## Other agents' own hook formats
+## Built-in agents (the `agents` module)
 
-There are no built-in installers for Gemini CLI or Antigravity. To use them, write their hooks yourself with `--agent gemini` / `--agent antigravity`. The relay does not translate their event names; map them to the events above (Gemini `BeforeTool` = `PreToolUse`, `AfterTool` = `PostToolUse`, `BeforeAgent` = `UserPromptSubmit`, `AfterAgent` = `Stop`).
+The `agents` module ("Agentes", off by default) installs hooks for five agents and gives each its own pill `agent_<id>`. It uses its own channel (`--channel agents`) and does not need the `claude` module. Settings > Agentes shows, per agent, whether it is found, whether the hook is in place, and the exact diff before anything is written (backup first, explicit click, a file that changed in between is refused).
+
+| Agent | File written (user level only) | Approval from the island |
+|---|---|---|
+| Codex | `%CODEX_HOME%` or `~/.codex/hooks.json` (merged) | Yes, via `PermissionRequest`. Open Codex and run `/hooks` once to trust the hooks |
+| Cursor | `~/.cursor/hooks.json` (merged) | Yes, shell commands only (`beforeShellExecution`); the exe always prints `{"continue":true,"permission":"ask"}` when there is no decision, so Cursor never blocks. With the hook installed Cursor asks before every shell command |
+| Gemini CLI | `~/.gemini/settings.json` (`hooks` merged) | No (observe only; its hooks cannot grant permissions) |
+| Copilot CLI | `%COPILOT_HOME%` or `~/.copilot/hooks/coucou.json` (our own file) | No (observe only until its reply format is verified on a real CLI) |
+| OpenCode | `~/.config/opencode/plugins/coucou.js` (our own file) | No (observe only) |
+
+Approval needs the "Aprovar permissões pela ilha" switch. The only answers sent back are `allow` and `deny`; there is no "always" and no automatic approval. If Coucou is closed, paused, busy or the switch is off, the agent asks in its own window.
+
+### Dialects
+
+The hook exe takes `--format <codex|gemini|cursor|copilot|opencode>` and renames the agent's events to the ones above (no `--format` = Claude, unchanged): Gemini `BeforeAgent`/`BeforeTool`/`AfterTool`/`AfterAgent` become `UserPromptSubmit`/`PreToolUse`/`PostToolUse`/`Stop`; Cursor `sessionStart`/`postToolUse`/`stop`/`sessionEnd` map the same way, `beforeShellExecution` becomes a `PermissionRequest` for the tool `Shell`, `conversation_id` becomes `session_id`, and `user_email` is dropped. Other tools can still send the events above with `--agent <name>` (legacy channel).
+
+NOTE (verify live): the Cursor reply carries `"continue":true` next to `"permission"`. It follows the documented shape but has not been seen accepted by a real Cursor. If Cursor rejects it, drop `continue` in `hook/src/formats.rs` (`cursor_json`) and keep `permission`.

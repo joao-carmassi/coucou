@@ -345,6 +345,11 @@ pub fn subscribe(ctx: &ModuleCtx, ch: Channel) -> bool {
     true
 }
 
+/// Does this waiting request belong to channel `name`? A module may only answer its own.
+pub fn is_pending_on(request_id: &str, name: &str) -> bool {
+    pending().as_ref().unwrap().get(request_id).is_some_and(|(ch, _)| ch == name)
+}
+
 fn send(request_id: &str, reply: Reply, keep: bool) {
     let sender = {
         let mut g = pending();
@@ -470,6 +475,16 @@ mod tests {
 b").is_err());
         assert!(matches!(rx.try_recv(), Ok(Reply::Decline)));
         assert!(!pending().as_ref().unwrap().contains_key("bad-1"));
+    }
+
+    #[test]
+    fn a_request_belongs_to_the_channel_that_made_it() {
+        let (tx, _rx) = mpsc::channel(1);
+        pending().as_mut().unwrap().insert("own-1".into(), ("one".into(), tx));
+        assert!(is_pending_on("own-1", "one"));
+        assert!(!is_pending_on("own-1", "two") && !is_pending_on("own-1", ""));
+        assert!(!is_pending_on("missing", "one"));
+        pending().as_mut().unwrap().remove("own-1");
     }
 
     #[test]

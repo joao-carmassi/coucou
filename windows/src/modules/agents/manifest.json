@@ -1,0 +1,8 @@
+{
+  "id": "agents",
+  "label": "Agentes",
+  "default": false,
+  "order": 18,
+  "settingsDefaults": { "agentsApprove": false, "agentsNotify": false },
+  "presets": ["dev", "tudo", "vitrine"]
+}
