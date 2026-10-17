@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.11.0
+
+One-line island feedback, reworked.
+
+- One "Tempo de foco": the time the island stays minimized before hiding is now also the focus time (board primary pick). During it the compact line shows the last module you opened. The old "Voltar à aba" control is gone (`focusHoldMinutes` stays in settings.json but is no longer read).
+- Pinned line: Tocando, Clima and Sistema ("Uso do PC": CPU and RAM %) can be pinned from their views (only one pinned at a time). It stays on the compact island until you unpin it, or its module has had nothing to show for 5 minutes. Approvals, questions, "pronto", reminders and the timer still pass over it, then it returns. Hub "Linha da ilha" shows what is pinned.
+- Tocando and Clima no longer show their line unprompted: pin them, or see them for the focus time after leaving their tab.
+- Timer: optional glance (every focus-time interval the timer's remaining time peeks, even with the island hidden).
+- Sistema: height now follows what is visible (hide temperatures and the view shrinks).
+- Core: `api.status.source/pin/pinned`, `api.island.focusMs`, `BAND.PINNED`, kit `pinButton`, source `icon` is drawn, urgent lines show beside other pills.
+
 ## Unreleased
 
 - One "Tempo de foco": `compactHideInterval` now also times the board's primary pick and the implicit tab focus (the separate "Voltar à aba" control is gone and its value is not migrated: the reopen window is now the hide interval; `focusHoldMinutes` stays in settings.json, unused).
