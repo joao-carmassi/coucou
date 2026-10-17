@@ -675,6 +675,8 @@ describe("planusage", () => {
     expect(T.hosts.planusage.height).toBe(256);
     settings.planusageClaudeNet = false;
     delete T.answers.planusage_claude;
+  });
+});
 
 // ── Estatísticas de IA: Hoje, 7 dias, 30 dias ───────────────────────────────────────────────
 
