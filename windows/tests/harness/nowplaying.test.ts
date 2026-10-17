@@ -181,3 +181,48 @@ describe("nowplaying lifecycle", () => {
     expect(mine().length).toBe(n); // nothing keeps running
   });
 });
+
+describe("track change card", () => {
+  const settle = async () => { await tick(100); };
+  const reset = async () => {
+    Registry.apply({ nowplaying: false });
+    await tick(100);
+    Registry.apply({ nowplaying: true });
+    await tick(100);
+  };
+  it("unpinned, hidden: shows the track card for the focus time", async () => {
+    await reset();
+    Pin.set("");
+    island.hide();
+    await settle();
+    emit("nowplaying-state", track(true, "Nova"));
+    await settle();
+    expect(State.mode).toBe("compact");
+    expect(State.statusLine).toMatchObject({ text: "Nova", card: { sub: "Artista" } });
+    await tick(20_000);
+    expect(State.statusLine?.text).toBe("Nova");
+    emit("nowplaying-state", track(true, "Nova")); // same track: nothing new
+    await tick(60_000);
+    expect(State.statusLine?.text).not.toBe("Nova");
+  });
+  it("with a pinned line the card is brief", async () => {
+    Pin.set("nowplaying.track");
+    island.hide();
+    await settle();
+    emit("nowplaying-state", track(true, "Outra faixa"));
+    await settle();
+    const strong = State.statusLine?.priority ?? 0;
+    expect(State.statusLine?.text).toBe("Outra faixa");
+    await tick(4500);
+    expect(State.statusLine?.priority ?? 0).toBeLessThan(strong); // back to the pinned line
+  });
+  it("expanded: no notice", async () => {
+    Pin.set("");
+    island.expand("nowplaying");
+    await settle();
+    emit("nowplaying-state", track(true, "Terceira"));
+    await settle();
+    expect(State.mode).toBe("expanded");
+    expect(State.statusLine?.text).not.toBe("Terceira");
+  });
+});

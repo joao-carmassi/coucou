@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { compactCard, remaining, wantTick, clampSens, clock, danceLevel, fraction, positionAt, shapeBands, trackKey, trackLine, wantCapture, type Track } from "../src/modules/nowplaying/logic.ts";
+import { compactCard, remaining, wantTick, clampSens, clock, danceLevel, fraction, positionAt, shapeBands, trackKey, wantCapture, type Track } from "../src/modules/nowplaying/logic.ts";
 
 const T = (o: Partial<Track> = {}): Track => ({
   appId: "Spotify.exe", app: "Spotify", title: "A", artist: "B", album: "C", playing: true,
@@ -51,13 +51,10 @@ test("levels are clamped and scaled by sensitivity", () => {
   assert.deepEqual(shapeBands([0.2, 1, -1], 2), [0.4, 1, 0]);
 });
 
-test("trackKey ignores position, cover and play state; trackLine falls back", () => {
+test("trackKey ignores position, cover and play state", () => {
   assert.equal(trackKey(T()), trackKey(T({ positionMs: 5, playing: false, art: "x" })));
   assert.notEqual(trackKey(T()), trackKey(T({ title: "Z" })));
   assert.equal(trackKey(null), "");
-  assert.equal(trackLine(T()), "A · B");
-  assert.equal(trackLine(T({ artist: "" })), "A");
-  assert.equal(trackLine(T({ artist: "", title: "" })), "Spotify");
 });
 
 test("remaining: time left, empty when the length or position is unknown", () => {

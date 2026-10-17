@@ -1,19 +1,20 @@
 // The core's queue of short notices (api.island.notice). Pure: no DOM, no timers, time is passed in.
 // Highest priority is in front, then the oldest (FIFO). The island owns the single timeout (nextDeadline).
 
-import type { Notice } from "./moduleApi";
+import type { Notice, StatusCard } from "./moduleApi";
 
 export const NOTICE_STALE_MS = 60_000;
 export const NOTICE_CAP = 12;
 /** Mirror of BAND.URGENT / BAND.NOTICE (this file stays free of value imports; tests/notices.test.ts pins them). */
 export const NOTICE_URGENT = 90;
 export const NOTICE_DEFAULT_PRIORITY = 60;
-const MS_DEFAULT = 4000, MS_MIN = 1500, MS_MAX = 15_000;
+const MS_DEFAULT = 4000, MS_MIN = 1500, MS_MAX = 600_000;
 
 export interface NoticeEntry {
   owner: string;
   key?: string;
   text: string;
+  card?: StatusCard;
   priority: number;
   ms: number;
   view?: string;
@@ -37,7 +38,7 @@ export class NoticeQueue {
   add(owner: string, n: Notice, now: number): () => void {
     const priority = Number.isFinite(n.priority) ? (n.priority as number) : NOTICE_DEFAULT_PRIORITY;
     const ms = Math.min(MS_MAX, Math.max(MS_MIN, Number.isFinite(n.ms) ? (n.ms as number) : MS_DEFAULT));
-    const fields = { text: n.text, priority, ms, view: n.view, peek: n.peek === true, at: now, shownAt: null };
+    const fields = { text: n.text, card: n.card, priority, ms, view: n.view, peek: n.peek === true, at: now, shownAt: null };
     let e = n.key != null ? this.list.find((x) => x.owner === owner && x.key === n.key) : undefined;
     if (e) Object.assign(e, fields);
     else this.list.push((e = { owner, key: n.key, seq: ++this.seq, ...fields }));

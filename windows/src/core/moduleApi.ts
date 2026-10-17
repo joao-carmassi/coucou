@@ -93,7 +93,7 @@ export interface Notice {
   text: string;
   /** BAND scale; >= BAND.URGENT ignores presence quiet. Default BAND.NOTICE. */
   priority?: number;
-  /** On-screen time once shown; default 4000, clamped to 1500..15000. */
+  /** On-screen time once shown; default 4000, clamped to 1500..600000 (api.island.focusMs() for "until the island hides"). */
   ms?: number;
   /** The same owner + key replaces in place (the on-screen time restarts). */
   key?: string;
@@ -101,6 +101,8 @@ export interface Notice {
   view?: string;
   /** May reveal a hidden island to compact (never while presence is quiet, unless urgent). */
   peek?: boolean;
+  /** Shown as the richer compact card (cover, second line, trailing text) instead of the plain `text`. */
+  card?: StatusCard;
 }
 /** A command (api.actions.add); with `key`, run by Alt+<key>. */
 export interface ActionDef {
@@ -190,6 +192,8 @@ export interface IslandApi {
     source(key: string, def: SourceDef): StatusSource;
     /** True while the user pinned this module's source `key`. */
     pinned(key: string): boolean;
+    /** True while the user pinned any source line (of any module). */
+    anyPinned(): boolean;
     /** Pins (on) or releases (off) this module's source `key`; pinning replaces any other pinned line. */
     pin(key: string, on: boolean): void;
   };

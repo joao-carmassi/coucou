@@ -118,6 +118,7 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
         return { set: (line) => { if (Pin.setLine(src, line)) host.redraw(); }, dispose };
       },
       pinned: (key) => Pin.pinned() === `${id}.${key}`,
+      anyPinned: () => Pin.pinned() !== "",
       pin(key, on) {
         const sid = `${id}.${key}`;
         if (on) Pin.set(sid);

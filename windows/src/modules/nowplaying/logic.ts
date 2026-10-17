@@ -89,6 +89,3 @@ export function wantTick(o: { playing: boolean; paused?: boolean; mode: string; 
   if (!o.playing || o.paused) return false;
   return (o.mode === "compact" && o.hasLength && o.cardShown === true) || (o.mode === "expanded" && o.view === "nowplaying");
 }
-
-/** One line for the notice. */
-export const trackLine = (t: Track) => (t.artist ? `${t.title} · ${t.artist}` : t.title || t.app);
