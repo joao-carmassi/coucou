@@ -54,7 +54,7 @@ export function buildView(ctx: ViewContext): ViewHost {
       for (;;) {
         const s = await AistatsBridge.refresh();
         draw(s);
-        if (!s?.more || !shown) break;
+        if (!s?.more || !shown || ctx.api.island.mode() !== "expanded") break;
       }
     } finally { busy = false; }
   };

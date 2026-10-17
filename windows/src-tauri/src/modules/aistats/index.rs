@@ -1,6 +1,6 @@
 // The on-disk counter index and the incremental scan. Nothing here runs unless the view asks for a refresh.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, UNIX_EPOCH};
@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 
 use super::parse::{claude_line, codex_line, CodexState, Totals};
 
-const RECENT: usize = 64;
+/// Message keys remembered across all files. Resumed or forked sessions copy earlier messages into a new log.
+const SEEN_MAX: usize = 20_000;
 /// Most bytes read from one file per step, so a huge log is spread over several budgeted calls.
 const CHUNK: u64 = 8 << 20;
 
@@ -24,11 +25,50 @@ pub struct FileMark {
     pub size: u64,
     pub mtime: u64,
     pub offset: u64,
-    /// Claude: message ids seen at the end of the file, to dedupe repeated lines across scans.
-    pub recent_ids: Vec<String>,
     /// Codex: last cumulative total and current model, so a resumed read keeps taking deltas.
     pub codex_total: Option<Totals>,
     pub codex_model: String,
+}
+
+/// Hashes of recent Claude message keys, oldest first; stored as a plain list.
+#[derive(Default, Clone)]
+pub struct Seen {
+    order: VecDeque<u64>,
+    set: HashSet<u64>,
+}
+
+impl Seen {
+    /// True when the key is new (and now remembered).
+    pub fn insert(&mut self, key: &str) -> bool {
+        let h = fnv(key);
+        if !self.set.insert(h) {
+            return false;
+        }
+        self.order.push_back(h);
+        if self.order.len() > SEEN_MAX {
+            if let Some(old) = self.order.pop_front() {
+                self.set.remove(&old);
+            }
+        }
+        true
+    }
+}
+
+impl From<Vec<u64>> for Seen {
+    fn from(v: Vec<u64>) -> Self {
+        Seen { set: v.iter().copied().collect(), order: v.into() }
+    }
+}
+
+impl From<Seen> for Vec<u64> {
+    fn from(s: Seen) -> Self {
+        s.order.into()
+    }
+}
+
+/// FNV-1a: a stable key for a path, so the index never holds a path (the folder name is a project slug).
+pub fn fnv(s: &str) -> u64 {
+    s.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3))
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -41,14 +81,27 @@ pub struct Day {
 #[derive(Default, Serialize, Deserialize)]
 pub struct Index {
     pub v: u32,
+    #[serde(with = "seen_serde", default)]
+    pub seen: Seen,
     pub files: BTreeMap<String, FileMark>,
     pub days: BTreeMap<String, Day>,
     /// A log shrank and was read again from the start: its old tokens stay counted (shortcut: cannot subtract).
     pub approx: bool,
 }
 
+mod seen_serde {
+    use super::Seen;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    pub fn serialize<S: Serializer>(s: &Seen, ser: S) -> Result<S::Ok, S::Error> {
+        Vec::<u64>::from(s.clone()).serialize(ser)
+    }
+    pub fn deserialize<'a, D: Deserializer<'a>>(de: D) -> Result<Seen, D::Error> {
+        Ok(Vec::<u64>::deserialize(de)?.into())
+    }
+}
+
 /// Reads whole lines of `chunk` into `days`; returns the bytes consumed (up to the last '\n').
-pub fn ingest(mark: &mut FileMark, days: &mut BTreeMap<String, Day>, chunk: &[u8], kind: Kind, off: i64) -> usize {
+pub fn ingest(mark: &mut FileMark, seen: &mut Seen, days: &mut BTreeMap<String, Day>, chunk: &[u8], kind: Kind, off: i64) -> usize {
     let Some(end) = chunk.iter().rposition(|&b| b == b'\n') else { return 0 };
     let mut st = CodexState { model: mark.codex_model.clone(), last: mark.codex_total };
     for line in chunk[..end].split(|&b| b == b'\n') {
@@ -56,12 +109,8 @@ pub fn ingest(mark: &mut FileMark, days: &mut BTreeMap<String, Day>, chunk: &[u8
         match kind {
             Kind::Claude => {
                 let Some(r) = claude_line(line, off) else { continue };
-                if mark.recent_ids.contains(&r.key) {
+                if !seen.insert(&r.key) {
                     continue;
-                }
-                mark.recent_ids.push(r.key);
-                if mark.recent_ids.len() > RECENT {
-                    mark.recent_ids.remove(0);
                 }
                 let d = days.entry(r.day).or_default();
                 d.tok.add(&r.tok);
@@ -109,7 +158,7 @@ pub fn scan(index: &mut Index, roots: &[(PathBuf, Kind)], budget: Duration, off:
             let Ok(meta) = std::fs::metadata(&p) else { continue };
             let size = meta.len();
             let mtime = meta.modified().ok().and_then(|m| m.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs());
-            let mark = index.files.entry(p.to_string_lossy().into_owned()).or_default();
+            let mark = index.files.entry(format!("{:016x}", fnv(&p.to_string_lossy()))).or_default();
             if mark.size == size && mark.mtime == mtime {
                 continue;
             }
@@ -126,7 +175,7 @@ pub fn scan(index: &mut Index, roots: &[(PathBuf, Kind)], budget: Duration, off:
                 continue;
             }
             let full = buf.len() as u64 == CHUNK;
-            let n = ingest(mark, &mut index.days, &buf, *kind, off);
+            let n = ingest(mark, &mut index.seen, &mut index.days, &buf, *kind, off);
             // A full chunk without a newline is one oversized line: skip it rather than stall forever.
             let n = if n == 0 && full { buf.len() } else { n };
             mark.offset += n as u64;
@@ -156,38 +205,48 @@ mod tests {
 
     #[test]
     fn dedupes_in_scan_and_across_scans() {
-        let (mut mark, mut days) = (FileMark::default(), BTreeMap::new());
+        let (mut mark, mut seen, mut days) = (FileMark::default(), Seen::default(), BTreeMap::new());
         let a = format!("{}\n{}\n{}\n", claude("a", 5), claude("a", 5), claude("b", 7));
-        assert_eq!(ingest(&mut mark, &mut days, a.as_bytes(), Kind::Claude, 0), a.len());
+        assert_eq!(ingest(&mut mark, &mut seen, &mut days, a.as_bytes(), Kind::Claude, 0), a.len());
         let b = format!("{}\n{}\n", claude("b", 7), claude("c", 1));
-        ingest(&mut mark, &mut days, b.as_bytes(), Kind::Claude, 0);
+        ingest(&mut mark, &mut seen, &mut days, b.as_bytes(), Kind::Claude, 0);
         let d = &days["2026-10-02"];
         assert_eq!(d.tok.output, 13, "a=5 b=7 c=1");
         assert_eq!(d.by_project["p"], 16);
         assert_eq!(d.by_model["m"].input, 3);
-        for i in 0..100 {
-            ingest(&mut mark, &mut days, format!("{}\n", claude(&format!("x{i}"), 1)).as_bytes(), Kind::Claude, 0);
-        }
-        assert_eq!(mark.recent_ids.len(), RECENT);
+    }
+
+    #[test]
+    fn forked_log_does_not_double_count() {
+        let (mut seen, mut days) = (Seen::default(), BTreeMap::new());
+        let (mut m1, mut m2) = (FileMark::default(), FileMark::default());
+        let a = format!("{}\n{}\n", claude("a", 5), claude("b", 7));
+        ingest(&mut m1, &mut seen, &mut days, a.as_bytes(), Kind::Claude, 0);
+        let fork = format!("{a}{}\n", claude("c", 1)); // a resumed session copies the earlier messages
+        ingest(&mut m2, &mut seen, &mut days, fork.as_bytes(), Kind::Claude, 0);
+        assert_eq!(days["2026-10-02"].tok.output, 13);
+        let mut back: Seen = Vec::<u64>::from(seen).into();
+        assert!(!back.insert("a|r"), "the list survives a round-trip");
+        assert!(back.insert("zzz|r"));
     }
 
     #[test]
     fn partial_last_line_waits() {
-        let (mut mark, mut days) = (FileMark::default(), BTreeMap::new());
+        let (mut mark, mut seen, mut days) = (FileMark::default(), Seen::default(), BTreeMap::new());
         let full = format!("{}\n", claude("a", 5));
         let text = format!("{full}{}", &claude("b", 9)[..40]);
-        let n = ingest(&mut mark, &mut days, text.as_bytes(), Kind::Claude, 0);
+        let n = ingest(&mut mark, &mut seen, &mut days, text.as_bytes(), Kind::Claude, 0);
         assert_eq!(n, full.len());
         assert_eq!(days["2026-10-02"].tok.output, 5);
-        assert_eq!(ingest(&mut mark, &mut days, b"no newline", Kind::Claude, 0), 0);
+        assert_eq!(ingest(&mut mark, &mut seen, &mut days, b"no newline", Kind::Claude, 0), 0);
     }
 
     #[test]
     fn codex_resumes_with_the_saved_total() {
         let tc = |i: u64| format!("{{\"timestamp\":\"2026-10-02T10:00:00Z\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"token_count\",\"info\":{{\"total_token_usage\":{{\"input_tokens\":{i},\"output_tokens\":0}}}}}}}}\n");
-        let (mut mark, mut days) = (FileMark::default(), BTreeMap::new());
-        ingest(&mut mark, &mut days, tc(100).as_bytes(), Kind::Codex, 0);
-        ingest(&mut mark, &mut days, tc(130).as_bytes(), Kind::Codex, 0);
+        let (mut mark, mut seen, mut days) = (FileMark::default(), Seen::default(), BTreeMap::new());
+        ingest(&mut mark, &mut seen, &mut days, tc(100).as_bytes(), Kind::Codex, 0);
+        ingest(&mut mark, &mut seen, &mut days, tc(130).as_bytes(), Kind::Codex, 0);
         assert_eq!(days["2026-10-02"].tok.input, 130);
     }
 
@@ -224,6 +283,7 @@ mod tests {
         std::fs::write(&f, format!("{}\n", claude("z", 1))).unwrap(); // shrank
         scan(&mut ix, &roots, Duration::from_secs(5), 0);
         assert!(ix.approx);
+        assert!(ix.files.keys().all(|k| k.len() == 16 && !k.contains(['/', '\\'])), "no path in the index");
         assert!(scan(&mut ix, &roots, Duration::ZERO, 0), "no budget leaves work");
         let _ = std::fs::remove_dir_all(&dir);
     }

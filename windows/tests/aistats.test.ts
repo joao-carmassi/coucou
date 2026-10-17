@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { costOf, costTotal, fmtTokens, keepDays, weekBars, type Totals } from "../src/modules/aistats/logic.ts";
+import { rate, costOf, costTotal, fmtTokens, keepDays, weekBars, type Totals } from "../src/modules/aistats/logic.ts";
 
 const t = (o: Partial<Totals>): Totals => ({ input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0, ...o });
 
@@ -33,4 +33,23 @@ test("week bars: 7 local days, biggest is 100, tiny non-empty days keep 4", () =
 test("formats and keep-days clamp", () => {
   assert.deepEqual([999, 12_400, 3_500_000, 2e9].map(fmtTokens), ["999", "12 mil", "3.5 M", "2.0 B"]);
   assert.deepEqual(["x", 0, 30.7, 9999].map(keepDays), [90, 90, 30, 365]);
+});
+
+test("price table: versions, date suffixes and old-style ids", () => {
+  assert.deepEqual(rate("claude-opus-4-20250514"), [15, 75, 0.1], "a date is not a minor version");
+  assert.deepEqual(rate("claude-opus-4-1-20250805"), [15, 75, 0.1]);
+  assert.deepEqual(rate("claude-opus-4-5-20251101"), [5, 25, 0.1]);
+  assert.deepEqual(rate("claude-opus-5"), [5, 25, 0.1]);
+  assert.deepEqual(rate("claude-opus-5-5"), [4, 20, 0.05]);
+  assert.deepEqual(rate("claude-sonnet-4-20250514"), [3, 15, 0.1]);
+  assert.deepEqual(rate("claude-sonnet-5"), [2, 10, 0.1]);
+  assert.deepEqual(rate("claude-sonnet-5-5"), [2, 10, 0.05]);
+  assert.deepEqual(rate("claude-3-5-haiku-20241022"), [0.8, 4, 0.1]);
+  assert.deepEqual(rate("claude-haiku-4-5-20251001"), [1, 5, 0.1]);
+  assert.deepEqual(rate("claude-3-5-sonnet-20241022"), [3, 15, 0.1]);
+  assert.deepEqual(rate("fable-5"), [10, 50, 0.1]);
+  assert.deepEqual(rate("mythos-5-1"), [10, 50, 0.025]);
+  assert.equal(rate("claude-opus"), null);
+  assert.equal(rate("gpt-5"), null);
+  assert.equal(costOf("claude-opus-5-5", t({ cache_read: 1e6 })), 0.2);
 });

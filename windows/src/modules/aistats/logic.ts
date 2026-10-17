@@ -11,22 +11,35 @@ export interface Summary {
 }
 
 export const PRICES_DATE = "2026-10-17";
-/** USD per million tokens (input, output). Cache read costs 0.1x input, cache write 1.25x. Estimate only. */
-function rate(model: string): [number, number] | null {
-  const m = model.toLowerCase();
-  if (m.includes("opus")) {
-    const minor = /opus-4-(\d+)/.exec(m);
-    return minor && Number(minor[1]) >= 5 ? [5, 25] : [15, 75];
+/** [input, output] USD per million tokens and the cache-read price as a fraction of input. 5-min cache write is 1.25x input. */
+type Rate = [number, number, number];
+
+/** Family + version from a model id; date suffixes ("-20250514") are not versions. Old ids put it first ("claude-3-5-haiku"). */
+function parseModel(id: string): { fam: string; ver: number } | null {
+  const m = id.toLowerCase();
+  const old = /claude-(\d)(?:-(\d{1,2})(?!\d))?-(opus|sonnet|haiku)/.exec(m);
+  if (old) return { fam: old[3], ver: Number(old[1]) + Number(old[2] ?? 0) / 10 };
+  const nw = /(opus|sonnet|haiku|fable|mythos)-(\d{1,2})(?!\d)(?:[-.](\d{1,2})(?!\d))?/.exec(m);
+  return nw ? { fam: nw[1], ver: Number(nw[2]) + Number(nw[3] ?? 0) / 10 } : null;
+}
+
+// shortcut: Haiku 5.5 is tiered by request size (<=100k tokens 0.10/0.50, else 0.50/2.50); daily totals cannot tell, so the low tier is used. Upgrade by summing per request in Rust.
+export function rate(model: string): Rate | null {
+  const p = parseModel(model);
+  if (!p) return null;
+  const { fam, ver } = p;
+  switch (fam) {
+    case "opus": return ver >= 5.5 ? [4, 20, 0.05] : ver >= 4.5 ? [5, 25, 0.1] : ver >= 3 ? [15, 75, 0.1] : null;
+    case "sonnet": return ver >= 5.5 ? [2, 10, 0.05] : ver >= 5 ? [2, 10, 0.1] : ver >= 3 ? [3, 15, 0.1] : null;
+    case "haiku": return ver >= 5.5 ? [0.1, 0.5, 0.1] : ver >= 4 && ver < 5 ? [1, 5, 0.1] : ver >= 3.5 && ver < 4 ? [0.8, 4, 0.1] : null;
+    default: return ver >= 5.1 ? [10, 50, 0.025] : ver >= 5 ? [10, 50, 0.1] : null; // fable / mythos
   }
-  if (m.includes("sonnet")) return [3, 15];
-  if (m.includes("haiku")) return [1, 5];
-  return null; // unknown model: no cost, never zero
 }
 
 export function costOf(model: string, t: Totals): number | null {
   const r = rate(model);
   if (!r) return null;
-  return (t.input * r[0] + t.output * r[1] + t.cache_read * r[0] * 0.1 + t.cache_write * r[0] * 1.25) / 1e6;
+  return (t.input * r[0] + t.output * r[1] + t.cache_read * r[0] * r[2] + t.cache_write * r[0] * 1.25) / 1e6;
 }
 
 /** Sum over the models that have a price; `partial` when some model had none. */

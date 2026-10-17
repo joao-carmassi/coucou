@@ -58,6 +58,7 @@ fn keep_days_of(s: &Settings) -> i64 {
     s.extra.get("aistatsKeepDays").and_then(|v| v.as_f64()).map_or(90, |n| (n as i64).clamp(1, 365))
 }
 
+// shortcut: the current UTC offset is applied to all history, so days read across a DST change can land one hour off; upgrade by storing UTC hours.
 /// Local minus UTC in seconds, rounded to 15 min, from the clock Windows reports for the local zone.
 fn local_offset() -> i64 {
     let t = platform::local_time();
