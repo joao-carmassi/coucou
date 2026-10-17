@@ -53,6 +53,29 @@ beforeEach(() => {
   calls.invoke.length = 0;
 });
 
+describe("source lines are plain", { timeout: 30_000 }, () => {
+  const el = () => document.querySelector("#activity-line")!;
+  it("pinned text: still, no shimmer, instant swap, idle loop; activity lines still shimmer", () => {
+    expect(el().classList.contains("still")).toBe(false); // dummy status (activity) shimmers
+    P.sa!.set({ priority: 1, text: "A 10%" });
+    P.a!.status.pin("line", true);
+    tick(500);
+    expect(line()?.still).toBe(true);
+    expect(el().classList.contains("still")).toBe(true);
+    expect(el().querySelectorAll("span")).toHaveLength(1);
+    P.sa!.set({ priority: 1, text: "A 11%" });
+    tick(100);
+    expect(el().querySelectorAll("span")).toHaveLength(1); // swapped at once, no leaving span
+    expect(el().textContent).toBe("A 11%");
+    tick(2000);
+    expect((island as unknown as { running: boolean }).running).toBe(false);
+    P.a!.status.pin("line", false);
+    tick(500);
+    expect(line()?.still).toBeUndefined();
+    expect(el().classList.contains("still")).toBe(false);
+  });
+});
+
 describe("pinned line", { timeout: 30_000 }, () => {
   it("shows over an agent working line (30), beside other pills", () => {
     P.sa!.set({ priority: 1, text: "A pinned" });

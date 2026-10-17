@@ -165,6 +165,12 @@ body {
   background-position: 100% center, 0 0;
 }
 
+/* A source line is plain: no shimmer (the loop does not step it), text swaps instantly. */
+#activity-line.still span { color: var(--dim); background: none; }
+
+/* Leaves room for the pin button (absolute, top-right of its positioned parent). */
+.pin-room { padding-right: 48px; }
+
 /* A mini Mochi: the slot is the body, the canvas is larger and overflows it so
    hands, badges and particles are not cut off. */
 .mini {
