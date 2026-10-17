@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clampSens, clock, danceLevel, fraction, positionAt, shapeBands, trackKey, trackLine, wantCapture, type Track } from "../src/modules/nowplaying/logic.ts";
+import { compactCard, remaining, wantTick, clampSens, clock, danceLevel, fraction, positionAt, shapeBands, trackKey, trackLine, wantCapture, type Track } from "../src/modules/nowplaying/logic.ts";
 
 const T = (o: Partial<Track> = {}): Track => ({
   appId: "Spotify.exe", app: "Spotify", title: "A", artist: "B", album: "C", playing: true,
@@ -58,4 +58,29 @@ test("trackKey ignores position, cover and play state; trackLine falls back", ()
   assert.equal(trackLine(T()), "A · B");
   assert.equal(trackLine(T({ artist: "" })), "A");
   assert.equal(trackLine(T({ artist: "", title: "" })), "Spotify");
+});
+
+test("remaining: time left, empty when the length or position is unknown", () => {
+  assert.equal(remaining(T(), 1_000), "-1:30");
+  assert.equal(remaining(T(), 5_000), "-1:26");
+  assert.equal(remaining(T({ playing: false }), 99_000), "-1:30"); // paused: frozen
+  assert.equal(remaining(T({ durationMs: null }), 1_000), "");
+  assert.equal(remaining(T({ positionMs: null }), 1_000), "");
+  assert.equal(remaining(T({ positionMs: 100_000 }), 1_000), "-0:00");
+});
+
+test("compactCard: cover, title, artist, time left; dimmed when paused; falls back to the app name", () => {
+  assert.deepEqual(compactCard(T({ art: "data:x" }), 1_000), { text: "A", card: { art: "data:x", sub: "B", trail: "-1:30", dim: false } });
+  assert.equal(compactCard(T({ playing: false }), 1_000).card.dim, true);
+  assert.equal(compactCard(T({ title: "" }), 1_000).text, "Spotify");
+});
+
+test("wantTick: only while playing and the time is on screen", () => {
+  const b = { playing: true, mode: "compact", view: "x", hasLength: true };
+  assert.equal(wantTick(b), true);
+  assert.equal(wantTick({ ...b, hasLength: false }), false);
+  assert.equal(wantTick({ ...b, playing: false }), false);
+  assert.equal(wantTick({ ...b, mode: "hidden" }), false);
+  assert.equal(wantTick({ ...b, mode: "expanded" }), false);
+  assert.equal(wantTick({ ...b, mode: "expanded", view: "nowplaying", hasLength: false }), true);
 });

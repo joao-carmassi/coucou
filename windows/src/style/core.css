@@ -134,6 +134,17 @@ body {
   opacity: 0;
   transition: opacity 0.25s ease-in-out;
 }
+/* Compact card (StatusLine.card): cover, two lines, trailing text. Same slot as the line above. */
+#compact-card { position: absolute; height: 24px; display: flex; align-items: center; gap: 8px; overflow: hidden;
+  pointer-events: none; opacity: 0; transition: opacity 0.25s ease-in-out; font-variant-numeric: tabular-nums; }
+#compact-card .cc-art { flex: none; width: 24px; height: 24px; border-radius: 6px; overflow: hidden; background: var(--surface-track, #333); }
+#compact-card .cc-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#compact-card .cc-text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+#compact-card .cc-text > * { display: block; font-style: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#compact-card b { font: 600 11px/12px var(--font, inherit); color: var(--ink, #fff); }
+#compact-card i { font: 400 10px/12px var(--font, inherit); color: var(--dim); }
+#compact-card .cc-trail { flex: none; font-size: 11px; color: var(--dim); }
+#compact-card .cc-trail:empty { display: none; }
 /* Each word is its own span so a new one can rise in as the old one leaves. */
 #activity-line span {
   position: absolute;

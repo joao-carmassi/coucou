@@ -73,5 +73,22 @@ export const danceLevel = (level: number, sens: number) => clamp01(level * 1.6 *
 /** Bars for the view: each band scaled by the sensitivity. */
 export const shapeBands = (bands: readonly number[], sens: number) => bands.map((b) => clamp01(b * clampSens(sens)));
 
-/** One line for the notice and the pill. */
+/** Time left, "-3:05"; "" when the length or the position is unknown. */
+export function remaining(t: Track, now: number): string {
+  const p = positionAt(t, now);
+  return p === null || t.durationMs === null || t.durationMs <= 0 ? "" : `-${clock(t.durationMs - p)}`;
+}
+
+/** The compact island's card for a track (cover, title, artist, time left; dimmed while paused). Pure. */
+export function compactCard(t: Track, now: number) {
+  return { text: t.title || t.app, card: { art: t.art, sub: t.artist, trail: remaining(t, now), dim: !t.playing } };
+}
+
+/** The 1 s tick is needed only while the playing track's time (compact) or progress bar (open player) is on screen. */
+export function wantTick(o: { playing: boolean; mode: string; view: string; hasLength: boolean }): boolean {
+  if (!o.playing) return false;
+  return (o.mode === "compact" && o.hasLength) || (o.mode === "expanded" && o.view === "nowplaying");
+}
+
+/** One line for the notice. */
 export const trackLine = (t: Track) => (t.artist ? `${t.title} · ${t.artist}` : t.title || t.app);

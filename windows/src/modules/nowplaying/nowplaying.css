@@ -1,4 +1,10 @@
 /* Tocando agora: this module's classes, all prefixed "np-". */
+/* The body scrolls (themed) if the content ever exceeds the island; centred otherwise (margin:auto, not justify-content). */
+.np-body { box-sizing: border-box; justify-content: flex-start; overflow-y: auto; overflow-x: hidden; min-height: 0; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.18) transparent; }
+.np-body > .np-player, .np-body > .np-empty { margin: auto 0; }
+.np-body::-webkit-scrollbar { width: 6px; }
+.np-body::-webkit-scrollbar-track { background: transparent; }
+.np-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 999px; }
 .np-player { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .np-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .np-art { flex: none; width: 56px; height: 56px; border-radius: 8px; overflow: hidden; background: var(--surface-track); display: grid; place-items: center; color: var(--dim); }

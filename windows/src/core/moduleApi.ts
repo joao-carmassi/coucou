@@ -38,7 +38,12 @@ export interface StatusLine {
   urgent?: boolean;
   /** Shown beside other pills in place of the mini grid. Default: only when no other pill. */
   overGrid?: boolean;
+  /** Richer compact line: `text` is the first line, beside a small cover, a second line and a trailing text (a time). */
+  card?: StatusCard;
 }
+
+/** Image URL / data URL (null: a neutral square), second line, trailing text, dimmed (paused). All optional. */
+export interface StatusCard { art?: string | null; sub?: string; trail?: string; dim?: boolean }
 
 export interface AvatarSignal { state: BotStateName; priority: number; emote?: BotEmoteName; ttlMs?: number }
 

@@ -14,7 +14,7 @@ import { Avatar } from "../core/avatar";
 import { Hooks, emitMode } from "../core/hooks";
 import { glowOf } from "../mochi/moods";
 import { BAND, EXPANDED_W, PANEL_H } from "../core/moduleApi";
-import type { Disposer, IslandHost, Notice, Overlay, StatusLine, TabDef, ViewContext, ViewDef } from "../core/moduleApi";
+import type { Disposer, IslandHost, Notice, Overlay, StatusCard, StatusLine, TabDef, ViewContext, ViewDef } from "../core/moduleApi";
 import { Holds, Last } from "../core/holds";
 import { Requests, type Req, type RequestSpec } from "../core/requests";
 import { Compact } from "../core/compact";
@@ -31,6 +31,7 @@ import { h } from "../kit/dom";
 import { IslandStateMachine, type FsmState } from "./fsm";
 
 const BOT_OVERHANG = 40;
+const CARD_ART = 24; // the compact card's cover (px); style/core.css #compact-card .cc-art
 /** Same margin as the Rust hit test (src-tauri/src/island.rs). */
 const HIT_MARGIN = 14;
 
@@ -74,6 +75,8 @@ export class Island implements IslandHost {
   private widthTarget = -1;
   private gridH = 0;
   private activityShown = false;
+  private cardEl!: HTMLElement;
+  private cardParts!: { art: HTMLElement; title: HTMLElement; sub: HTMLElement; trail: HTMLElement };
   private measureCtx = document.createElement("canvas").getContext("2d")!;
   private measured = { text: "", w: 0 };
   private height = new Tracked(0);
@@ -202,6 +205,9 @@ export class Island implements IslandHost {
     this.greetingCanvas = h("canvas", { id: "greeting-canvas" });
     this.miniGrid = h("div", { id: "mini-grid" });
     this.activityEl = h("div", { id: "activity-line" });
+    this.cardParts = { art: h("div", { class: "cc-art" }), title: h("b"), sub: h("i"), trail: h("span", { class: "cc-trail" }) };
+    this.cardEl = h("div", { id: "compact-card" }, this.cardParts.art,
+      h("div", { class: "cc-text" }, this.cardParts.title, this.cardParts.sub), this.cardParts.trail);
     this.countdown = h("div", { id: "countdown" });
 
 
@@ -223,6 +229,7 @@ export class Island implements IslandHost {
       this.botCanvas,
       this.miniGrid,
       this.activityEl,
+      this.cardEl,
       this.countdown,
     );
 
@@ -666,7 +673,7 @@ export class Island implements IslandHost {
     const fitted = this.views?.get(State.view)?.height ?? null;
     const line = this.compactLine();
     const others = this.textOverGrid() ? 0 : State.gridPills.length;
-    const cw = compactWidth(others, line ? this.textWidth(line) : 0);
+    const cw = compactWidth(others, line ? this.lineWidth(line) : 0);
     const { w, h } = islandSize(State.mode, State.view, fitted, cw);
     const r = State.mode === "expanded" ? EXPANDED_CORNER : ROUNDED_CORNER;
     return { w, h, r };
@@ -696,6 +703,33 @@ export class Island implements IslandHost {
     next.animate([{ transform: "translateY(100%)", opacity: 0 }, { transform: "none", opacity: 1 }], opts);
     cur.animate([{ transform: "none", opacity: 1 }, { transform: "translateY(-100%)", opacity: 0 }], opts).onfinish = () =>
       cur.remove();
+  }
+
+  /** Width of the compact content: the text, or a card's cover + two lines + trailing text. */
+  private lineWidth(line: string): number {
+    const c = State.statusLine?.card;
+    if (!c) return this.textWidth(line);
+    const m = (s: string) => (s ? this.measureCtx.measureText(s).width : 0);
+    this.textWidth(line); // sets the measuring font
+    return (c.art !== undefined ? CARD_ART + 8 : 0) + Math.max(m(line), m(c.sub ?? "")) + (c.trail ? 10 + m(c.trail) : 0);
+  }
+
+  /** Paints the card of the status line (cover, two lines, trailing text); each part only when it changed. */
+  private syncCard(c: StatusCard | undefined, text: string) {
+    const on = !!c && State.mode === "compact";
+    this.cardEl.style.opacity = on ? (c!.dim ? "0.55" : "1") : "0";
+    if (!on) return;
+    const p = this.cardParts;
+    const set = (el: HTMLElement, v: string) => { if (el.textContent !== v) el.textContent = v; };
+    set(p.title, text);
+    set(p.sub, c!.sub ?? "");
+    set(p.trail, c!.trail ?? "");
+    p.art.style.display = c!.art === undefined ? "none" : "";
+    const url = c!.art ?? "";
+    if (p.art.dataset.src !== url) {
+      p.art.dataset.src = url;
+      p.art.replaceChildren(...(url ? [h("img", { src: url, alt: "" })] : []));
+    }
   }
 
   private textWidth(s: string): number {
@@ -746,6 +780,9 @@ export class Island implements IslandHost {
     // Growing reveals the text instead of flashing an ellipsis; it shows once settled.
     this.activityEl.style.textOverflow = this.width.animating ? "clip" : "";
     this.activityEl.style.top = `${hh / 2 - 8}px`;
+    this.cardEl.style.left = `${COMPACT_CONTENT_X}px`;
+    this.cardEl.style.width = `${Math.max(0, w - COMPACT_CONTENT_X - COMPACT_PAD)}px`;
+    this.cardEl.style.top = `${hh / 2 - CARD_ART / 2}px`;
     this.greetingCanvas.style.left = `${(w - EXPANDED_W) / 2}px`;
     for (const o of this.overlays) o.place?.(w);
 
@@ -1276,10 +1313,13 @@ export class Island implements IslandHost {
     }
 
     const line = State.mode === "compact" ? this.compactLine() : "";
-    this.activityEl.style.opacity = line ? "1" : "0";
-    this.activityEl.classList.toggle("on", !!line);
-    if (line) this.setActivityText(line);
-    this.activityShown = !!line;
+    const card = line ? State.statusLine?.card : undefined;
+    const plain = card ? "" : line; // a card has no shimmer: the frame loop stays idle for it
+    this.activityEl.style.opacity = plain ? "1" : "0";
+    this.activityEl.classList.toggle("on", !!plain);
+    if (plain) this.setActivityText(plain);
+    this.activityShown = !!plain;
+    this.syncCard(card, line);
 
     // Text or minis changed while compact: the island follows, width only
     // (height/radius belong to a running hidden→compact spring). Not while hidden:
