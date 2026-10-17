@@ -63,6 +63,13 @@ function chart(s: Summary, keys: string[], today: string) {
     plot, axis);
 }
 
+/** Restarts the one-shot CSS fade-in of the panel (a tab switch only, not a data refresh). */
+function fade(el: HTMLElement) {
+  el.classList.remove("fade");
+  void el.offsetWidth;
+  el.classList.add("fade");
+}
+
 export function buildView(ctx: ViewContext): ViewHost {
   let tab: Tab = "today";
   let sum: Summary | null | undefined; // undefined: not read yet
@@ -71,7 +78,7 @@ export function buildView(ctx: ViewContext): ViewHost {
   let busy = false;
   let shown = false;
 
-  const tabBtn = (t: Tab, text: string) => h("button", { type: "button", role: "tab", text, onclick: () => { tab = t; draw(); } });
+  const tabBtn = (t: Tab, text: string) => h("button", { type: "button", role: "tab", text, onclick: () => { tab = t; draw(); fade(panel); } });
   const tabs: Record<Tab, HTMLButtonElement> = { today: tabBtn("today", "Hoje"), week: tabBtn("week", "7 dias"), month: tabBtn("month", "30 dias") };
   const when = h("span", { class: "aistats-when" });
   const status = h("span", { class: "aistats-foot" });

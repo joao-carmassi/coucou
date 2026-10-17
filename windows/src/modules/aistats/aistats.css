@@ -65,3 +65,8 @@
 .aistats-stack > .codex, .aistats-split > .codex, .aistats-who.codex > i { background: var(--cyan); }
 .aistats-note { color: var(--dim-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .aistats-note.approx { color: var(--dim-3); }
+
+/* Tab switch: 160 ms fade-in of the new panel; one-shot CSS, paused with the rest while the island is away. */
+.aistats-panel.fade { animation: aistats-fade 160ms ease-out; }
+@keyframes aistats-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .aistats-panel.fade { animation: none; } }
