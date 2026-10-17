@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.3
+
+- Estatísticas de IA and Uso do plano redesigned in the Pausas style (period tabs, tiles, bars, daily chart; plan windows with colour thresholds and reset countdown).
+- Tocando: volume slider removed; a new track shows the compact card (cover, title, artist, time left) and keeps it for the focus time (3.5 s when a line is pinned).
+- Mídia: file conversions grouped in a "Converter" submenu of the right-click menu.
+- Core: notices can carry a card and last up to 10 min; `api.status.anyPinned()`.
+
 ## 0.12.2
 
 - Uso do plano: its own tab icon; the view sizes itself to its content (no scroll with two providers, scroll only past the panel limit).
