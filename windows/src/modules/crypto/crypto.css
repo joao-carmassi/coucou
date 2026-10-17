@@ -1,0 +1,22 @@
+/* Cripto: this module's classes, all prefixed "crypto-". Reuse kit classes; never redefine them. Nothing animates. */
+.crypto-body { padding: 12px 16px 12px 84px; gap: 8px; font: 400 11.5px var(--font); color: var(--dim); }
+.crypto-head { display: flex; align-items: center; gap: 10px; height: 22px; flex: none; min-width: 0; }
+.crypto-title { font: 600 12.5px var(--font); color: var(--ink); white-space: nowrap; }
+.crypto-head .text-link { flex: none; font-size: 10.5px; }
+.crypto-head .text-link:disabled { color: var(--dim-4); }
+.crypto-panel { display: flex; flex-direction: column; gap: 6px; flex: none; min-width: 0; }
+.crypto-k { font: 600 9.5px/11px var(--font); text-transform: uppercase; letter-spacing: 0.6px; color: var(--dim-2); margin-top: 4px; }
+.crypto-foot { font-size: 10.5px; color: var(--dim-3); white-space: nowrap; }
+.crypto-note { font-size: 10.5px; line-height: 14px; color: var(--dim-3); }
+.crypto-list { display: flex; flex-direction: column; gap: 3px; }
+.crypto-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.crypto-ccy { font-weight: 600; color: var(--ink-2); }
+.crypto-src { font-size: 10px; color: var(--dim-3); }
+.crypto-val { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.crypto-amt { font-size: 10.5px; color: var(--dim-3); font-variant-numeric: tabular-nums; }
+.crypto-totalrow { display: flex; align-items: baseline; gap: 8px; }
+.crypto-total { font: 600 20px var(--font); color: var(--ink); font-variant-numeric: tabular-nums; }
+.crypto-partial { font-size: 10px; color: var(--amber); }
+/* Hidden figures stay blurred until hover or keyboard focus, so a screen share does not show them. */
+.crypto-total.hide, .crypto-amt.hide, .crypto-val.hide { filter: blur(6px); }
+.crypto-total.hide:hover, .crypto-total.hide:focus, .crypto-list:hover .hide { filter: none; }
