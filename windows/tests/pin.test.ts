@@ -40,7 +40,7 @@ test("pinned beats an agent working line (30) and sits below voice, timer, notic
   assert.equal(shown(s, "w.now", null, { timer: { priority: 50, text: "05:00", overGrid: true }, "#notice": { priority: 60, text: "n", overGrid: true } }, 2), "n");
 });
 
-test("without a pinned line the old rule stands: a line that is not overGrid is hidden by other pills", () => {
+test("without a pinned line a plain line is hidden by other pills, an urgent one is not", () => {
   assert.equal(shown([], "", null, { voice: { priority: 40, text: "v" } }, 2), null);
   assert.equal(shown([], "", null, { agent: { priority: 100, text: "a", urgent: true } }, 2), "a");
 });

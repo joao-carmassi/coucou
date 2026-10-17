@@ -27,7 +27,8 @@ function start(api: IslandApi): Disposer {
     const mode = api.island.mode(), view = api.island.view();
     const onTab = mode === "expanded" && view === "nowplaying";
     if (mode === "hidden") { recent = false; recentT?.(); recentT = null; }
-    else if (wasOnTab && !onTab) {
+    else if (recent && mode === "expanded" && !onTab) { recent = false; recentT?.(); recentT = null; } // another module's view took over
+    else if (wasOnTab && !onTab && mode !== "expanded") {
       recent = true;
       recentT?.();
       recentT = api.timeout(() => { recent = false; recentT = null; reconcile(); }, api.island.focusMs());

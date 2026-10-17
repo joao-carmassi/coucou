@@ -44,7 +44,9 @@ function start(api: IslandApi): Disposer {
   const read = async (fresh = false) => {
     let line: string | null = null;
     try { line = usageLine(await SysmonBridge.quick(fresh), showOf(api.settings<Cfg>().sysmonShow)); } catch { /* null: the core releases the pin after 5 min */ }
-    if (usagePoll) usage.set(line ? { priority: BAND.AMBIENT, icon: "📊", text: line } : null);
+    // Both metrics off in sysmonShow: a dim note keeps the pin instead of letting the core release it.
+    const off = !!usagePoll && !line && !showOf(api.settings<Cfg>().sysmonShow).cpu && !showOf(api.settings<Cfg>().sysmonShow).ram;
+    if (usagePoll) usage.set(line ? { priority: BAND.AMBIENT, icon: "📊", text: line } : off ? { priority: BAND.AMBIENT, icon: "📊", text: "Uso do PC: nada selecionado", dim: true } : null);
   };
   const reconcileUsage = () => {
     const on = api.status.pinned("usage");
@@ -53,11 +55,13 @@ function start(api: IslandApi): Disposer {
   };
   reconcileUsage();
   const offUsage = api.island.onChange(reconcileUsage);
+  // The interval sleeps while hidden: on return read at once (fresh baseline) so no stale value shows.
+  const offVis = api.onVisibility((mode) => { if (mode !== "hidden" && usagePoll) void read(true); });
   // Settings can flip alerts while running: look again whenever the island's state changes (cheap, no timer).
   const offChange = api.island.onChange(arm);
   // And on a settings change (deferred: the stored settings are replaced by a listener that runs after ours).
   const offSettings = api.listen("settings-changed", () => void api.timeout(arm, 0));
-  return () => { offChange(); offUsage(); usagePoll?.(); usagePoll = null; usage.dispose(); offSettings(); probe?.(); probe = null; temp = null; };
+  return () => { offChange(); offUsage(); offVis(); usagePoll?.(); usagePoll = null; usage.dispose(); offSettings(); probe?.(); probe = null; temp = null; };
 }
 
 export const sysmonModule: ModuleDef = {

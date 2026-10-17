@@ -26,7 +26,6 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 fn release() {
     *lock(&SAMPLER) = None;
     *lock(&ALERT_CPU) = None;
-    *lock(&QUICK_CPU) = None;
 }
 
 impl Module for Sysmon {
@@ -38,6 +37,7 @@ impl Module for Sysmon {
 
     fn stop(&self, _ctx: &ModuleCtx) {
         release();
+        *lock(&QUICK_CPU) = None;
     }
 }
 
@@ -125,14 +125,16 @@ pub fn step_cpu(prev: &mut Option<(u64, u64, u64)>, cur: Option<(u64, u64, u64)>
 }
 
 /// The pinned "Uso do PC" line: GetSystemTimes + GlobalMemoryStatusEx only, no sampler. `fresh` drops the old baseline
-/// (the line was just pinned), so the first CPU value covers one interval, not the time since it was last pinned.
+/// (just pinned or shown again), measuring over ~200 ms instead of the time since the last read.
 #[tauri::command]
 pub async fn sysmon_quick(app: AppHandle, fresh: bool) -> Result<Quick, String> {
     gate(&app)?;
     blocking(move || {
         let mut prev = lock(&QUICK_CPU);
         if fresh {
-            *prev = None;
+            // Two readings a moment apart, so the first line already has a CPU value.
+            *prev = metrics::cpu_times();
+            std::thread::sleep(std::time::Duration::from_millis(200));
         }
         let cpu = step_cpu(&mut prev, metrics::cpu_times());
         let ram = metrics::ram().and_then(|(u, t)| used_pct(t, t.saturating_sub(u)));
