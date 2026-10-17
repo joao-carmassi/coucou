@@ -68,3 +68,17 @@ export class AlertState {
     return fire;
   }
 }
+
+/** Island height for the shown sections (px estimates of the CSS: tile 79, section head 24, row 16 + gap 4, chip 22, note ~80). */
+export interface Fit { drives: number; chipLines: number; note: boolean }
+export const FIT_MIN = 160;
+export function fitHeight(s: Show, f: Fit, chrome = 52, pad = 14, max = 320): number {
+  const parts: number[] = [];
+  if (s.cpu || s.ram || s.gpu) parts.push(79);
+  const disk = s.disk ? 24 + Math.max(1, f.drives) * 20 - 4 : 0;
+  const net = s.net ? 24 + 2 * 20 - 4 : 0;
+  if (disk || net) parts.push(Math.max(disk, net));
+  if (s.temp) parts.push(24 + Math.max(1, f.chipLines) * 28 - 6 + (f.note ? 90 : 0));
+  const content = parts.reduce((a, b) => a + b, 0) + 10 * Math.max(0, parts.length - 1);
+  return Math.min(max, Math.max(FIT_MIN, chrome + 2 * pad + content));
+}

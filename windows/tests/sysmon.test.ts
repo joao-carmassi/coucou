@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { AlertState, bytes, clampInt, COOLDOWN, heat, pct, rate, showOf, spark } from "../src/modules/sysmon/logic.ts";
+import { AlertState, bytes, clampInt, COOLDOWN, fitHeight, FIT_MIN, heat, pct, rate, showOf, spark } from "../src/modules/sysmon/logic.ts";
 
 const lim = { cpu: 90, ram: 90, disk: 95, temp: 85 };
 
@@ -63,4 +63,19 @@ test("a dip resets the streak; an unmeasured round keeps it", () => {
   b.step({ cpu: 95 }, lim);
   assert.deepEqual(b.step({ cpu: null }, lim), []);
   assert.deepEqual(b.step({ cpu: 95 }, lim), []);
+});
+
+test("fitHeight follows the shown sections and clamps to 160..320", () => {
+  const all = showOf(null), f = { drives: 2, chipLines: 1, note: false };
+  const full = fitHeight(all, f);
+  assert.ok(full < 320 && full > 200);
+  const noTemp = fitHeight({ ...all, temp: false }, f);
+  assert.ok(noTemp < full, "hiding temperatures shrinks the island");
+  const none = { cpu: false, ram: false, gpu: false, disk: false, net: false, temp: false };
+  assert.equal(fitHeight(none, f), FIT_MIN);
+  assert.ok(fitHeight({ ...none, cpu: true }, f) < noTemp);
+  assert.equal(fitHeight({ ...none, cpu: true, gpu: true }, f), fitHeight({ ...none, ram: true }, f), "tiles are one row");
+  assert.ok(fitHeight({ ...none, disk: true, net: true }, f) < fitHeight({ ...none, disk: true, net: true, temp: true }, f));
+  assert.ok(fitHeight(all, { ...f, note: true }) > full, "the LHM note adds height");
+  assert.equal(fitHeight(all, { drives: 9, chipLines: 5, note: true }), 320);
 });
