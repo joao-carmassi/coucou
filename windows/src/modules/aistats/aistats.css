@@ -1,0 +1,10 @@
+/* Estatísticas de IA: this module's classes, all prefixed "aistats-". Reuse kit classes; never redefine them. */
+.aistats-view { font: 400 12px var(--font); color: var(--dim); }
+.aistats-tiles { display: flex; gap: 14px; }
+.aistats-tile b { display: block; font: 600 15px var(--font); color: var(--ink); font-variant-numeric: tabular-nums; }
+.aistats-days { display: flex; align-items: flex-end; gap: 6px; height: 56px; }
+.aistats-day { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; height: 100%; }
+.aistats-day > i { display: block; width: 100%; min-height: 2px; border-radius: 3px; background: var(--amber); }
+.aistats-row { display: flex; justify-content: space-between; gap: 8px; }
+.aistats-row span:first-child { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aistats-row span:last-child { font-variant-numeric: tabular-nums; }
