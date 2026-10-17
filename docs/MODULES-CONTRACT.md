@@ -688,3 +688,7 @@ Prices of chosen coins; portfolio value from Coinbase and OKX through READ-ONLY 
 - **Not built**: wake word (user decision); spoken answers to questions (`shortcut: actions only, add a "voice.answer" service when a second module asks for it`); app launching or shell (nothing outside registered actions).
 - **Commands / events (voice)**: `voice_start(mode?)`, `voice_speak`, `voice_download_whisper`; `voice-flow`, `voice-assist-hotkey`, `voice-text.mode`.
 - **Not verified here**: a real assistant take by microphone ("próxima faixa" running the nowplaying `Alt+N` action), SAPI speech output, the hotkey registering on the user's layout.
+
+## TLS roots (reqwest, all modules)
+
+- reqwest uses `rustls-tls-native-roots`: the app now trusts every CA installed in the Windows certificate store, including ones added by antivirus or corporate proxies (TLS inspection). Pinned downloads still check size + SHA-256, and secrets-bearing calls keep their host allowlists.
