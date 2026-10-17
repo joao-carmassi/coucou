@@ -58,7 +58,7 @@ beforeAll(async () => {
 afterAll(() => vi.useRealTimers());
 
 describe("defaults", () => {
-  it("focus hold is one minute", () => expect(DEFAULT_SETTINGS.focusHoldMinutes).toBe(1));
+  it("focus time is one minute", () => expect(DEFAULT_SETTINGS.compactHideInterval).toBe(60));
 });
 
 const clearAll = () => { Holds.clear(); Last.clear(); };

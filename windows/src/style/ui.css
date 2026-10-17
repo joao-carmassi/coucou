@@ -143,3 +143,8 @@
 .scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
+
+/* Pin button (kit/pin.ts): a module view's "pin to the island" toggle */
+.pin-btn { display: inline-grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 8px; background: transparent; color: var(--dim); cursor: pointer; }
+.pin-btn:hover { background: var(--surface-track); color: var(--ink); }
+.pin-btn.on { color: var(--amber); }

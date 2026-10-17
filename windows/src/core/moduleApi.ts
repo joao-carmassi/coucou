@@ -12,7 +12,7 @@ export type { Pill } from "./state";
 export type Disposer = () => void;
 
 /** Optional neutral priority bands for status lines and avatar signals (any number works). */
-export const BAND = { URGENT: 90, NOTICE: 60, ACTIVE: 30, AMBIENT: 10 } as const;
+export const BAND = { URGENT: 90, NOTICE: 60, PINNED: 35, ACTIVE: 30, AMBIENT: 10 } as const;
 
 /** The window is a fixed PANEL_W x PANEL_H; the expanded island is EXPANDED_W wide. core/layout re-exports both. */
 export const PANEL_H = 320;
@@ -40,7 +40,21 @@ export interface StatusLine {
   overGrid?: boolean;
   /** Richer compact line: `text` is the first line, beside a small cover, a second line and a trailing text (a time). */
   card?: StatusCard;
+  /** A click on the compact island while this line is shown opens this view (source lines get their source's `view`). */
+  view?: string;
+  /** Dimmed (paused). Cards dim through `card.dim`. */
+  dim?: boolean;
 }
+
+/** A one-line source a module registers (api.status.source): shown when the user pinned it, or while it is the last module opened. */
+export interface SourceDef {
+  /** Pt-BR name of the line, for the settings window and tooltips. */
+  label: string;
+  /** Opened by a click on the line. */
+  view?: string;
+}
+/** `set(line)` publishes (null = no content); `ttlMs` and `priority` of a source line are ignored: the core assigns the band. */
+export interface StatusSource { set(line: StatusLine | null): void; dispose: Disposer }
 
 /** Image URL / data URL (null: a neutral square), second line, trailing text, dimmed (paused). All optional. */
 export interface StatusCard { art?: string | null; sub?: string; trail?: string; dim?: boolean }
@@ -161,7 +175,20 @@ export interface IslandApi {
   listen<T>(event: string, fn: (payload: T) => void): Disposer;
   timeout(fn: () => void, ms: number): Disposer;
   interval(fn: () => void, ms: number, opts?: { whenVisible?: boolean }): Disposer;
-  status: { set(line: StatusLine | null): void };
+  status: {
+    set(line: StatusLine | null): void;
+    /**
+     * Registers a one-line source "<moduleId>.<key>" (key: [a-z0-9-]+; registering it again replaces it; removed when the module stops).
+     * Its line is shown at BAND.PINNED while the user pinned it (setting `pinnedLine`, one at a time, over any agent line but under
+     * notices and alerts), and at the ambient band while this module is the last one the user opened (until the island hides).
+     * The pin is dropped by itself when the source has had no content for 5 minutes.
+     */
+    source(key: string, def: SourceDef): StatusSource;
+    /** True while the user pinned this module's source `key`. */
+    pinned(key: string): boolean;
+    /** Pins (on) or releases (off) this module's source `key`; pinning replaces any other pinned line. */
+    pin(key: string, on: boolean): void;
+  };
   avatar: { publish(sig: AvatarSignal | null): void;
     /** The glow behind Mochi for a mood (colour and opacity); idle's for an unknown name. */
     glow(mood: string): { color: string; opacity: number }; emote(e: BotEmoteName): void; morph(v: number): void; gulp(): void; tint(color: string | null): void; bodyColor(): string | null;
@@ -230,6 +257,8 @@ export interface IslandApi {
      * Dropped by the disposer, by this module stopping and by Pause (while paused the call is a no-op).
      */
     notice(n: Notice): Disposer;
+    /** The user's focus time in ms: how long the minimized island stays up before hiding (60 s when it never hides). */
+    focusMs(): number;
     /** True while any pinned request exists (a note over it would be rude). */
     busy(): boolean;
     setView(view: string): void; close(): void; wake(): void; hide(): void;

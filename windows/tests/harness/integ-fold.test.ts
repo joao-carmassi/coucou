@@ -90,7 +90,7 @@ describe("folded island with an integration pill", () => {
   });
 
   it("picked integration, folded, Claude starts working: past the hold time the folded island shows Claude, no click", () => {
-    Object.assign(State.settings, { boardPrimary: "claude", focusHoldMinutes: 1 });
+    Object.assign(State.settings, { boardPrimary: "claude", compactHideInterval: 60 });
     probe.api!.status.set(null);
     probe.api!.pills.set({ id: "claude-pill", ambient: false, mood: "idle" });
     pick();
@@ -107,7 +107,7 @@ describe("folded island with an integration pill", () => {
   });
 
   it("picked integration, folded, Claude done: the hover wake past the hold time shows Claude even if the timer never ran", () => {
-    Object.assign(State.settings, { boardPrimary: "claude", focusHoldMinutes: 1 });
+    Object.assign(State.settings, { boardPrimary: "claude", compactHideInterval: 60 });
     probe.api!.status.set(null);
     probe.api!.pills.set({ id: "claude-pill", ambient: false, mood: "idle" });
     pick();
