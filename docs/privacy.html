@@ -32,6 +32,7 @@
 <ul>
 <li><b>GitHub, Vercel, Stripe, Resend, Notion, Cal.com, n8n</b>: Coucou reads data from your own accounts (repositories and builds, deployments, payments, emails, pages, bookings, workflow runs) to display it. It only reads. For n8n, the address is the one you enter.</li>
 <li><b>Voice model download</b>: if you press “Baixar modelo” in Settings → Voz, two files (the speech model and its engine) are downloaded from huggingface.co. This is the only time the voice module touches the network; the files are pinned and checked against a SHA-256 hash.</li>
+<li><b>Plan usage (Claude), opt-in</b>: the “Uso do plano” module reads Codex limits from local files and sends nothing. Only if you turn on “Mostrar também o uso do Claude” (off by default), Coucou reads the login token of Claude Code on your PC and sends it to api.anthropic.com to get your 5-hour and weekly usage, only while the Uso do plano tab is open or when you press “Atualizar”, at most every 5 minutes. This endpoint is unofficial and may stop working. The token is never refreshed, stored, logged or sent anywhere else.</li>
 </ul>
 <p>We have no access to these requests or their responses.</p>
 
@@ -83,6 +84,7 @@
 <ul>
 <li><b>GitHub, Vercel, Stripe, Resend, Notion, Cal.com, n8n</b> : Coucou lit les données de tes propres comptes (dépôts et builds, déploiements, paiements, e-mails, pages, rendez-vous, exécutions de workflows) pour les afficher. Il ne fait que lire. Pour n8n, l’adresse est celle que tu saisis.</li>
 <li><b>Téléchargement du modèle vocal</b> : si tu appuies sur « Baixar modelo » dans Configurações → Voz, deux fichiers (le modèle de reconnaissance et son moteur) sont téléchargés depuis huggingface.co. C’est la seule fois où le module vocal utilise le réseau ; les fichiers sont épinglés et vérifiés par empreinte SHA-256.</li>
+<li><b>Utilisation du forfait (Claude), optionnel</b> : le module « Uso do plano » lit les limites de Codex dans des fichiers locaux et n’envoie rien. Seulement si tu actives « Mostrar também o uso do Claude » (désactivé par défaut), Coucou lit le jeton de connexion de Claude Code sur ton PC et l’envoie à api.anthropic.com pour obtenir ton utilisation sur 5 heures et sur la semaine, uniquement quand l’onglet Uso do plano est ouvert ou quand tu appuies sur « Atualizar », au plus toutes les 5 minutes. Ce point d’accès n’est pas officiel et peut cesser de fonctionner. Le jeton n’est jamais renouvelé, conservé, journalisé ni envoyé ailleurs.</li>
 </ul>
 <p>Le développeur n’a accès ni à ces requêtes ni à leurs réponses.</p>
 
