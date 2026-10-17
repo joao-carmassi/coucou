@@ -26,6 +26,7 @@ import { colorFor } from "../core/pills";
 import { State } from "../core/state";
 import { BotEngine, hexToRGB, sleepDue, type RGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
+import { CompanionLink } from "./companionLink";
 import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
 import { buildHeader, buildViews, type Header, type ViewActions, type ViewHost } from "../views/views";
 import { h } from "../kit/dom";
@@ -90,6 +91,8 @@ export class Island implements IslandHost {
   private botSize = new Spring(10);
 
   private engine = new BotEngine();
+  /** The floating Mochi window: while it is on, this island draws and animates no Mochi of its own. */
+  private link = new CompanionLink();
   private greeting = new Greeting();
 
 
@@ -157,6 +160,7 @@ export class Island implements IslandHost {
     this.engine.onDizzy = () => this.handleDizzy();
     this.greeting.onComplete = () => this.fsm.greetComplete();
     State.onPause((paused) => {
+      this.syncCompanion();
       if (!paused) return;
       this.notices.clear();
       this.syncNotices();
@@ -567,7 +571,7 @@ export class Island implements IslandHost {
    * the setting is on and the island is visible or a notice waits.
    */
   private syncWatch() {
-    const want = State.settings.hideWhenBusy && (State.mode !== "hidden" || this.notices.size > 0);
+    const want = State.settings.hideWhenBusy && (State.mode !== "hidden" || this.notices.size > 0 || this.link.on);
     if (want === this.watching) return;
     this.watching = want;
     if (!want) {
@@ -598,6 +602,7 @@ export class Island implements IslandHost {
   applyPresence(p: Presence, silent = false) {
     const was = this.quiet;
     this.quiet = p.quiet;
+    this.syncCompanion();
     if (!silent && !was && p.quiet && State.settings.hideWhenBusy) {
       // Requests ignore presence: a pinned one, or any at urgent priority, keeps the island up.
       const front = Requests.front();
@@ -609,6 +614,22 @@ export class Island implements IslandHost {
 
   reveal() {
     this.fsm.reveal();
+  }
+
+  /** The companion window opened after the last message: say everything again. */
+  companionReady() {
+    this.link.again();
+    this.syncCompanion();
+  }
+
+  /** On/off follows the setting; while on, the state message goes out only when it changed. Hidden for a pause or a quiet presence. */
+  private syncCompanion() {
+    if (this.link.setOn(!!State.settings.companionEnabled)) {
+      this.dirty = true;
+      this.syncWatch(); // the presence watch also serves the companion
+      this.ensureRunning(); // the island redraws his Mochi, or stops drawing it, on the next frame
+    }
+    this.link.state(this.effState(), this.targetBodyColor(), State.paused || (State.settings.hideWhenBusy && this.quiet));
   }
 
   reopen() {
@@ -1043,7 +1064,7 @@ export class Island implements IslandHost {
     if (State.mode === "compact" && !this.wasInIsland && !this.dirty && !this.lastOverlayBusy &&
         !this.width.animating && !this.height.animating && !this.radius.animating && this.offsetX.settled &&
         this.botCx.settled && this.botCy.settled && this.botSize.settled && !this.tintSettling &&
-        !this.engine.animating && nowMs - this.lastFrame < IDLE_FRAME_MS) {
+        (this.link.on || !this.engine.animating) && nowMs - this.lastFrame < IDLE_FRAME_MS) {
       window.setTimeout(() => requestAnimationFrame(this.frame), IDLE_FRAME_MS - (nowMs - this.lastFrame) - 8);
       return;
     }
@@ -1100,7 +1121,7 @@ export class Island implements IslandHost {
       ? settling
       : settling ||
         !this.botCx.settled || !this.botCy.settled || !this.botSize.settled ||
-        greetingActive || this.engine.busy || this.tintSettling || overlayBusy ||
+        greetingActive || (!this.link.on && this.engine.busy) || this.tintSettling || overlayBusy ||
         (State.mode === "compact" && this.activityShown && !State.statusLine?.still) ||
         // The auto-close countdown bar is only redrawn here; a stopped loop froze
         // it and it caught up in jumps whenever something else animated.
@@ -1132,7 +1153,7 @@ export class Island implements IslandHost {
     this.botSize.target = p.diameter / 0.6;
 
     const greetingActive = State.mode === "expanded" && State.view === "greeting";
-    this.botCanvas.style.opacity = p.opacity > 0 && !greetingActive ? "1" : "0";
+    this.botCanvas.style.opacity = p.opacity > 0 && !greetingActive && !this.link.on ? "1" : "0";
 
     if (State.mode === "expanded" && !greetingActive && viewLayout(State.view).glow !== false) {
       const d = p.diameter;
@@ -1150,6 +1171,7 @@ export class Island implements IslandHost {
   }
 
   private drawBot(dt: number) {
+    if (this.link.on) return; // the companion window draws him
     const size = this.botSize.value;
     const w = Math.max(1, Math.round(size));
     const hCss = w + BOT_OVERHANG;
@@ -1198,10 +1220,11 @@ export class Island implements IslandHost {
     const active = State.mode !== "compact" || this.wasInIsland || this.rawState() !== "idle";
     if (active) {
       this.restSince = nowMs;
-      if (this.asleep) { this.asleep = false; this.engine.setState(this.effState()); }
+      if (this.asleep) { this.asleep = false; this.engine.setState(this.effState()); this.syncCompanion(); }
     } else if (!this.asleep && sleepDue(this.restSince, nowMs, State.settings.mochiSleepMinutes ?? 10)) {
       this.asleep = true;
       this.engine.setState(this.effState());
+      this.syncCompanion();
     }
   }
 
@@ -1233,6 +1256,7 @@ export class Island implements IslandHost {
 
   /** True while the body colour is still on its way — the frame loop keeps going. */
   private get tintSettling(): boolean {
+    if (this.link.on) return false; // nothing eases while the companion draws him
     const target = this.targetBodyColor();
     if (!target || !this.bodyRGB) return false;
     return this.bodyRGB.some((v, i) => Math.abs(v - target[i]) > TINT_SETTLED);
@@ -1288,7 +1312,7 @@ export class Island implements IslandHost {
     }
 
     const emote = Avatar.takeEmote();
-    if (emote) this.engine.triggerEmote(emote);
+    if (emote) { if (this.link.on) this.link.emote(emote); else this.engine.triggerEmote(emote); }
 
     // Compact mini grid
     const showGrid = State.mode === "compact" && !this.textOverGrid();
@@ -1336,6 +1360,7 @@ export class Island implements IslandHost {
     syncMiniBotStates(State.pills);
     pruneMiniBots();
     this.engine.setState(this.effState());
+    this.syncCompanion();
     this.startNoticeClock();
   }
 
@@ -1431,10 +1456,12 @@ export class Island implements IslandHost {
 
   avatarTint(color: string | null) {
     this.tintRequest = color ? hexToRGB(color) : null;
+    this.syncCompanion();
     this.ensureRunning();
   }
 
   avatarLevel(v: number, opts?: { dance?: boolean }) {
+    if (this.link.on) return this.link.level(v, !!opts?.dance);
     // Hidden: nothing is drawn, so no frame is requested; the value just decays.
     if (this.engine.setLevel(v, performance.now(), !!opts?.dance) && v > 0.02 && State.mode !== "hidden") this.ensureRunning();
   }
@@ -1457,6 +1484,7 @@ export class Island implements IslandHost {
     this.fsm.homeToPetitDelay = State.settings.autoCloseInterval;
     this.fsm.petitToHiddenDelay = State.settings.compactHideInterval;
     Pin.sync(); // the settings window may have pinned or released a line
+    this.syncCompanion();
     // Re-arm with the new delay (or cancel it, for "never") if already minimized.
     if (this.fsm.state === "petit" && !this.wasInIsland) this.fsm.mouseLeft();
     syncMiniBotStates(State.pills); // a changed colour map reaches the minis now
