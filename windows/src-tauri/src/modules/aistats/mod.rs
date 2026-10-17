@@ -9,6 +9,7 @@
 mod index;
 mod parse;
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Mutex;
@@ -80,37 +81,24 @@ fn roots() -> Vec<(PathBuf, Kind)> {
 #[serde(rename_all = "camelCase")]
 pub struct Summary {
     days: Vec<DayRow>,
-    total: Totals,
-    models: Vec<(String, Totals)>,
-    projects: Vec<(String, u64)>,
     approx: bool,
     more: bool,
 }
 
+/// One local day: its totals, split by model and by project (the view sums the period it shows).
 #[derive(Serialize, Debug)]
 pub struct DayRow {
     day: String,
     tok: Totals,
+    models: BTreeMap<String, Totals>,
+    projects: BTreeMap<String, u64>,
 }
 
-/// The last `SHOWN_DAYS` local days ending `today` (a day number). Models: all, biggest first. Projects: top 5.
+/// The last `SHOWN_DAYS` local days ending `today` (a day number), oldest first.
 fn summarize(ix: &Index, today: i64, more: bool) -> Summary {
     let from = day_key(today - SHOWN_DAYS + 1);
-    let mut s = Summary { days: vec![], total: Totals::default(), models: vec![], projects: vec![], approx: ix.approx, more };
-    let mut models: std::collections::BTreeMap<&str, Totals> = Default::default();
-    let mut projects: std::collections::BTreeMap<&str, u64> = Default::default();
-    for (k, d) in ix.days.range(from..) {
-        s.total.add(&d.tok);
-        s.days.push(DayRow { day: k.clone(), tok: d.tok });
-        d.by_model.iter().for_each(|(m, t)| models.entry(m).or_default().add(t));
-        d.by_project.iter().for_each(|(p, n)| *projects.entry(p).or_insert(0) += n);
-    }
-    s.models = models.into_iter().map(|(m, t)| (m.to_string(), t)).collect();
-    s.models.sort_by_key(|(_, t)| std::cmp::Reverse(t.sum()));
-    s.projects = projects.into_iter().map(|(p, n)| (p.to_string(), n)).collect();
-    s.projects.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
-    s.projects.truncate(5);
-    s
+    let days = ix.days.range(from..).map(|(k, d)| DayRow { day: k.clone(), tok: d.tok, models: d.by_model.clone(), projects: d.by_project.clone() }).collect();
+    Summary { days, approx: ix.approx, more }
 }
 
 fn today(off: i64) -> i64 {
@@ -180,24 +168,26 @@ mod tests {
     use index::Day;
 
     #[test]
-    fn summary_window_and_ranking() {
+    fn summary_window_and_split() {
         let mut ix = Index::default();
         let mut add = |k: &str, model: &str, project: &str, n: u64| {
             let d: &mut Day = ix.days.entry(k.into()).or_default();
-            let t = Totals { output: n, ..Default::default() };
+            let t = Totals { output: n, req: 1, ..Default::default() };
             d.tok.add(&t);
             d.by_model.entry(model.into()).or_default().add(&t);
             *d.by_project.entry(project.into()).or_insert(0) += n;
         };
         add("2026-10-17", "a", "p1", 5);
         add("2026-10-10", "b", "p2", 9);
+        add("2026-10-10", "a", "p2", 1);
         add("2026-09-01", "b", "p3", 100); // outside the 30 shown days
         let s = summarize(&ix, days_from_civil(2026, 10, 17), true);
-        assert_eq!(s.days.len(), 2);
-        assert_eq!(s.total.output, 14);
-        assert_eq!(s.models[0].0, "b");
-        assert_eq!(s.projects.iter().map(|p| p.0.as_str()).collect::<Vec<_>>(), ["p2", "p1"]);
+        assert_eq!(s.days.iter().map(|d| d.day.as_str()).collect::<Vec<_>>(), ["2026-10-10", "2026-10-17"]);
+        let d = &s.days[0];
+        assert_eq!((d.tok.output, d.tok.req, d.models["b"].output, d.projects["p2"]), (10, 2, 9, 10));
         assert!(s.more && !s.approx);
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(json.contains(r#""models":{"a":"#) && json.contains(r#""req":1"#), "{json}");
     }
 
     #[test]

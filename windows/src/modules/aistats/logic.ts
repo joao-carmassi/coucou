@@ -1,14 +1,10 @@
-// Pure rules of Estatísticas de IA: money estimate, 7-day bars, number formats.
+// Pure rules of Estatísticas de IA: money estimate, period sums, number formats, the view's height.
 
-export interface Totals { input: number; output: number; cache_read: number; cache_write: number; reasoning: number }
-export interface Summary {
-  days: { day: string; tok: Totals }[];
-  total: Totals;
-  models: [string, Totals][];
-  projects: [string, number][];
-  approx: boolean;
-  more: boolean;
-}
+/** `req` is 0 for days indexed before requests were counted. */
+export interface Totals { input: number; output: number; cache_read: number; cache_write: number; reasoning: number; req: number }
+export interface DayRow { day: string; tok: Totals; models: Record<string, Totals>; projects: Record<string, number> }
+/** The last 30 local days that have usage, oldest first (same shape as Rust). */
+export interface Summary { days: DayRow[]; approx: boolean; more: boolean }
 
 export const PRICES_DATE = "2026-10-17";
 /** [input, output] USD per million tokens and the cache-read price as a fraction of input. 5-min cache write is 1.25x input. */
@@ -42,45 +38,114 @@ export function costOf(model: string, t: Totals): number | null {
   return (t.input * r[0] + t.output * r[1] + t.cache_read * r[0] * r[2] + t.cache_write * r[0] * 1.25) / 1e6;
 }
 
-/** Sum over the models that have a price; `partial` when some model had none. */
-export function costTotal(models: readonly [string, Totals][]): { usd: number; partial: boolean } {
-  let usd = 0, partial = false;
+/** Sum over the models that have a price; `missing` lists the models with tokens and no price. */
+export function costTotal(models: readonly [string, Totals][]): { usd: number; partial: boolean; missing: string[] } {
+  let usd = 0;
+  const missing: string[] = [];
   for (const [m, t] of models) {
     const c = costOf(m, t);
-    if (c === null) partial = true; else usd += c;
+    if (c !== null) usd += c;
+    else if (sumOf(t)) missing.push(m);
   }
-  return { usd, partial };
+  return { usd, partial: missing.length > 0, missing };
 }
 
+export const ZERO: Totals = { input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0, req: 0 };
 export const sumOf = (t: Totals) => t.input + t.output + t.cache_read + t.cache_write;
+const plus = (a: Totals, b: Totals): Totals => ({
+  input: a.input + b.input, output: a.output + b.output, cache_read: a.cache_read + b.cache_read,
+  cache_write: a.cache_write + b.cache_write, reasoning: a.reasoning + b.reasoning, req: a.req + (b.req ?? 0),
+});
 
+/** Local "YYYY-MM-DD", the key Rust writes. */
 export function dayKey(d: Date): string {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-/** The 7 local days ending `now`, with the bar height in percent (the biggest day is 100, a non-empty day at least 4). */
-export function weekBars(days: Summary["days"], now: Date): { day: string; tokens: number; pct: number }[] {
-  const by = new Map(days.map((d) => [d.day, sumOf(d.tok)]));
-  const rows = Array.from({ length: 7 }, (_, i) => {
-    const day = dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - (6 - i), 12));
-    return { day, tokens: by.get(day) ?? 0, pct: 0 };
-  });
-  const max = Math.max(...rows.map((r) => r.tokens));
-  for (const r of rows) r.pct = r.tokens ? Math.max(4, Math.round((r.tokens / max) * 100)) : 0;
-  return rows;
+/** The last `n` day keys, oldest first, ending with `now`'s day. */
+export function lastDays(now: Date, n: number): string[] {
+  return Array.from({ length: n }, (_, i) => dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - (n - 1 - i), 12)));
 }
 
+export interface Period {
+  tok: Totals;
+  models: [string, Totals][];   // biggest first
+  projects: [string, number][]; // biggest first
+  /** Some day with tokens has no request count (it was indexed by an older version). */
+  reqPartial: boolean;
+}
+
+/** The given days summed. */
+export function period(days: readonly DayRow[], keys: readonly string[]): Period {
+  const want = new Set(keys);
+  let tok = ZERO, reqPartial = false;
+  const models: Record<string, Totals> = {}, projects: Record<string, number> = {};
+  for (const d of days) {
+    if (!want.has(d.day)) continue;
+    tok = plus(tok, d.tok);
+    if (sumOf(d.tok) && !d.tok.req) reqPartial = true;
+    for (const [m, t] of Object.entries(d.models ?? {})) models[m] = plus(models[m] ?? ZERO, t);
+    for (const [p, n] of Object.entries(d.projects ?? {})) projects[p] = (projects[p] ?? 0) + n;
+  }
+  const big = <T>(list: [string, T][], v: (x: T) => number) => list.sort((a, b) => v(b[1]) - v(a[1]) || a[0].localeCompare(b[0]));
+  return { tok, models: big(Object.entries(models), sumOf), projects: big(Object.entries(projects), (n) => n), reqPartial };
+}
+
+/** Share of the prompt read from the cache, 0..1; null when nothing was sent. */
+export function cacheHit(t: Totals): number | null {
+  const prompt = t.input + t.cache_read + t.cache_write;
+  return prompt ? t.cache_read / prompt : null;
+}
+
+export type Provider = "claude" | "codex";
+// shortcut: the source is inferred from the model id (the Claude logs hold only Claude models); upgrade by tagging the source in Rust.
+export const providerOf = (model: string): Provider => (/claude|opus|sonnet|haiku|fable|mythos/i.test(model) ? "claude" : "codex");
+
+/** Tokens per provider over the given models. */
+export function split(models: readonly [string, Totals][]): Record<Provider, number> {
+  const out: Record<Provider, number> = { claude: 0, codex: 0 };
+  for (const [m, t] of models) out[providerOf(m)] += sumOf(t);
+  return out;
+}
+
+/** "claude-opus-4-5-20251101" -> "opus-4-5". */
+export const modelName = (id: string): string => id.replace(/^claude-/, "").replace(/-\d{8}$/, "");
+
+const date = (k: string, o: Intl.DateTimeFormatOptions) => new Date(`${k}T12:00:00`).toLocaleDateString("pt-BR", o).replace(/\./g, "");
+/** "ter, 10 de mar", or "10 de mar" without the weekday. */
+export const dayLabel = (k: string, weekday = true): string =>
+  date(k, weekday ? { weekday: "short", day: "numeric", month: "short" } : { day: "numeric", month: "short" });
+/** "ter". */
+export const weekdayLabel = (k: string): string => date(k, { weekday: "short" });
+
+const one = (n: number) => n.toFixed(1).replace(".", ",");
 export function fmtTokens(n: number): string {
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)} B`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)} M`;
+  if (n >= 1e9) return `${one(n / 1e9)} B`;
+  if (n >= 1e6) return `${one(n / 1e6)} M`;
   if (n >= 1e3) return `${Math.round(n / 1e3)} mil`;
   return String(n);
 }
 
-export const fmtUsd = (usd: number) => `US$ ${usd.toFixed(2)}`;
+export const fmtUsd = (usd: number) => `US$ ${usd.toFixed(2).replace(".", ",")}`;
 
 export function keepDays(v: unknown): number {
   const n = Math.floor(Number(v));
   return Number.isFinite(n) && n >= 1 ? Math.min(365, n) : 90;
+}
+
+// Fixed heights of the view's parts (aistats.css), so the island fits its content without measuring. chrome 56 =
+// #content padding + header + card border (as sysmon); body padding 12 + 12; head 22.
+const FIT_HEAD = 56 + 24 + 22;
+/** gap 10, tiles 54, gap 10, (middle), gap 10, foot 16. */
+const FIT_BODY = 10 + 54 + 10 + 10 + 16;
+export const LIST_MAX = 4;
+const ROW_H = 16, ROW_GAP = 4, CHART_H = 96;
+export type Tab = "today" | "week" | "month";
+/** Island height. "today" holds two lists of `rows` rows (one "nothing" line when 0) under a 14 px heading + 6 gap; the
+ *  periods hold the 96 px chart row; `empty` is one message line under the head. */
+export function fitHeight(tab: Tab, rows: number, empty = false): number {
+  if (empty) return FIT_HEAD + 10 + ROW_H;
+  const n = Math.max(1, Math.min(LIST_MAX, rows));
+  return FIT_HEAD + FIT_BODY + (tab === "today" ? 20 + n * ROW_H + (n - 1) * ROW_GAP : CHART_H);
 }

@@ -675,6 +675,37 @@ describe("planusage", () => {
     expect(T.hosts.planusage.height).toBe(256);
     settings.planusageClaudeNet = false;
     delete T.answers.planusage_claude;
+
+// ── Estatísticas de IA: Hoje, 7 dias, 30 dias ───────────────────────────────────────────────
+
+describe("aistats", () => {
+  it("today, then the 7 and 30 day tabs", async () => {
+    const tok = (o: Record<string, number>) => ({ input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0, req: 0, ...o });
+    T.answers.aistats_refresh = () => ({
+      approx: true, more: false,
+      days: [
+        { day: "2026-02-12", tok: tok({ input: 900_000, output: 40_000 }), models: { "gpt-5": tok({ input: 900_000, output: 40_000 }) }, projects: {} },
+        { day: "2026-03-06", tok: tok({ input: 20_000, output: 90_000, cache_read: 1_800_000, cache_write: 60_000, req: 120 }),
+          models: { "claude-opus-4-5-20251101": tok({ input: 20_000, output: 90_000, cache_read: 1_800_000, cache_write: 60_000, req: 120 }) }, projects: { coucou: 1_970_000 } },
+        { day: "2026-03-10", tok: tok({ input: 45_000, output: 120_000, cache_read: 3_200_000, cache_write: 150_000, reasoning: 8000, req: 214 }),
+          models: {
+            "claude-opus-4-5-20251101": tok({ input: 30_000, output: 80_000, cache_read: 2_600_000, cache_write: 120_000, req: 150 }),
+            "claude-haiku-4-5-20251001": tok({ input: 5000, output: 10_000, cache_read: 300_000, cache_write: 30_000, req: 40 }),
+            "gpt-5-codex": tok({ input: 10_000, output: 30_000, cache_read: 300_000, reasoning: 8000, req: 24 }),
+          },
+          projects: { coucou: 2_500_000, "site-novo": 540_000, dotfiles: 200_000 } },
+      ],
+    });
+    await go("overview");
+    snap("aistats-today", await showing("aistats"));
+    expect(T.hosts.aistats.height).toBe(278);
+    const tab = (i: number) => (T.hosts.aistats.el.querySelectorAll(".aistats-tabs button")[i] as HTMLElement).click();
+    tab(1);
+    snap("aistats-week", T.hosts.aistats.el);
+    expect(T.hosts.aistats.height).toBe(298);
+    tab(2);
+    snap("aistats-month", T.hosts.aistats.el);
+    delete T.answers.aistats_refresh;
   });
 });
 
