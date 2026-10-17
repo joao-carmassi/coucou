@@ -140,7 +140,7 @@ export const calendarModule: ModuleDef = {
   id: "calendar",
   views: [{
     name: "calendar",
-    layout: { height: 250, botX: 54, botY: null, botDiameter: 46 },
+    layout: { height: 300, botX: 54, botY: null, botDiameter: 46 },
     build: (ctx) => buildCalendarView(view, ctx),
   }],
   tabs: [{ view: "calendar", title: "Agenda", icon: () => svg(ICON_CALENDAR, 13), order: 36 }],

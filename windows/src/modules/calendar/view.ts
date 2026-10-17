@@ -20,7 +20,7 @@ export interface CalUi {
   arm(paint: () => void): void;
 }
 
-const MAX_LINES = 7;
+const MAX_LINES = 60; // a bound on the DOM; the list scrolls
 
 function line(o: Occurrence, tz: string): HTMLElement {
   const join = o.link && h("button", { class: "link-btn text-link cal-join", text: "Entrar", onclick: () => void App.openUrl(o.link!) });
@@ -52,7 +52,7 @@ export function buildCalendarView(ui: CalUi, ctx: ViewContext): ViewHost {
         h("div", { class: "actions" }, h("button", { class: "link-btn text-link", text: "Abrir configurações", onclick: () => void App.openSettingsWindow() })));
       return;
     }
-    const list = h("div", { class: "cal-list" });
+    const list = h("div", { class: "cal-list scroll" });
     let lines = 0;
     for (const g of groups) {
       if (lines + 2 > MAX_LINES) break;

@@ -10,7 +10,7 @@ import type { WeatherStore } from "./store";
 
 /** `onSync` runs on every visible sync (the module refreshes its status line there). */
 export function buildWeatherView(ctx: ViewContext, store: WeatherStore, onSync: () => void): ViewHost {
-  const body = h("div", { class: "stack weather-body" });
+  const body = h("div", { class: "stack scroll weather-body" });
   const el = view(card(null, body));
   let shown = "";
 

@@ -104,7 +104,7 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
   const head = paneHead(paneTab(h("b", { text: "Mídia" })), h("div", { class: "grow" }), sub);
   const grid = paneList("media-grid");
   const menu = h("div", { class: "media-menu" });
-  const ffbox = h("div", { class: "media-ffbox" });
+  const ffbox = h("div", { class: "media-ffbox scroll" });
   ffbox.style.display = "none";
   const main = paneMain(head, grid, menu);
   const el = panel({ cls: "media-view", side: { title: "Mídia", sub: "capturas e arquivos" }, main });

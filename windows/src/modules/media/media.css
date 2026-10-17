@@ -137,6 +137,8 @@
 #island.ghost-on #bot-glow { opacity: 0 !important; }
 
 .media-ffbox {
+  flex: 0 1 auto;
+  max-height: 45%;
   margin: 0 0 8px;
   padding: 10px 12px;
   border-radius: 10px;
