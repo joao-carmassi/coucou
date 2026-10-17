@@ -112,7 +112,7 @@ import type { Settings } from "./state";
 import type { FsmState } from "../island/fsm";
 import type { ViewActions } from "../views/views";
 export type Disposer = () => void;
-/** Higher wins, tie goes to the most recent. Optional neutral bands: BAND = { URGENT: 90, NOTICE: 60, ACTIVE: 30, AMBIENT: 10 }. */
+/** Higher wins, tie goes to the most recent. Optional neutral bands: BAND = { URGENT: 90, NOTICE: 60, PINNED: 35, ACTIVE: 30, AMBIENT: 10 }. */
 export interface StatusLine { priority: number; text: string; icon?: string; ttlMs?: number; urgent?: boolean;
   /** Shown beside other pills in place of the mini grid (the timer). Default: only when no other pill. */ overGrid?: boolean }
 export interface AvatarSignal { state: BotStateName; priority: number; emote?: BotEmoteName; ttlMs?: number }
@@ -134,7 +134,7 @@ export interface IslandApi {
   listen<T>(event: string, fn: (payload: T) => void): Disposer;
   timeout(fn: () => void, ms: number): Disposer;
   interval(fn: () => void, ms: number, opts?: { whenVisible?: boolean }): Disposer;
-  status: { set(line: StatusLine | null): void };
+  status: { set(line: StatusLine | null): void; source(key: string, def: { label: string; view?: string }): { set(line: StatusLine | null): void; dispose(): void }; pinned(key: string): boolean; pin(key: string, on: boolean): void };
   avatar: { publish(sig: AvatarSignal | null): void; emote(e: BotEmoteName): void; morph(v: number): void; gulp(): void };
   island: { open(view: string): void; request(spec: { view: string; priority: number; pin?: boolean; ms?: number }): Disposer; busy(): boolean; setView(view: string): void; close(): void; wake(): void; hide(): void;
     keepAwake(pred: () => boolean): Disposer; mode(): IslandMode; fsmState(): FsmState; mouseInside(): boolean; view(): string;
@@ -349,14 +349,27 @@ Modules read `State` (pills, focusId, mode, view) but never write it; the three 
 | Priority | Who |
 |---|---|
 | 100 | claude: approval pending |
-| 90 | claude: question pending |
+| 90 | claude: question pending (`BAND.URGENT`) |
 | 80 | error |
-| 60 | finished (claude "pronto") |
-| 50 | timer |
+| 60 | notices (`BAND.NOTICE`, the core's `#notice` owner); claude "pronto" (finished); water / break / timer-finished notices |
+| 50 | timer (running countdown, `overGrid`) |
 | 40 | voice |
-| 30 | claude activity |
-| 20 | media |
-| 10 | integrations |
+| 35 | the pinned line (`BAND.PINNED`, core-assigned to the one source the user pinned; `overGrid`) |
+| 30 | claude activity ("working", `BAND.ACTIVE`) |
+| 12 | the last-opened module's source line (core-assigned: `BAND.AMBIENT + 2`) |
+| 10 | clock (`BAND.AMBIENT`) |
+
+Priorities 20 (media) and 10 (integrations) used to be listed here; no module publishes them any more. Ties go to the newest, except that the core's notice beats a plain line.
+
+### One-line sources, the pinned line and the focus time
+
+- **One focus time ("Tempo de foco").** `compactHideInterval` (seconds the minimized island stays up before it hides; 0 = never) is the only focus time. The board's primary pick (`api.island.focusMs()`), the implicit tab focus (`core/holds.ts: focusMs`) and the last-opened line all use it; "never hides" counts as 60 s for them. The old key `focusHoldMinutes` is still read and written in `settings.json` (never deleted, Rust keeps it) but nothing uses it; the Hub shows one control, "Tempo de foco".
+- **`api.status.source(key, { label, view? }) => { set(line | null), dispose }`.** Registers the source `<moduleId>.<key>` (`key` is `[a-z0-9-]+`; registering again replaces; removed when the module stops). `set` takes a `StatusLine` (text, `icon` drawn before the text, `dim`, `card`); its `priority` and `ttlMs` are ignored, the core assigns the band, and `view` defaults to the source's `view`. `null` means no content.
+- **When a source line shows.** (1) It is the pinned one (core setting `pinnedLine`, a flat string in `settings.json`, default `""`, ONE at a time: pinning another replaces it): shown whenever the island is compact, at `BAND.PINNED` (35, `overGrid`), above agent "working" lines and below voice, timer, notices, alerts and questions; those still pass over it for their normal time and then the pinned line returns. (2) Else it is the first source with content of the module whose view the user left last (`core/pin.ts`): shown at the ambient band (12) for the focus time, i.e. until the island hides; below everything else and hidden by any non-ambient pill. A click on a shown source line opens its `view` (after a waiting request and a shown notice). A pin whose module is off is ignored (not erased).
+- **Auto-release.** When the pinned source exists but has had no content (`set(null)`) for 5 minutes, the pin is cleared (and saved). One core timeout, armed when the source goes null, cancelled when content returns or the pin changes; nothing runs otherwise.
+- **API.** `api.status.pinned(key)` and `api.status.pin(key, on)` toggle the module's own source; `kit/pin.ts: pinButton(api, key) => { el, sync() }` is the pin button views embed (titles "Fixar na ilha" / "Soltar", `aria-pressed`). The Hub's "Linha da ilha" section shows what is pinned with a "Soltar" button.
+- **Shipped sources.** `nowplaying.track` (the cover card) and `weather.now` (icon + temperature). Weather note: while `weather.now` is pinned the forecast is fetched once at start and then refreshed every 30 min by one `api.interval(..., { whenVisible: true })`, armed only while pinned and the island is visible (a hidden island polls nothing; on return a cache older than 30 min is refreshed). So a pinned weather line talks to open-meteo every 30 min while the island is visible; unpinned, nothing runs in the background.
+- **Timer glance.** Timer setting `timerGlance` (bool, default false): with a timer or pomodoro running, every focus time one short `api.island.notice` (`peek: true`, 3 s, key `timer-glance`) shows the remaining time, even when the island is hidden. One `api.timeout`, re-armed after each fire, cancelled when the timer stops or the module is switched off.
 
 ## Rust modules are zero-edit (0.6.0)
 
@@ -469,7 +482,7 @@ Honest limits: (a) glob order is alphabetical by folder, so module CSS must not 
 
 ## Task holds, ambient pills, adaptive home (0.8.0)
 
-- Focus (0.8.3), two sources in `core/holds.ts`. Implicit focus (`Last`): every view the user leaves (tab change, or the island leaving `expanded`) is stamped lazily with `Date.now()` (no timers); the next reopen within `settings.focusHoldMinutes` minutes lands on it, unless it is the home view or unknown; `0` = off. The time counts from the last leave, so leaving a tab and then closing counts from the close. Needs no module code. Sticky hold (`api.island.hold(view, opts?: {idleMs?}) => Disposer`, `Holds`): for a running task. Never pins nor opens the island. Same owner+view replaces the earlier hold. No time expiry: every reopen lands on the view until the disposer runs, the module stops, or the user picks the home view; only an explicit `idleMs` expires it (unseen that long). Not persisted across restarts.
+- Focus (0.8.3), two sources in `core/holds.ts`. Implicit focus (`Last`): every view the user leaves (tab change, or the island leaving `expanded`) is stamped lazily with `Date.now()` (no timers); the next reopen within the focus time (`focusMs(settings.compactHideInterval)`) lands on it, unless it is the home view or unknown; The time counts from the last leave, so leaving a tab and then closing counts from the close. Needs no module code. Sticky hold (`api.island.hold(view, opts?: {idleMs?}) => Disposer`, `Holds`): for a running task. Never pins nor opens the island. Same owner+view replaces the earlier hold. No time expiry: every reopen lands on the view until the disposer runs, the module stops, or the user picks the home view; only an explicit `idleMs` expires it (unseen that long). Not persisted across restarts.
 - Landing precedence on reopen: explicit open/setView > front request > live sticky hold (most recently seen) > implicit last view > `homeView` hook > home-flagged tab > first tab > empty.
 - Actions do not drop focus. Release-on-action is opt-in: a module that wants an action to end its focus calls its hold's disposer in the handler (the plumbing stays; no module does it now). Only the timer holds (ready/running, released when finished or cancelled).
 - `Pill.ambient`: always listed (`pills.others()`, board); never hides the status line. In the compact grid it depends on the status line (0.8.4, `State.gridPills` / `State.statusLine`): while a status line is on show (only non-ambient pills can hide one) the ambient pills stay out of the grid; with no line on show (nobody working) every other pill is listed, ambient ones included (the compact grid draws the first 4; the 6 cap is the Início board only). A picked or front pill is never in the grid.
@@ -481,9 +494,9 @@ Honest limits: (a) glob order is alphabetical by folder, so module CSS must not 
 ### Board primary
 
 - Default: the first pill owned by the module named in `boardPrimary` (default `claude`). A module that is off or has no pill changes nothing; the existing fallback chain stays.
-- A click on a pill in the right-hand list is a user pick. The pick ends when anything else takes the front, or when the island was closed for >= `focusHoldMinutes` (the close time is stamped through `api.onVisibility` and judged on the next open; and, 0.8.4, while folded a folded island must not keep the picked pill in front, so ONE `api.timeout` of `focusHoldMinutes` is armed at the fold only while a pick exists, cancelled on open or when the board stops, and on fire puts the default in front; that revert is skipped only when the front pill has news of its own (explicit mood or badge). Since 0.8.5 a focus service must be side-effect free while the island is folded (Claude's `focusPill` only sets the focus then), so the revert never opens it; the same "due" test (`closedAt` + `focusHoldMinutes`) is also judged lazily on every visibility change (hover wake, open) in case the timer did not run, and the pick is dropped only once judged; `0` = back to the default at the fold). The same setting times the core's implicit tab focus (see above); the board's pick is independent of it and unchanged.
+- A click on a pill in the right-hand list is a user pick. The pick ends when anything else takes the front, or when the island was closed for >= the focus time (the close time is stamped through `api.onVisibility` and judged on the next open; and, 0.8.4, while folded a folded island must not keep the picked pill in front, so ONE `api.timeout` of `api.island.focusMs()` is armed at the fold only while a pick exists, cancelled on open or when the board stops, and on fire puts the default in front; that revert is skipped only when the front pill has news of its own (explicit mood or badge). Since 0.8.5 a focus service must be side-effect free while the island is folded (Claude's `focusPill` only sets the focus then), so the revert never opens it; the same "due" test (`closedAt` + the focus time) is also judged lazily on every visibility change (hover wake, open) in case the timer did not run, and the pick is dropped only once judged; a tiny focus time = back to the default at the fold). The same setting times the core's implicit tab focus (see above); the board's pick is independent of it and unchanged.
 - Explicit moods (`alert`, `ask`, `error`, `done`) or a badge on the front pill win over the default.
-- Settings section "Início": the provider list comes from the catalog (`MODULE_INFO`, every module but the board), refreshed on each focus/pointerdown of the select; the board names no module. `moduleSettings.save` refuses the core keys `focusHoldMinutes` and `modulesEnabled` (the board declares them to read only; the catalog test allows exactly those two for `board`).
+- Settings section "Início": the provider list comes from the catalog (`MODULE_INFO`, every module but the board), refreshed on each focus/pointerdown of the select; the board names no module. `moduleSettings.save` refuses the core keys `focusHoldMinutes` and `modulesEnabled` (the board declares `modulesEnabled` to read only; the catalog test allows exactly that one for `board`).
 
 ## Clima / weather (wave 1, F14)
 
@@ -519,8 +532,8 @@ Break reminders and screen time per app. Default off, order 17, tab "Pausas".
 - **Track.** `appId, app, title, artist, album, playing, canPrev, canNext, canToggle, positionMs, durationMs, at, art`. `positionMs` is valid for the unix ms `at`; the view moves it forward locally (one `api.interval` of 1 s, `whenVisible`, armed only while playing and the tab is open). `durationMs` is null for streams without a length (most browsers): the progress bar is then hidden. `art` is a 96 px JPEG data URL of at most 48 KiB (source read capped at 4 MiB), or null.
 - **Capture rule.** The island asks for the loopback (`wantCapture` in `logic.ts`) only while something plays AND Pause is off AND the island is not hidden AND (the dance setting is on OR the tab is open expanded). Any other state sends `nowplaying_capture(false)`: the thread ends within 20 ms and the device is released; `stop()` and the host's stop flag end it too. No packets arrive while nothing renders, so nothing is analysed or emitted then.
 - **Volume mapping is fuzzy.** The media session knows the player by its id (`Spotify.exe`, or a packaged id such as `Microsoft.ZuneMusic_8wekyb3d8bbwe!App`), the audio session by process id. `volume.rs` compares the last name of the id with the exe name (case-insensitive, `.exe` stripped) by exact key match plus an alias list and sets every matching session. A browser that plays through a helper process with another exe name, or a player without an audio session yet, shows "sem volume". It is the app's volume in the Windows mixer, not the player's own slider.
-- **0.10.1 UX.** No ambient pill any more (it drew a second, mini Mochi in the compact grid): the one Mochi dances through `api.avatar.level`. The compact island shows a `StatusLine.card` (cover, title, artist, time left "-m:ss") at priority `BAND.AMBIENT + 2`: any agent, notice, timer or voice line beats it, a non-ambient pill hides it, paused = dimmed. The time left needs one `api.interval(1 s, whenVisible)`, armed only while playing, compact (length known) or the open player; none when hidden or paused; no remaining time when the length is unknown. The Tocando view is 200 px tall with 14 px padding, room for the Mochi at `botX`, and a themed vertical scroll (`np-body`) if content exceeds.
-- **Core consumers.** `api.avatar.level` (dance), `api.island.notice` with `peek` (track change, not on first read, not while the tab is open), `api.actions.add` (`Alt+P` tocar/pausar, `Alt+N` próxima faixa), `api.status.set` (compact card while a track is known), `api.paused()` / `onPause`.
+- **0.10.1 UX.** No ambient pill any more (it drew a second, mini Mochi in the compact grid): the one Mochi dances through `api.avatar.level`. The card (cover, title, artist, time left "-m:ss") is the source `nowplaying.track` (see "One-line sources"): shown on the compact island when pinned from the Tocando tab (pin button) or right after leaving the tab; paused = dimmed. Older builds showed it always at `BAND.AMBIENT + 2`; that ambient mechanism is gone. The time left needs one `api.interval(1 s, whenVisible)`, armed only while playing, compact (length known) or the open player; none when hidden or paused; no remaining time when the length is unknown. The Tocando view is 200 px tall with 14 px padding, room for the Mochi at `botX`, and a themed vertical scroll (`np-body`) if content exceeds.
+- **Core consumers.** `api.avatar.level` (dance), `api.island.notice` with `peek` (track change, not on first read, not while the tab is open), `api.actions.add` (`Alt+P` tocar/pausar, `Alt+N` próxima faixa), `api.status.source` / `pinned` / `pin` (compact card while a track is known), `api.paused()` / `onPause`.
 - **Privacy.** Audio is analysed locally in a 1024-sample window and dropped; it is never stored, logged or sent. Only the render device's loopback is opened, no microphone. Cover art stays in memory as a data URL. No network.
 - **Tests.** Rust: `analyze` (edges, silence, tone lands in its band, mono mixing), `session` (position, duration, emit rule, base64, bounded cover, actions), `volume` (key/matching). TS: `tests/nowplaying.test.ts`; harness `tests/harness/nowplaying.test.ts` (off = nothing; capture follows play state and visibility; stop releases everything).
 
