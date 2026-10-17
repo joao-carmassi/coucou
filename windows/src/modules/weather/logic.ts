@@ -10,7 +10,7 @@ export interface Forecast { current: Current; hours: Hour[]; days: Day[] }
 export interface Cache { key: string; at: number; forecast: Forecast | null; error: string | null }
 
 /** Settings keys of this module (manifest settingsDefaults). */
-export interface WeatherCfg { weatherPlace: Place | null; weatherUnits: Units }
+export interface WeatherCfg { weatherPlace: Place | null; weatherUnits: Units; weatherGlanceEvery?: number }
 
 /** One fetch per city and unit for this long while the view is open; a failure is kept this long too (no retry storm). */
 export const CACHE_MS = 10 * 60_000;
@@ -82,4 +82,14 @@ export function needsPoll(c: Pick<Cache, "key" | "at"> | null, key: string, now:
 /** "Cidade, Estado, País" without the empty parts. */
 export function placeLabel(p: Place): string {
   return [p.name, p.admin, p.country].filter(Boolean).join(", ");
+}
+
+/** How many cells each strip of the Clima view shows (they are fitted to the width, never scrolled). */
+export const HOURS_SHOWN = 6;
+export const DAYS_SHOWN = 5;
+
+/** `weatherGlanceEvery` (minutes; 0 or anything invalid = off) -> whole minutes, at most one day. */
+export function glanceMinutes(v: unknown): number {
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 1440) : 0;
 }

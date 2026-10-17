@@ -6,6 +6,7 @@
   "presets": ["tudo", "vitrine"],
   "settingsDefaults": {
     "weatherPlace": null,
-    "weatherUnits": "C"
+    "weatherUnits": "C",
+    "weatherGlanceEvery": 0
   }
 }

@@ -2,7 +2,7 @@
 // Only the chosen city's coordinates leave the machine (the forecast request); the search text goes to the geocoder.
 import type { ModuleSettings } from "../../core/moduleSettings";
 import { h } from "../../kit/dom";
-import { placeLabel } from "./logic";
+import { glanceMinutes, placeLabel } from "./logic";
 import type { Place, Units, WeatherCfg } from "./logic";
 import { weatherBridge } from "./bridge";
 
@@ -49,6 +49,11 @@ function weatherSettingsSection(ms: ModuleSettings): { el: HTMLElement } {
   };
   const unitsRow = h("div", { class: "actions" }, unit("C", "Celsius"), unit("F", "Fahrenheit"));
 
+  const glance = h("select", {}, ...[[0, "Desligado"], [15, "A cada 15 min"], [30, "A cada 30 min"], [60, "A cada 1 h"], [120, "A cada 2 h"]]
+    .map(([v, t]) => h("option", { value: String(v), text: String(t) }))) as HTMLSelectElement;
+  glance.value = String(glanceMinutes(cfg.weatherGlanceEvery));
+  glance.addEventListener("change", () => void ms.save({ weatherGlanceEvery: Number(glance.value) }));
+
   return {
     el: h("section", { id: "weather" },
       h("h2", {}, h("span", { text: "Clima" })),
@@ -58,7 +63,8 @@ function weatherSettingsSection(ms: ModuleSettings): { el: HTMLElement } {
       note,
       results,
       h("div", { class: "row" }, h("label", { text: "Temperatura" }), unitsRow),
-      h("div", { class: "sub", text: "Só as coordenadas da cidade escolhida são enviadas ao Open-Meteo, e só ao abrir a aba Clima." })),
+      h("div", { class: "row" }, h("label", { text: "Mostrar o clima na ilha" }), glance),
+      h("div", { class: "sub", text: "Só as coordenadas da cidade escolhida são enviadas ao Open-Meteo: ao abrir a aba Clima e, se ativado acima, a cada intervalo (mesmo com a ilha oculta)." })),
   };
 }
 

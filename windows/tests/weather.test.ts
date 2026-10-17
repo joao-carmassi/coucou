@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CACHE_MS, cacheKey, describe, dayLabel, fmtTemp, hourLabel, isFresh, needsPoll, placeLabel, POLL_MS, statusParts, statusText } from "../src/modules/weather/logic.ts";
+import { CACHE_MS, cacheKey, describe, dayLabel, fmtTemp, hourLabel, isFresh, needsPoll, placeLabel, POLL_MS, statusParts, statusText, glanceMinutes } from "../src/modules/weather/logic.ts";
+import { readFileSync } from "node:fs";
 import type { Forecast } from "../src/modules/weather/logic.ts";
 
 test("WMO codes map to pt-BR text and an icon, day and night", () => {
@@ -76,4 +77,20 @@ test("status parts split the icon from the temperature; the pinned line polls ev
   assert.equal(needsPoll({ key: "other", at: 0 }, "k", 10), true);
   assert.equal(needsPoll({ key: "k", at: 0 }, "k", POLL_MS - 1), false);
   assert.equal(needsPoll({ key: "k", at: 0 }, "k", POLL_MS), true);
+});
+
+test("glanceMinutes: 0 and junk are off, whole minutes, capped at a day", () => {
+  for (const v of [0, -5, NaN, undefined, null, "x"]) assert.equal(glanceMinutes(v), 0);
+  assert.equal(glanceMinutes(30), 30);
+  assert.equal(glanceMinutes(15.9), 15);
+  assert.equal(glanceMinutes(99999), 1440);
+});
+
+test("the strips never scroll: no overflow-x/auto/scroll rule on them, pin is a direct child of a relative body", () => {
+  const css = readFileSync(new URL("../src/modules/weather/weather.css", import.meta.url), "utf8");
+  const strips = css.split("\n").filter((l) => /\.weather-(hours|days)/.test(l)).join("\n");
+  assert.doesNotMatch(strips, /overflow(-x|-y)?:\s*(auto|scroll)/);
+  assert.match(css, /\.weather-body\s*\{[^}]*position:\s*relative[^}]*padding:\s*14px 48px/);
+  const view = readFileSync(new URL("../src/modules/weather/view.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(view, /weather-head"[^]*?pin\.el\)\)/);
 });
