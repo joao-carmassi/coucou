@@ -32,7 +32,7 @@ const weatherModule = {
 
 const manifest = {
   id: "weather", label: "Clima", default: false, order: 15,
-  settingsDefaults: { weatherPlace: null, weatherUnits: "C" },
+  settingsDefaults: { weatherPlace: null, weatherUnits: "C", weatherGlanceEvery: 0 },
 };
 const place = { name: "Campinas", admin: "São Paulo", country: "Brasil", lat: -22.9, lon: -47.06 };
 const settings = () => State.settings as unknown as Record<string, unknown>;
@@ -146,7 +146,7 @@ describe("weather module", () => {
     T.host!.sync();
     await tick();
     T.host!.sync();
-    const btn = document.querySelector<HTMLButtonElement>(".weather-head .pin-btn")!;
+    const btn = document.querySelector<HTMLButtonElement>(".weather-body > .pin-btn")!;
     expect(btn.title).toBe("Fixar na ilha");
     btn.click();
     expect(State.settings.pinnedLine).toBe("weather.now");
@@ -155,6 +155,54 @@ describe("weather module", () => {
     btn.click();
     expect(State.settings.pinnedLine).toBe("");
     expect(btn.title).toBe("Fixar na ilha");
+  });
+
+  describe("glance (weatherGlanceEvery)", () => {
+    const MIN15 = 15 * 60_000;
+    const run = async (every: number, body: (armed: () => number) => Promise<void>) => {
+      vi.useFakeTimers();
+      const sp = vi.spyOn(window, "setTimeout");
+      try {
+        settings().weatherGlanceEvery = every;
+        Registry.apply({ weather: true });
+        await vi.advanceTimersByTimeAsync(10);
+        await body(() => sp.mock.calls.filter((c) => c[1] === MIN15).length);
+      } finally {
+        sp.mockRestore();
+        settings().weatherGlanceEvery = 0;
+        vi.useRealTimers();
+      }
+    };
+
+    it("0 = off: no timeout; no city: none either", async () => {
+      await run(0, async (armed) => { expect(armed()).toBe(0); });
+      settings().weatherPlace = null;
+      await run(15, async (armed) => { expect(armed()).toBe(0); });
+    });
+
+    it("on with a city: one timeout, fires a peek notice with the line, re-arms; stale cache fetches first", async () => {
+      await run(15, async (armed) => {
+        expect(armed()).toBe(1);
+        T.island!.hide();
+        await vi.advanceTimersByTimeAsync(MIN15);
+        expect(T.forecasts).toBe(1); // no cache: fetched first
+        expect(armed()).toBe(2); // re-armed
+        expect(document.body.textContent).toMatch(/23°C/); // peeked even though it was hidden
+        await vi.advanceTimersByTimeAsync(MIN15);
+        expect(T.forecasts).toBe(1); // cache younger than 30 min: no fetch
+        await vi.advanceTimersByTimeAsync(MIN15);
+        expect(T.forecasts).toBe(2); // 45 min old: stale
+        expect(armed()).toBe(4);
+      });
+    });
+
+    it("disable clears it: no more fetches", async () => {
+      await run(15, async () => {
+        Registry.apply({ weather: false });
+        await vi.advanceTimersByTimeAsync(3 * MIN15);
+        expect(T.forecasts).toBe(0);
+      });
+    });
   });
 
   it("module off: the source is gone and the pin stays in the settings", async () => {

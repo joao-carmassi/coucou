@@ -12,12 +12,12 @@ export class WeatherStore {
 
   constructor(private readonly source: (lat: number, lon: number, units: Units) => Promise<Forecast | null>) {}
 
-  load(place: Place, units: Units, force = false, now = Date.now()): void {
+  load(place: Place, units: Units, force = false, now = Date.now()): Promise<void> {
     const key = cacheKey(place, units);
-    if (!force && (this.pending === key || (this.cache?.key === key && isFresh(this.cache, now)))) return;
+    if (!force && (this.pending === key || (this.cache?.key === key && isFresh(this.cache, now)))) return Promise.resolve();
     const seq = ++this.seq;
     this.pending = key;
-    this.source(place.lat, place.lon, units).then(
+    return this.source(place.lat, place.lon, units).then(
       (forecast) => (forecast ? { forecast, error: null } : { forecast: null, error: "sem dados do serviço de clima" }),
       (err) => ({ forecast: null, error: err instanceof Error ? err.message : String(err) }),
     ).then((r) => {
