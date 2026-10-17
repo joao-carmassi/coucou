@@ -142,12 +142,8 @@ pub async fn sysmon_quick(app: AppHandle, fresh: bool) -> Result<Quick, String> 
         }
         let cpu = step_cpu(&mut prev, metrics::cpu_times());
         let ram = metrics::ram().and_then(|(u, t)| used_pct(t, t.saturating_sub(u)));
-        // Query opened on `fresh`; a read after a stop reopens it lazily (that first collect has no baseline: None).
-        let mut q = lock(&QUICK_GPU);
-        if q.is_none() {
-            *q = metrics::GpuProbe::open();
-        }
-        let gpu = q.as_ref().and_then(|g| g.load());
+        // Opened only on `fresh`: a late read after sysmon_quick_stop must not reopen it (GPU None for that tick).
+        let gpu = lock(&QUICK_GPU).as_ref().and_then(|g| g.load());
         Quick { cpu, ram, gpu }
     })
     .await

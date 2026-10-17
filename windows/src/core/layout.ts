@@ -70,11 +70,15 @@ export function miniGridSize(n: number): { w: number; h: number } {
 }
 
 /** Width of the compact island: bare when idle, grown for the grid or the status text. */
-export function compactWidth(others: number, textW: number, snap = 8): number {
+export function compactWidth(others: number, textW: number, snap = 8, prev = 0): number {
   const base = 2 * COMPACT_PAD + COMPACT_BOT_D;
   if (others > 0) return base + COMPACT_GAP + miniGridSize(others).w;
   // Snapped (8 px; wider for still lines whose value changes every few seconds) so the island doesn't twitch.
-  if (textW > 0) return Math.min(COMPACT_MAX_W, base + COMPACT_GAP + Math.ceil((textW + 1) / snap) * snap);
+  if (textW > 0) {
+    const w = Math.min(COMPACT_MAX_W, base + COMPACT_GAP + Math.ceil((textW + 1) / snap) * snap);
+    // Hysteresis: a shrink of just one step keeps the previous width (a value flapping 9%/10% would jump 16 px every tick); the text still fits.
+    return prev > w && prev - w <= snap ? prev : w;
+  }
   return base;
 }
 
