@@ -93,6 +93,18 @@ fn limit_label(name: &str) -> String {
     if ["five_hour", "five-hour", "5_hour", "5-hour", "5h", "session"].iter().any(|k| name.contains(k)) { "5 h".into() } else { raw() }
 }
 
+/// A fixed text per failure kind: reqwest's own message could carry the URL or headers.
+fn net_error(e: &reqwest::Error) -> String {
+    // The cause chain goes to the log only (hyper/rustls/io texts: no headers, no token).
+    let mut src: &dyn std::error::Error = e;
+    let mut chain = String::new();
+    while let Some(n) = src.source() { chain.push_str(&format!(" <- {n}")); src = n; }
+    crate::core::log::line(format!("planusage: request failed (timeout={}, connect={}){chain}", e.is_timeout(), e.is_connect()));
+    if e.is_timeout() { "A Anthropic demorou demais para responder".into() }
+    else if e.is_connect() { "Sem conexão com a Anthropic".into() }
+    else { "Falha ao falar com a Anthropic".into() }
+}
+
 /// One request. Every error is a fixed pt-BR text: reqwest's own messages could carry the URL or headers.
 pub async fn fetch() -> Result<Vec<Window>, String> {
     let creds: Value = std::fs::read(credentials_path()).ok().and_then(|b| serde_json::from_slice(&b).ok()).ok_or(NO_LOGIN)?;
@@ -109,7 +121,7 @@ pub async fn fetch() -> Result<Vec<Window>, String> {
         .header("anthropic-beta", "oauth-2025-04-20")
         .send()
         .await
-        .map_err(|_| "Sem conexão com a Anthropic".to_string())?;
+        .map_err(|e| net_error(&e))?;
     drop(token);
     match res.status().as_u16() {
         200..=299 => {}
@@ -132,6 +144,14 @@ pub async fn fetch() -> Result<Vec<Window>, String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    #[ignore = "live network + the local Claude Code login"]
+    fn live_fetch() {
+        let r = tauri::async_runtime::block_on(fetch());
+        eprintln!("live_fetch -> {:?}", r.as_ref().map(|w| w.len()));
+        assert!(r.is_ok(), "{r:?}");
+    }
 
     #[test]
     fn parses_both_shapes() {
