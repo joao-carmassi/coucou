@@ -93,6 +93,12 @@ fn limit_label(name: &str) -> String {
     if ["five_hour", "five-hour", "5_hour", "5-hour", "5h", "session"].iter().any(|k| name.contains(k)) { "5 h".into() } else { raw() }
 }
 
+/// rustls reports an untrusted TLS-intercepting CA as `invalid peer certificate: UnknownIssuer`.
+fn is_cert_error(chain: &str) -> bool {
+    let c = chain.to_lowercase();
+    c.contains("unknownissuer") || c.contains("certificate")
+}
+
 /// A fixed text per failure kind: reqwest's own message could carry the URL or headers.
 fn net_error(e: &reqwest::Error) -> String {
     // The cause chain goes to the log only (hyper/rustls/io texts: no headers, no token).
@@ -101,6 +107,7 @@ fn net_error(e: &reqwest::Error) -> String {
     while let Some(n) = src.source() { chain.push_str(&format!(" <- {n}")); src = n; }
     crate::core::log::line(format!("planusage: request failed (timeout={}, connect={}){chain}", e.is_timeout(), e.is_connect()));
     if e.is_timeout() { "A Anthropic demorou demais para responder".into() }
+    else if is_cert_error(&chain) { "Certificado não confiável (antivírus ou proxy HTTPS?)".into() }
     else if e.is_connect() { "Sem conexão com a Anthropic".into() }
     else { "Falha ao falar com a Anthropic".into() }
 }
@@ -144,6 +151,12 @@ pub async fn fetch() -> Result<Vec<Window>, String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn cert_error_detected() {
+        assert!(is_cert_error(" <- client error (Connect) <- invalid peer certificate: UnknownIssuer"));
+        assert!(!is_cert_error(" <- tcp connect error <- os error 10061"));
+    }
 
     #[test]
     #[ignore = "live network + the local Claude Code login"]
