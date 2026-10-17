@@ -1,14 +1,14 @@
 // Sistema: CPU, memória, disco, rede, GPU and temperatures. The view samples only while open; the optional alert
-// check runs every 15 s only when alerts are on (and Pause is off), and is the module's only background work.
+// check runs every 15 s only when alerts are on (and Pause is off). The pinned "Uso do PC" line polls only while pinned.
 import "./sysmon.css";
 import { svg } from "../../kit/dom";
 import { ICONS } from "../../kit/icons";
 import { BAND, PANEL_H, type Disposer, type IslandApi, type ModuleDef } from "../../core/moduleApi";
 import { SysmonBridge } from "./bridge";
-import { AlertState, LABEL, clampInt, type AlertKey } from "./logic";
+import { AlertState, LABEL, USAGE_MS, clampInt, showOf, usageLine, type AlertKey } from "./logic";
 import { buildSysmonView } from "./view";
 
-interface Cfg { sysmonAlerts: boolean; sysmonCpuMax: number; sysmonRamMax: number; sysmonDiskMax: number; sysmonTempMax: number }
+interface Cfg { sysmonShow: unknown; sysmonAlerts: boolean; sysmonCpuMax: number; sysmonRamMax: number; sysmonDiskMax: number; sysmonTempMax: number }
 
 let temp: number | null = null;
 
@@ -38,11 +38,26 @@ function start(api: IslandApi): Disposer {
     else if (!on && probe) { probe(); probe = null; }
   };
   arm();
+  // Pinned one-line source "usage": a light read (sysmon_quick) every USAGE_MS, armed only while pinned and the island is visible.
+  const usage = api.status.source("usage", { label: "Uso do PC", view: "sysmon" });
+  let usagePoll: Disposer | null = null;
+  const read = async (fresh = false) => {
+    let line: string | null = null;
+    try { line = usageLine(await SysmonBridge.quick(fresh), showOf(api.settings<Cfg>().sysmonShow)); } catch { /* null: the core releases the pin after 5 min */ }
+    if (usagePoll) usage.set(line ? { priority: BAND.AMBIENT, icon: "📊", text: line } : null);
+  };
+  const reconcileUsage = () => {
+    const on = api.status.pinned("usage");
+    if (on && !usagePoll) { usagePoll = api.interval(() => void read(), USAGE_MS, { whenVisible: true }); void read(true); }
+    else if (!on && usagePoll) { usagePoll(); usagePoll = null; usage.set(null); }
+  };
+  reconcileUsage();
+  const offUsage = api.island.onChange(reconcileUsage);
   // Settings can flip alerts while running: look again whenever the island's state changes (cheap, no timer).
   const offChange = api.island.onChange(arm);
   // And on a settings change (deferred: the stored settings are replaced by a listener that runs after ours).
   const offSettings = api.listen("settings-changed", () => void api.timeout(arm, 0));
-  return () => { offChange(); offSettings(); probe?.(); probe = null; temp = null; };
+  return () => { offChange(); offUsage(); usagePoll?.(); usagePoll = null; usage.dispose(); offSettings(); probe?.(); probe = null; temp = null; };
 }
 
 export const sysmonModule: ModuleDef = {

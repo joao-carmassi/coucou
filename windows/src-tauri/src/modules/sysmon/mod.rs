@@ -15,6 +15,7 @@ use crate::core::settings::Settings;
 pub struct Sysmon;
 
 static SAMPLER: Mutex<Option<metrics::Sampler>> = Mutex::new(None);
+static QUICK_CPU: Mutex<Option<(u64, u64, u64)>> = Mutex::new(None);
 static ALERT_CPU: Mutex<Option<(u64, u64, u64)>> = Mutex::new(None);
 
 /// A panic under the lock must never make release (or the next sample) panic too.
@@ -25,6 +26,7 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 fn release() {
     *lock(&SAMPLER) = None;
     *lock(&ALERT_CPU) = None;
+    *lock(&QUICK_CPU) = None;
 }
 
 impl Module for Sysmon {
@@ -47,7 +49,7 @@ pub fn modules() -> Vec<Box<dyn Module>> {
 
 pub fn handler() -> crate::core::host::Handler {
     crate::core::host::handler(tauri::generate_handler![
-        sysmon_sample, sysmon_release, sysmon_alert_probe, sysmon_lhm_info, sysmon_lhm_read, sysmon_lhm_install, sysmon_lhm_open,
+        sysmon_sample, sysmon_release, sysmon_alert_probe, sysmon_quick, sysmon_lhm_info, sysmon_lhm_read, sysmon_lhm_install, sysmon_lhm_open,
     ])
 }
 
@@ -110,6 +112,35 @@ pub async fn sysmon_alert_probe(app: AppHandle, tick: u32) -> Result<Probe, Stri
     .await
 }
 
+#[derive(Serialize, Default)]
+pub struct Quick {
+    pub cpu: Option<f32>,
+    pub ram: Option<f32>,
+}
+
+/// CPU percent since the previous reading (`prev` is replaced); None on the first one or when the counters did not move.
+pub fn step_cpu(prev: &mut Option<(u64, u64, u64)>, cur: Option<(u64, u64, u64)>) -> Option<f32> {
+    let p = std::mem::replace(prev, cur);
+    metrics::cpu_pct(p?, cur?)
+}
+
+/// The pinned "Uso do PC" line: GetSystemTimes + GlobalMemoryStatusEx only, no sampler. `fresh` drops the old baseline
+/// (the line was just pinned), so the first CPU value covers one interval, not the time since it was last pinned.
+#[tauri::command]
+pub async fn sysmon_quick(app: AppHandle, fresh: bool) -> Result<Quick, String> {
+    gate(&app)?;
+    blocking(move || {
+        let mut prev = lock(&QUICK_CPU);
+        if fresh {
+            *prev = None;
+        }
+        let cpu = step_cpu(&mut prev, metrics::cpu_times());
+        let ram = metrics::ram().and_then(|(u, t)| used_pct(t, t.saturating_sub(u)));
+        Quick { cpu, ram }
+    })
+    .await
+}
+
 #[tauri::command]
 pub fn sysmon_lhm_info(app: AppHandle) -> Result<lhm::Info, String> {
     gate(&app)?;
@@ -140,6 +171,18 @@ pub async fn sysmon_lhm_open(app: AppHandle) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn step_cpu_needs_a_baseline_and_keeps_the_latest() {
+        let mut prev = None;
+        assert_eq!(step_cpu(&mut prev, Some((0, 100, 100))), None);
+        assert_eq!(prev, Some((0, 100, 100)));
+        // idle +50 of total (kernel +60, user +40) = 100 -> 50% busy
+        assert_eq!(step_cpu(&mut prev, Some((50, 160, 140))), Some(50.0));
+        assert_eq!(step_cpu(&mut prev, Some((50, 160, 140))), None, "no time passed");
+        assert_eq!(step_cpu(&mut prev, None), None);
+        assert_eq!(prev, None);
+    }
 
     #[test]
     fn used_percent() {
