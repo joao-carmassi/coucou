@@ -1,14 +1,36 @@
 # Read-only idle sampler for the running Coucou process (never touches it).
 # Works on Windows PowerShell 5 and pwsh.
-# Usage: powershell -File scripts/idle-measure.ps1 [-Seconds 60] [-Warmup 10] [-Name coucou] [-Hidden]
+# Usage: powershell -File scripts/idle-measure.ps1 [-Seconds 60] [-Warmup 10] [-Name coucou] [-Hidden] [-HiddenWait 180]
+# -Hidden first waits (up to -HiddenWait s) for the island window to collapse to the wake strip; the island hides
+# compactHideInterval (60 s) after the last event, so sampling earlier measures the visible compact island (~10 ms/s
+# of main thread from the cursor poll and frames), not the hidden one. Exit 2 if it never collapses (a Claude session
+# keeps it up: end the session or use tray Pause).
 # Sampling starts after -Warmup seconds. Exit 1 if: main CPU > 50 ms per 60 s (scaled to the window),
 # threads grew by more than 3, handles moved by more than 15, or (-Hidden) webview2 sum > 1 % of a core.
 # Without -Hidden the webview2 % is informational only.
-param([int]$Seconds = 60, [int]$Warmup = 10, [string]$Name = 'coucou', [switch]$Hidden)
+param([int]$Seconds = 60, [int]$Warmup = 10, [string]$Name = 'coucou', [switch]$Hidden, [int]$HiddenWait = 180)
 $ErrorActionPreference = 'Stop'
 $main = Get-Process -Name $Name -ErrorAction SilentlyContinue | Sort-Object StartTime | Select-Object -First 1
 if (-not $main) { Write-Host "process '$Name' not running"; exit 2 }
 $id = $main.Id
+
+# Height of the shortest visible top-level window of the process (the collapsed wake strip is 6 px).
+Add-Type -Namespace Idle -Name Win -MemberDefinition @'
+public delegate bool EnumProc(System.IntPtr h, System.IntPtr l);
+[System.Runtime.InteropServices.DllImport("user32")] public static extern bool EnumWindows(EnumProc p, System.IntPtr l);
+[System.Runtime.InteropServices.DllImport("user32")] public static extern uint GetWindowThreadProcessId(System.IntPtr h, out uint pid);
+[System.Runtime.InteropServices.DllImport("user32")] public static extern bool IsWindowVisible(System.IntPtr h);
+public static int MinHeight(uint pid) {
+  int min = int.MaxValue;
+  EnumWindows(delegate(System.IntPtr h, System.IntPtr l) {
+    uint p; GetWindowThreadProcessId(h, out p);
+    if (p == pid && IsWindowVisible(h)) { RECT r; if (GetRect(h, out r) && r.b - r.t > 1 && r.b - r.t < min) min = r.b - r.t; }
+    return true; }, System.IntPtr.Zero);
+  return min;
+}
+public struct RECT { public int l, t, r, b; }
+[System.Runtime.InteropServices.DllImport("user32", EntryPoint = "GetWindowRect")] static extern bool GetRect(System.IntPtr h, out RECT r);
+'@
 
 function Get-Set {
   $p = Get-Process -Id $id -ErrorAction Stop
@@ -23,6 +45,14 @@ function Get-Set {
     WS = $p.WorkingSet64; WebCpu = [double](($kids | ForEach-Object { $_.TotalProcessorTime.TotalMilliseconds } | Measure-Object -Sum).Sum)
     PerProc = @($kids | ForEach-Object { $c = ($all | Where-Object ProcessId -eq $_.Id).CommandLine; [pscustomobject]@{ Id = $_.Id; Type = $(if ($c -match '--type=([\w-]+)') { $matches[1] } else { 'browser' }); Cpu = $_.TotalProcessorTime.TotalMilliseconds } })
     WebCount = $kids.Count; WebWS = [double](($kids | Measure-Object -Property WorkingSet64 -Sum).Sum); ThreadCpu = $tm
+  }
+}
+if ($Hidden) {
+  Write-Host "waiting for the island to hide (up to $HiddenWait s)"
+  $until = (Get-Date).AddSeconds($HiddenWait)
+  while ([Idle.Win]::MinHeight($id) -gt 8) {
+    if ((Get-Date) -gt $until) { Write-Host 'island never collapsed to the wake strip: not hidden, nothing measured'; exit 2 }
+    Start-Sleep -Seconds 2
   }
 }
 if ($Warmup -gt 0) { Write-Host "warmup $Warmup s"; Start-Sleep -Seconds $Warmup }
