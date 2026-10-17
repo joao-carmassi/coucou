@@ -22,8 +22,8 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use serde_json::{json, Map, Value};
-use tauri::{AppHandle, Manager};
-use crate::core::{platform, settings};
+
+use crate::core::platform;
 
 /// Every event the island reacts to, with the hook timeout written to settings.json.
 /// PermissionRequest waits for a human, so it gets the decision timeout + 10 s.
@@ -375,69 +375,6 @@ fn write_like(temp: &Path, original: &Path, bytes: &[u8]) -> std::io::Result<()>
     file.write_all(bytes)?;
     let _ = original;
     Ok(())
-}
-
-/// Copies the relay (coucou-hook.exe / coucou-hook) into the local data dir's
-/// bin/ on launch. In a bundled install it comes from the app resources; in
-/// `tauri dev` it sits next to the app binary in the workspace target directory.
-///
-/// Every candidate is tried rather than just the first, because getting this
-/// wrong is silent and fatal: `resources` used to be a glob, which made NSIS
-/// mirror the source path into `_up_\target\release\`, no candidate matched, and
-/// the relay was simply never installed. It only looked healthy on a developer
-/// machine, where a leftover copy from `tauri dev` was already sitting in bin/.
-pub fn ensure_hook_exe(app: &AppHandle) {
-    let dest = crate::modules::claude::cfg::hook_exe_path();
-    let Some(dir) = dest.parent() else { return };
-    // Nobody else may swap the relay Claude Code runs: its folder is ours only.
-    if platform::ensure_private_dir(&settings::local_dir()).is_err()
-        || std::fs::create_dir_all(dir).is_err()
-    {
-        return;
-    }
-
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Ok(p) = app.path().resolve(platform::HOOK_EXE, tauri::path::BaseDirectory::Resource) {
-        candidates.push(p);
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            // Installed build, then `tauri dev` (target/debug) next to the
-            // release hook the pre-build step produces.
-            candidates.push(parent.join(platform::HOOK_EXE));
-            candidates.push(parent.join("../release").join(platform::HOOK_EXE));
-            // Belt and braces: where the old glob form used to land it.
-            candidates.push(parent.join("_up_/target/release").join(platform::HOOK_EXE));
-        }
-    }
-
-    let tried: Vec<String> = candidates.iter().map(|p| p.display().to_string()).collect();
-    let Some(src) = candidates.into_iter().find(|p| p.exists()) else {
-        crate::core::log::line(format!(
-            "{} not found — Claude Code hooks cannot work. Looked in: {}",
-            platform::HOOK_EXE,
-            tried.join(", ")
-        ));
-        return;
-    };
-    install_relay(&src, &dest);
-}
-
-fn install_relay(src: &Path, dest: &Path) {
-    let same = match (std::fs::metadata(src), std::fs::metadata(dest)) {
-        (Ok(a), Ok(b)) => a.len() == b.len() && a.modified().ok() == b.modified().ok(),
-        _ => false,
-    };
-    if same {
-        return;
-    }
-    // A hook may be running right now and hold the file open; keeping the old
-    // copy is fine, it is the same relay.
-    if let Err(err) = std::fs::copy(src, dest) {
-        if !dest.exists() {
-            crate::core::log::line(format!("could not install {}: {err}", platform::HOOK_EXE));
-        }
-    }
 }
 
 // ── Minimal unified diff (LCS) ────────────────────────────────────────────────
