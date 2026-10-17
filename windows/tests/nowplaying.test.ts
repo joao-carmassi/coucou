@@ -76,8 +76,9 @@ test("compactCard: cover, title, artist, time left; dimmed when paused; falls ba
 });
 
 test("wantTick: only while playing and the time is on screen", () => {
-  const b = { playing: true, mode: "compact", view: "x", hasLength: true };
+  const b = { playing: true, mode: "compact", view: "x", hasLength: true, cardShown: true };
   assert.equal(wantTick(b), true);
+  assert.equal(wantTick({ ...b, cardShown: false }), false, "compact but the card is not on show");
   assert.equal(wantTick({ ...b, hasLength: false }), false);
   assert.equal(wantTick({ ...b, playing: false }), false);
   assert.equal(wantTick({ ...b, mode: "hidden" }), false);

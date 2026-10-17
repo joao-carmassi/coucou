@@ -28,6 +28,7 @@ function start(api: IslandApi): Disposer {
   let done: Disposer | null = null;
   let hold: Disposer | null = null;
   let glance: Disposer | null = null;
+  let glanceMs = 0;
   const refresh = () => {
     api.status.set(Timer.active ? { priority: 50, text: Timer.text(), overGrid: true } : null);
     api.island.redraw();
@@ -36,6 +37,7 @@ function start(api: IslandApi): Disposer {
   // timerGlance: while a timer runs, every focus time a short peek with its line, even if the island is hidden.
   // One timeout, re-armed after each fire, dropped with the timer (disarm) and with the module.
   const armGlance = () => {
+    glanceMs = api.island.focusMs(); // read at every arm: a changed focus time applies from the next one
     glance = api.timeout(() => {
       glance = null;
       if (Timer.status !== "running") return;
@@ -44,7 +46,7 @@ function start(api: IslandApi): Disposer {
         api.island.notice({ text: `${Timer.text()}${label}`, priority: BAND.NOTICE, view: "timer", key: "timer-glance", peek: true, ms: 3000 });
       }
       armGlance();
-    }, api.island.focusMs());
+    }, glanceMs);
   };
   // Next phase: running at once, or ready (a click starts it) when timerPomodoroAuto is false.
   const advance = (text: string | null) => {
@@ -93,7 +95,7 @@ function start(api: IslandApi): Disposer {
   // The settings window saved: look one tick later (the core updates State after its own listener).
   const offCfg = api.listen("settings-changed", () => { api.timeout(() => {
     const want = Timer.status === "running" && readCfg().timerGlance === true;
-    if (want && !glance) armGlance();
+    if (want && (!glance || glanceMs !== api.island.focusMs())) { glance?.(); armGlance(); }
     else if (!want && glance) { glance(); glance = null; }
   }, 0); });
   const offKeep = api.island.keepAwake(() => Timer.active);

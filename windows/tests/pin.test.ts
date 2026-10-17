@@ -10,7 +10,7 @@ const src = (owner: string, key: string, text: string | null, view = "v"): Src =
 
 const OWNERS = ["#pin", "#last", "agent", "voice", "timer", "#notice"];
 /** What the compact island says with these sources and lines. */
-function shown(srcs: Src[], pinned: string, last: string | null, others: Record<string, { priority: number; text: string; overGrid?: boolean }> = {}, pills = 0) {
+function shown(srcs: Src[], pinned: string, last: string | null, others: Record<string, { priority: number; text: string; overGrid?: boolean; urgent?: boolean }> = {}, pills = 0) {
   OWNERS.forEach((o) => Compact.set(o, null));
   const { pin, last: l } = sourceLines(srcs, pinned, last);
   Compact.set("#pin", pin);
@@ -26,12 +26,23 @@ test("focusMs: the one focus time is the hide interval; never-hide uses 60 s", (
   assert.equal(focusMs(-5), 60_000);
 });
 
-test("pinned beats an agent working line (30) and sits below voice, timer, notice, urgent", () => {
+test("pinned beats an agent working line (30) and sits below voice, timer, notice, finished, urgent, with or without other pills", () => {
   const s = [src("w", "now", "pinned")];
   assert.equal(BAND.PINNED > BAND.ACTIVE && BAND.PINNED < 40, true);
-  assert.equal(shown(s, "w.now", null, { agent: { priority: 30, text: "working" } }), "pinned");
-  for (const [p, name] of [[40, "voice"], [50, "timer"], [60, "#notice"], [90, "agent"]] as const)
-    assert.equal(shown(s, "w.now", null, { [name]: { priority: p, text: `p${p}`, overGrid: true } }), `p${p}`);
+  for (const pills of [0, 2]) {
+    assert.equal(shown(s, "w.now", null, { agent: { priority: 30, text: "working" } }, pills), "pinned");
+    // none of these is overGrid: they pass over the pinned line by priority alone
+    for (const [p, name] of [[40, "voice"], [60, "agent"]] as const)
+      assert.equal(shown(s, "w.now", null, { [name]: { priority: p, text: `p${p}` } }, pills), `p${p}`);
+    assert.equal(shown(s, "w.now", null, { agent: { priority: 90, text: "ask", urgent: true } }, pills), "ask");
+    assert.equal(shown(s, "w.now", null, { agent: { priority: 100, text: "approve", urgent: true } }, pills), "approve");
+  }
+  assert.equal(shown(s, "w.now", null, { timer: { priority: 50, text: "05:00", overGrid: true }, "#notice": { priority: 60, text: "n", overGrid: true } }, 2), "n");
+});
+
+test("without a pinned line the old rule stands: a line that is not overGrid is hidden by other pills", () => {
+  assert.equal(shown([], "", null, { voice: { priority: 40, text: "v" } }, 2), null);
+  assert.equal(shown([], "", null, { agent: { priority: 100, text: "a", urgent: true } }, 2), "a");
 });
 
 test("pinned shows beside other pills (overGrid); a last-opened line does not", () => {

@@ -9,6 +9,7 @@ import { State } from "./state";
 
 const sources = new Map<string, Src>();
 let lastOwner: string | null = null;
+let lastT: number | null = null;
 let releaseAt: { id: string; t: number } | null = null;
 
 const pinned = () => (typeof State.settings.pinnedLine === "string" ? State.settings.pinnedLine : "");
@@ -43,8 +44,11 @@ export const Pin = {
     return Pin.sync();
   },
 
-  /** The last module the user opened (null: the island hid). True when the compact line changed. */
-  setLast(owner: string | null): boolean {
+  /** The last module the user opened (null: the island hid), kept for `ms` (the focus time). True when the compact line changed. */
+  setLast(owner: string | null, ms = 0): boolean {
+    if (lastT) window.clearTimeout(lastT);
+    lastT = null;
+    if (owner !== null && ms > 0) lastT = window.setTimeout(() => { lastT = null; if (Pin.setLast(null)) State.notify(); }, ms);
     if (owner === lastOwner) return false;
     lastOwner = owner;
     return Pin.sync();
@@ -78,6 +82,8 @@ export const Pin = {
     if (releaseAt) window.clearTimeout(releaseAt.t);
     releaseAt = null;
     sources.clear();
+    if (lastT) window.clearTimeout(lastT);
+    lastT = null;
     lastOwner = null;
     Compact.set("#pin", null);
     Compact.set("#last", null);
