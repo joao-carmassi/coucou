@@ -599,3 +599,17 @@ Token counters from the local logs of Claude Code and Codex. Tab "Estatísticas 
 - **Privacy**: only numbers, model ids, day keys and project folder base names are stored. No prompt, answer, tool input, full path, `cwd`, user id or e-mail. Nothing leaves the machine.
 - **Cost estimate** (`logic.ts`): per-family price table dated in the UI as "estimativa"; an unknown model has no cost (null), not zero, and the total is flagged "parcial".
 - **Limits**: a log that shrinks is read again from the start and the view says the numbers are approximate (old tokens cannot be subtracted). Codex tokens are not split by project. A same-size, same-second rewrite of a log is not noticed.
+
+## planusage (Uso do plano, order 19, default off, Rust prefix `planusage_`)
+
+Codex 5 h / weekly limits from local files, and (opt-in) Claude's 5 h / 7 d through the network. Tab "Uso do plano", pinnable one-line source `plan`.
+
+- **Manifest / settings keys**: `planusageClaudeNet` (default false). Presets: dev, tudo.
+- **Codex (no network)**: the newest `rollout-*.jsonl` of the last 7 day folders of `%CODEX_HOME%` (else `~/.codex`)`/sessions` is read once at start; then one `core/fswatch` watch (recursive, 2 s debounce) re-reads the 64 KiB tail of the newest changed `.jsonl`. Only `payload.rate_limits` of the last `token_count` line is read (`session_meta` is never parsed). Labels from `window_minutes`: 300 = "5 h", 10080 = "semana", else "N min"; `resets_at` seconds become ms. No sessions folder: "Codex não encontrado" and no watch. A window past its reset shows "–".
+- **Claude (network, opt-in, high risk)**: `GET https://api.anthropic.com/api/oauth/usage` is undocumented and may change or stop. Bearer = `claudeAiOauth.accessToken` of `%CLAUDE_CONFIG_DIR%` (else `~/.claude`)`/.credentials.json`, read per request and held on the stack: never stored, logged, sent to the webview or put in an error (reqwest errors become fixed pt-BR texts). The token is NEVER refreshed (that would rotate the CLI's credentials); expired or 401/403 shows "Abra o Claude Code para renovar o login". Fixed host, https, no redirects, 10 s timeout, 64 KiB body cap. Both known response shapes (`five_hour`/`seven_day`, `limits[]`) are parsed; anything else is an error. Result and error are cached 5 minutes in Rust.
+- **Fetch policy**: only while the Uso do plano view is open (one `api.interval` of 5 min, `whenVisible`, armed by the view) or on "Atualizar", and only with `planusageClaudeNet` on. Nothing in the background, nothing when unpinned and closed.
+- **Commands** (gated by `require("planusage")`): `planusage_get() -> AgentUsage[]` (Codex, cached), `planusage_claude() -> AgentUsage` (errors if the key is off). Event `planusage-changed` (to the island, `AgentUsage[]`) only when the Codex numbers changed.
+- **Service** `agents.usage` (types in `agents/api.ts`, imported as types only): provided here; returns cached numbers only (Claude's entry only while the key is on) and never fetches; the network is reached only from the open view or "Atualizar".
+- **Notice**: at >= 90 % of a window, once per window reset (`plan-<agent>-<label>`). The "already announced" map is memory-only: it repeats after a restart.
+- **Idle**: off = nothing. On with Codex = one fswatch thread parked in the kernel (a busy session fires at most every 2-8 s). No timer in Rust.
+- **Privacy**: `docs/privacy.html` section Network lists the opt-in. Settings text says it uses the internet, reads Claude Code's login token and that the endpoint is unofficial.

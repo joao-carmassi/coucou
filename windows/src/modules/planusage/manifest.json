@@ -1,0 +1,8 @@
+{
+  "id": "planusage",
+  "label": "Uso do plano",
+  "default": false,
+  "order": 19,
+  "settingsDefaults": { "planusageClaudeNet": false },
+  "presets": ["dev", "tudo", "vitrine"]
+}
