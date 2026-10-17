@@ -603,6 +603,26 @@ describe("clock and timer", () => {
   });
 });
 
+// ── Pausas: Hoje and 7 dias ─────────────────────────────────────────────────────────────────
+
+describe("eyecare", () => {
+  it("today, then the week tab", async () => {
+    T.answers.eyecare_usage = () => ({
+      "2026-03-04": { "code.exe": 9000 }, "2026-03-06": { "code.exe": 14_400, "chrome.exe": 3600 },
+      "2026-03-09": { "chrome.exe": 7200, "slack.exe": 600 },
+      "2026-03-10": { "code.exe": 5400, "chrome.exe": 2700, "windowsterminal.exe": 1500, "slack.exe": 420, "spotify.exe": 30, "notepad.exe": 10 },
+    });
+    T.answers.eyecare_breaks = () => ({ days: { "2026-03-08": [3, 1], "2026-03-09": [5, 2], "2026-03-10": [4, 3] }, last: NOW.getTime() - 42 * MIN });
+    await go("overview");
+    snap("eyecare-today", await showing("eyecare"));
+    expect(T.hosts.eyecare.height).toBe(292);
+    (T.hosts.eyecare.el.querySelectorAll(".eyecare-tabs button")[1] as HTMLElement).click();
+    snap("eyecare-week", T.hosts.eyecare.el);
+    expect(T.hosts.eyecare.height).toBe(272);
+    delete T.answers.eyecare_usage; delete T.answers.eyecare_breaks;
+  });
+});
+
 // ── The board, last: the other modules are stopped to get its empty and plain looks ─────────
 
 describe("board", () => {
