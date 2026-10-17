@@ -33,6 +33,11 @@ pub fn language(s: &Settings) -> &'static str {
     LANGS.iter().find(|l| **l == v).copied().unwrap_or("auto")
 }
 
+/// Right Ctrl dictation into any app (the keyboard hook exists only while this is true).
+pub fn flow_enabled(s: &Settings) -> bool {
+    s.extra.get("voiceFlowEnabled").and_then(Value::as_bool).unwrap_or(false)
+}
+
 /// Pre-module settings.json: `voiceEnabled` was the switch. Only fills a missing `modulesEnabled.voice`.
 pub fn migrate(s: &mut Settings) -> bool {
     if s.modules_enabled.contains_key("voice") {
@@ -89,6 +94,16 @@ mod tests {
         s.extra.insert("voiceEngine".into(), json!("x"));
         s.extra.insert("voiceLanguage".into(), json!("../../evil"));
         assert_eq!((engine(&s), language(&s)), (Engine::Whistle, "auto"));
+    }
+
+    #[test]
+    fn flow_is_off_unless_chosen() {
+        let mut s = Settings::default();
+        assert!(!flow_enabled(&s));
+        s.extra.insert("voiceFlowEnabled".into(), json!(true));
+        assert!(flow_enabled(&s));
+        s.extra.insert("voiceFlowEnabled".into(), json!("yes"));
+        assert!(!flow_enabled(&s), "only a real boolean turns the hook on");
     }
 
     #[test]

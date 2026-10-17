@@ -6,7 +6,8 @@
   "settingsDefaults": {
     "voiceHotkey": "Ctrl+Alt+V",
     "voiceEngine": "whistle",
-    "voiceLanguage": "auto"
+    "voiceLanguage": "auto",
+    "voiceFlowEnabled": false
   },
   "presets": [
     "tudo",

@@ -2,6 +2,7 @@
 // device (English engine, or whisper.cpp for several languages) and shown on a card; "Enviar" (in the UI) launches a Claude session with it.
 
 pub mod cfg;
+pub mod flow;
 pub mod voice;
 pub mod whisper;
 
@@ -21,6 +22,7 @@ impl Module for Voice {
     fn start(&self, ctx: &ModuleCtx, s: &Settings) {
         voice::configure(s);
         set_hotkey(&ctx.app, s);
+        flow::set(ctx, cfg::flow_enabled(s));
     }
 
     fn migrate(&self, s: &mut Settings) -> bool {
@@ -34,10 +36,12 @@ impl Module for Voice {
     fn apply(&self, ctx: &ModuleCtx, s: &Settings) {
         voice::configure(s);
         set_hotkey(&ctx.app, s);
+        flow::set(ctx, cfg::flow_enabled(s));
     }
 
     fn stop(&self, ctx: &ModuleCtx) {
         hotkeys::clear(&ctx.app, "voice");
+        flow::set(ctx, false); // removes the keyboard hook
         voice::stop(); // the capture loop ends within 30 ms and closes the microphone
     }
 }

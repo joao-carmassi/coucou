@@ -15,6 +15,8 @@ export const Voice = {
   text: "",
   note: "",
   busy: false,
+  /** Flow's own take, apart from the card: "" | "listening" | "transcribing". */
+  flow: "",
   level: null as HTMLElement | null,
   /** Review is over (sent or cancelled): the module lets go of the pin and folds the island. */
   leave: (() => {}) as () => void,
@@ -24,6 +26,7 @@ export const Voice = {
     this.phase = "none";
     this.text = this.note = "";
     this.busy = false;
+    this.flow = "";
     this.level = null;
     this.leave = this.park = () => {};
   },

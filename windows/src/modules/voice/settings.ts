@@ -19,7 +19,7 @@ const WHISPER_FILES = [
 
 /** Rust keeps these keys in `extra`: absent = the default (settingsDefaults), "" = off. */
 export function voiceSettingsSection(ms: ModuleSettings, ui: SettingsUi): { el: HTMLElement; dispose(): void } {
-  const cur = () => ms.get<{ voiceHotkey: string; voiceEngine: string; voiceLanguage: string }>();
+  const cur = () => ms.get<{ voiceHotkey: string; voiceEngine: string; voiceLanguage: string; voiceFlowEnabled: boolean }>();
   const status = h("span", { class: "hint" });
   const wstatus = h("span", { class: "hint" });
   const err = h("div", { class: "notice warn", style: "display:none" });
@@ -72,6 +72,15 @@ export function voiceSettingsSection(ms: ModuleSettings, ui: SettingsUi): { el: 
   download(dl, status, VoiceBridge.voiceDownloadModel);
   download(wdl, wstatus, VoiceBridge.voiceDownloadWhisper);
 
+  let flowOn = cur().voiceFlowEnabled === true;
+  const flow = h("button", { class: flowOn ? "switch on" : "switch", "aria-pressed": flowOn, "aria-label": "Ditado em qualquer app (Ctrl direito)" });
+  flow.addEventListener("click", () => {
+    flowOn = !flowOn;
+    flow.classList.toggle("on", flowOn);
+    flow.setAttribute("aria-pressed", String(flowOn));
+    void ms.save({ voiceFlowEnabled: flowOn });
+  });
+
   const input = h("input", {
     type: "text", value: cur().voiceHotkey, spellcheck: "false", placeholder: "ex.: Ctrl+Alt+V",
   }) as HTMLInputElement;
@@ -99,6 +108,11 @@ export function voiceSettingsSection(ms: ModuleSettings, ui: SettingsUi): { el: 
     h("div", { class: "row" }, h("label", { text: "Idioma" }), lang, h("span", { class: "hint", text: "Só o Whisper escolhe idioma; o motor leve entende apenas inglês." })),
     rowWhistle,
     rowWhisper,
+    h("div", { class: "row" },
+      h("label", { text: "Ditado em qualquer app (Ctrl direito)" }),
+      flow,
+      h("span", { class: "hint", text: "Segure o Ctrl direito e fale; solte para colar o texto no app em foco. Dois toques rápidos = mãos livres; um toque encerra; Esc cancela. Usa um gancho de teclado do Windows; nenhuma tecla é gravada; o texto é colado no app em foco e a área de transferência é restaurada; apps rodando como administrador não recebem a colagem." }),
+    ),
     err,
   );
   return { el, dispose: () => offs.forEach((o) => void o.then((off) => off())) };

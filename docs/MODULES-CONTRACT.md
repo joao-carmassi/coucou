@@ -645,3 +645,13 @@ Pills, notices and (where a blocking hook exists) an approval card for Codex, Cu
 - **`core/archive.rs`** (neutral): `hex`, `sha256_file`, `extract_zip` (enclosed names, entry and size caps), moved unchanged from `modules/sysmon/lhm.rs`, which re-exports the two it uses. Modules never call each other.
 - **Privacy**: Settings text and `docs/privacy.html` say everything runs on the PC and the only network use is the clicked download (github.com, huggingface.co).
 - **Not verified here**: a real microphone take through whisper in pt-BR (only the CLI on a synthetic clip), the download over the app's own HTTP client.
+
+### F38 Flow (dictate into any app)
+
+- **Settings**: `voiceFlowEnabled` (default false). The low-level keyboard hook (`modules/voice/flow.rs`) exists only while `voice` is on AND this is true: `Voice::start/apply` call `flow::set`, `stop` removes it (one thread in `GetMessageW`, spawned through `ctx.spawn`).
+- **Keys**: Right Ctrl held 250 ms or more records while held; release transcribes and pastes. Double tap (two taps under 200 ms, the second pressed within 350 ms of the first release) = hands-free, the next tap ends it. Esc cancels and is swallowed only while a Flow take records. Any other key while Right Ctrl is down is a chord: abort silently. Right Ctrl is never swallowed. Cap 2 min per take. The state machine is pure (`Tap::step`).
+- **Hook rules**: reads only the key code, the injected flag and the time; ignores injected keys (our own `SendInput`); posts a small event to its own queue and returns at once; never stores or logs a key.
+- **Paste**: only if `GetForegroundWindow()` equals the window recorded at start, else the text goes to the voice card (`voice-text`) and `voice-flow {state:"moved"}`. Clipboard: previous `CF_UNICODETEXT` saved, text set together with `ExcludeClipboardContentFromMonitorProcessing`, Ctrl+V by `SendInput`, ~150 ms later the old text is restored if nothing else wrote meanwhile. `shortcut: only text is restored; a copied image or file list is lost`.
+- **Events**: `voice-flow {state: listening|transcribing|pasted|moved|error|idle, chars, message}` drives the status line ("ditando…") and the avatar meter (`voice-level`); the listener exists only while the setting is on. Flow never opens the card or takes focus (errors do show the card).
+- **Limits**: SendInput into an elevated window fails silently and cannot be detected (the Settings text says so); antivirus heuristics may flag keyboard hooks; clipboard managers that ignore the exclusion format may still see the text.
+- **Not verified here**: Flow in Notepad, Chrome, VS Code and Windows Terminal; an elevated target; Win+V history; the idle measure with Flow on (`idle-measure.ps1`, delta < 10 ms).

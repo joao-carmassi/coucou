@@ -91,7 +91,7 @@ fn emit_state(app: &AppHandle, state: &str, message: &str) {
 
 #[tauri::command]
 pub fn voice_start(app: AppHandle) -> Result<(), String> {
-    start(&app)
+    start(&app, Mode::Card)
 }
 
 #[tauri::command]
@@ -102,8 +102,7 @@ pub fn voice_stop() {
 /// Esc while listening: stop and throw the audio away (no transcription).
 #[tauri::command]
 pub fn voice_cancel() {
-    CANCEL.store(true, Ordering::SeqCst);
-    stop()
+    cancel()
 }
 
 #[tauri::command]
@@ -152,6 +151,38 @@ pub fn stop() {
     STOP.store(true, Ordering::SeqCst);
 }
 
+/// Stop and throw the audio away (no transcription).
+pub fn cancel() {
+    CANCEL.store(true, Ordering::SeqCst);
+    stop()
+}
+
+/// Who asked for the take: the card (hotkey), or Flow (dictate into the window `target` that was in front).
+#[derive(Clone, Copy, PartialEq)]
+pub enum Mode {
+    Card,
+    Flow { target: isize },
+}
+
+/// Flow's status line and meter: `voice-flow` {state: listening|transcribing|pasted|moved|error|idle, chars, message}.
+fn emit_flow(app: &AppHandle, state: &str, chars: usize, message: &str) {
+    let _ = app.emit("voice-flow", serde_json::json!({ "state": state, "chars": chars, "message": message }));
+}
+
+/// Called from the Flow key thread. Flow never opens the card and never takes focus.
+pub fn start_flow(app: &AppHandle, target: isize) -> Result<(), String> {
+    if CAPTURING.load(Ordering::SeqCst) {
+        return Err("ocupado".into()); // a card take (or a Flow take) is running: say nothing
+    }
+    super::flow::ACTIVE.store(true, Ordering::SeqCst);
+    let r = start(app, Mode::Flow { target });
+    if let Err(m) = &r {
+        super::flow::ACTIVE.store(false, Ordering::SeqCst);
+        emit_flow(app, "error", 0, m);
+    }
+    r
+}
+
 /// The hotkey: ends the recording in progress; otherwise the island decides (`voice-hotkey`): it reopens
 /// a transcript waiting there, or calls `voice_start`. Runs on the main thread.
 pub fn on_hotkey(app: &AppHandle) {
@@ -161,7 +192,7 @@ pub fn on_hotkey(app: &AppHandle) {
     let _ = app.emit("voice-hotkey", ());
 }
 
-fn start(app: &AppHandle) -> Result<(), String> {
+fn start(app: &AppHandle, mode: Mode) -> Result<(), String> {
     let host = app.state::<ModuleHost>();
     host.require("voice")?;
     let ctx: Arc<ModuleCtx> = host.ctx("voice").ok_or("O módulo Voz está desligado nas Configurações.")?;
@@ -177,14 +208,37 @@ fn start(app: &AppHandle) -> Result<(), String> {
     CANCEL.store(false, Ordering::SeqCst);
     let app = app.clone();
     ctx.spawn(move |module_stop| {
-        emit_state(&app, "listening", "");
-        let result = record(&app, &module_stop).and_then(|pcm| match pcm {
+        let state = |s: &str| match mode {
+            Mode::Card => emit_state(&app, s, ""),
+            Mode::Flow { .. } => emit_flow(&app, s, 0, ""),
+        };
+        state("listening");
+        let max = if matches!(mode, Mode::Flow { .. }) { super::flow::MAX_SECS * RATE } else { MAX_RECORD };
+        let recorded = record(&app, &module_stop, max);
+        super::flow::ACTIVE.store(false, Ordering::SeqCst); // Esc is Esc again
+        let result = recorded.and_then(|pcm| match pcm {
             Some(pcm) if !CANCEL.load(Ordering::SeqCst) => {
-                emit_state(&app, "transcribing", "");
+                state("transcribing");
                 transcribe(engine, lang, &d, &pcm, &module_stop).map(Some)
             }
             _ => Ok(None),
         });
+        if let Mode::Flow { target } = mode {
+            match result {
+                Ok(Some((text, language))) if !text.is_empty() && !module_stop.load(Ordering::SeqCst) => match super::flow::paste(&text, target) {
+                    Ok(()) => emit_flow(&app, "pasted", text.chars().count(), ""),
+                    Err(m) => {
+                        // Not pasted (another window is in front, or the clipboard refused): the text waits on the card.
+                        let _ = app.emit("voice-text", serde_json::json!({ "text": text, "language": language }));
+                        if m == "moved" { emit_flow(&app, "moved", 0, "") } else { emit_flow(&app, "error", 0, &m) }
+                    }
+                },
+                Err(m) => emit_flow(&app, "error", 0, &m),
+                _ => emit_flow(&app, "idle", 0, ""),
+            }
+            CAPTURING.store(false, Ordering::SeqCst);
+            return;
+        }
         CAPTURING.store(false, Ordering::SeqCst);
         if module_stop.load(Ordering::SeqCst) {
             return; // the module went off: the card is gone too
@@ -201,9 +255,9 @@ fn start(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Records until the user stops it or MAX_RECORD. None = nothing said.
+/// Records until the user stops it or `max` samples. None = nothing said.
 /// The microphone is open (and the 30 ms loop runs) only inside this function.
-fn record(app: &AppHandle, module_stop: &AtomicBool) -> Result<Option<Vec<f32>>, String> {
+fn record(app: &AppHandle, module_stop: &AtomicBool, max: usize) -> Result<Option<Vec<f32>>, String> {
     let werr = |e: windows::core::Error| format!("Microfone: {}", e.message());
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
@@ -266,7 +320,7 @@ fn record(app: &AppHandle, module_stop: &AtomicBool) -> Result<Option<Vec<f32>>,
                 peak = peak.max(rms);
                 spoke |= rms >= QUIET;
                 phrase.extend(chunk);
-                if phrase.len() >= MAX_RECORD {
+                if phrase.len() >= max {
                     break 'run;
                 }
             }

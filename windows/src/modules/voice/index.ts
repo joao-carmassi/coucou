@@ -4,6 +4,7 @@
 import type { Disposer, IslandApi, ModuleDef } from "../../core/moduleApi";
 import { App } from "../../kit/app";
 import { VoiceBridge } from "./bridge";
+import { bindFlow, FLOW_STATUS } from "./flow";
 import { buildVoiceView, send, Voice } from "./view";
 
 const reviewing = () => Voice.phase === "review";
@@ -12,7 +13,7 @@ const STATUS: Partial<Record<string, string>> = { listening: "ouvindo…", trans
 function start(api: IslandApi): Disposer {
   // No reset here: the view is built before start() and already writes Voice.level; stop resets.
   const line = () => {
-    const text = STATUS[Voice.phase];
+    const text = STATUS[Voice.phase] ?? FLOW_STATUS[Voice.flow];
     api.status.set(text ? { priority: 40, text } : null);
   };
   // One pinned request while the card is up, in every phase (listening, transcribing, review, error). Below another
@@ -87,9 +88,9 @@ function start(api: IslandApi): Disposer {
       show();
     }),
     api.listen<number>("voice-level", (v) => {
-      if (Voice.phase !== "listening") return;
+      if (Voice.phase !== "listening" && Voice.flow !== "listening") return;
       api.avatar.level(v);
-      if (Voice.level) Voice.level.style.width = `${Math.round(v * 100)}%`;
+      if (Voice.phase === "listening" && Voice.level)Voice.level.style.width = `${Math.round(v * 100)}%`;
     }),
     api.listen<{ text: string }>("voice-text", ({ text }) => {
       Voice.text = text;
@@ -98,6 +99,8 @@ function start(api: IslandApi): Disposer {
       line();
       show();
     }),
+    // Flow: only while its setting is on. A failed take shows its reason on the card.
+    bindFlow(api, { line, error: (m) => { Voice.phase = "error"; Voice.note = m; line(); show(); } }),
     // The transcript stays reachable (a close or a hover does not lose it) until Enter/Esc: its request stays in the core queue.
   ];
   return () => {
