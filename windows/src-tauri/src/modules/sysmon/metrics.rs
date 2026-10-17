@@ -61,6 +61,11 @@ pub fn gpu_load(items: &[(String, f64)]) -> f32 {
     by_type.values().cloned().fold(0.0, f64::max).clamp(0.0, 100.0) as f32
 }
 
+/// None when the counter returned no engine instance (no GPU, or the counter is missing).
+pub fn gpu_pct(items: &[(String, f64)]) -> Option<f32> {
+    (!items.is_empty()).then(|| gpu_load(items))
+}
+
 // ---- readings ----
 
 #[derive(Serialize, Clone, Debug)]
@@ -232,11 +237,16 @@ struct Pdh {
     disk: PDH_HCOUNTER,
 }
 
-// shortcut: PDH handles are used only under the SAMPLER mutex, one thread at a time.
+// shortcut: PDH handles are used only under their owner's mutex (SAMPLER, QUICK_GPU), one thread at a time.
 unsafe impl Send for Pdh {}
 
 impl Pdh {
     fn open() -> Option<Self> {
+        Self::open_with(true)
+    }
+
+    /// `all`: also the GPU memory and disk counters (the sampler); false: only the GPU engines (the pinned quick line).
+    fn open_with(all: bool) -> Option<Self> {
         unsafe {
             let mut q = PDH_HQUERY::default();
             if PdhOpenQueryW(PCWSTR::null(), 0, &mut q) != 0 {
@@ -249,8 +259,8 @@ impl Pdh {
             let p = Pdh {
                 q,
                 gpu: add(w!("\\GPU Engine(*)\\Utilization Percentage")),
-                gpu_mem: add(w!("\\GPU Adapter Memory(*)\\Dedicated Usage")),
-                disk: add(w!("\\PhysicalDisk(_Total)\\% Disk Time")),
+                gpu_mem: if all { add(w!("\\GPU Adapter Memory(*)\\Dedicated Usage")) } else { PDH_HCOUNTER::default() },
+                disk: if all { add(w!("\\PhysicalDisk(_Total)\\% Disk Time")) } else { PDH_HCOUNTER::default() },
             };
             let _ = PdhCollectQueryData(q);
             Some(p)
@@ -289,7 +299,7 @@ impl Pdh {
         let mem = self.array(self.gpu_mem);
         let disk = self.array(self.disk);
         (
-            (!gpu.is_empty()).then(|| gpu_load(&gpu)),
+            gpu_pct(&gpu),
             (!mem.is_empty()).then(|| mem.iter().map(|(_, v)| *v as u64).sum()),
             disk.first().map(|(_, v)| v.clamp(0.0, 100.0) as f32),
         )
@@ -301,6 +311,20 @@ impl Drop for Pdh {
         unsafe {
             let _ = PdhCloseQuery(self.q);
         }
+    }
+}
+
+/// One PDH query with only the GPU engine counter, for the pinned quick line: open on a fresh start, one `load` per tick, drop on stop.
+pub struct GpuProbe(Pdh);
+
+impl GpuProbe {
+    pub fn open() -> Option<Self> {
+        Pdh::open_with(false).map(GpuProbe)
+    }
+
+    /// GPU load since the previous `load` (or since open); None when unreadable.
+    pub fn load(&self) -> Option<f32> {
+        self.0.collect().0
     }
 }
 
@@ -393,6 +417,13 @@ mod tests {
         assert_eq!(gpu_load(&v), 55.0);
         assert_eq!(gpu_load(&[("x_engtype_3D".into(), 400.0)]), 100.0, "clamped");
         assert_eq!(gpu_load(&[]), 0.0);
+    }
+
+    #[test]
+    fn gpu_pct_is_none_without_engines() {
+        assert_eq!(gpu_pct(&[]), None);
+        assert_eq!(gpu_pct(&[("pid_1_luid_0_phys_0_eng_0_engtype_3D".into(), 36.5)]), Some(36.5));
+        assert_eq!(gpu_pct(&[("a_engtype_3D".into(), 70.0), ("b_engtype_3D".into(), 70.0)]), Some(100.0), "summed per type, clamped");
     }
 
     #[test]

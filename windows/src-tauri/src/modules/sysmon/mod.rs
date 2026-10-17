@@ -16,6 +16,7 @@ pub struct Sysmon;
 
 static SAMPLER: Mutex<Option<metrics::Sampler>> = Mutex::new(None);
 static QUICK_CPU: Mutex<Option<(u64, u64, u64)>> = Mutex::new(None);
+static QUICK_GPU: Mutex<Option<metrics::GpuProbe>> = Mutex::new(None);
 static ALERT_CPU: Mutex<Option<(u64, u64, u64)>> = Mutex::new(None);
 
 /// A panic under the lock must never make release (or the next sample) panic too.
@@ -38,6 +39,7 @@ impl Module for Sysmon {
     fn stop(&self, _ctx: &ModuleCtx) {
         release();
         *lock(&QUICK_CPU) = None;
+        *lock(&QUICK_GPU) = None;
     }
 }
 
@@ -49,7 +51,7 @@ pub fn modules() -> Vec<Box<dyn Module>> {
 
 pub fn handler() -> crate::core::host::Handler {
     crate::core::host::handler(tauri::generate_handler![
-        sysmon_sample, sysmon_release, sysmon_alert_probe, sysmon_quick, sysmon_lhm_info, sysmon_lhm_read, sysmon_lhm_install, sysmon_lhm_open,
+        sysmon_sample, sysmon_release, sysmon_alert_probe, sysmon_quick, sysmon_quick_stop, sysmon_lhm_info, sysmon_lhm_read, sysmon_lhm_install, sysmon_lhm_open,
     ])
 }
 
@@ -116,6 +118,7 @@ pub async fn sysmon_alert_probe(app: AppHandle, tick: u32) -> Result<Probe, Stri
 pub struct Quick {
     pub cpu: Option<f32>,
     pub ram: Option<f32>,
+    pub gpu: Option<f32>,
 }
 
 /// CPU percent since the previous reading (`prev` is replaced); None on the first one or when the counters did not move.
@@ -124,8 +127,8 @@ pub fn step_cpu(prev: &mut Option<(u64, u64, u64)>, cur: Option<(u64, u64, u64)>
     metrics::cpu_pct(p?, cur?)
 }
 
-/// The pinned "Uso do PC" line: GetSystemTimes + GlobalMemoryStatusEx only, no sampler. `fresh` drops the old baseline
-/// (just pinned or shown again), measuring over ~200 ms instead of the time since the last read.
+/// The pinned "Uso do PC" line: GetSystemTimes + GlobalMemoryStatusEx + one PDH collect of the GPU engines, no sampler.
+/// `fresh` drops the old baselines (just pinned or shown again; reopens the GPU query), measuring over ~200 ms instead of the time since the last read.
 #[tauri::command]
 pub async fn sysmon_quick(app: AppHandle, fresh: bool) -> Result<Quick, String> {
     gate(&app)?;
@@ -134,13 +137,28 @@ pub async fn sysmon_quick(app: AppHandle, fresh: bool) -> Result<Quick, String> 
         if fresh {
             // Two readings a moment apart, so the first line already has a CPU value.
             *prev = metrics::cpu_times();
+            *lock(&QUICK_GPU) = metrics::GpuProbe::open();
             std::thread::sleep(std::time::Duration::from_millis(200));
         }
         let cpu = step_cpu(&mut prev, metrics::cpu_times());
         let ram = metrics::ram().and_then(|(u, t)| used_pct(t, t.saturating_sub(u)));
-        Quick { cpu, ram }
+        // Query opened on `fresh`; a read after a stop reopens it lazily (that first collect has no baseline: None).
+        let mut q = lock(&QUICK_GPU);
+        if q.is_none() {
+            *q = metrics::GpuProbe::open();
+        }
+        let gpu = q.as_ref().and_then(|g| g.load());
+        Quick { cpu, ram, gpu }
     })
     .await
+}
+
+/// The pinned line ended (unpinned, island hidden, module off): close the quick GPU query and drop the CPU baseline.
+#[tauri::command]
+pub async fn sysmon_quick_stop() -> Result<(), String> {
+    *lock(&QUICK_GPU) = None;
+    *lock(&QUICK_CPU) = None;
+    Ok(())
 }
 
 #[tauri::command]
