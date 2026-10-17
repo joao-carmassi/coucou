@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.1
+
+- Removed the three buttons on the home card (open, flip, Utilidades) and the Utilidades view; the whole card still opens on click.
+- Ctrl+Alt+K no longer opens a search field: it opens the island on the home, navigable by keyboard (Left/Right or Ctrl+Tab switch tabs, Enter opens the card, Esc folds). The palette was removed.
+- Uso do plano: own tab icon; connection failures say what failed (timeout / no connection / other) and the cause goes to the log.
+
 ## 0.12.0
 
 Wave 2: other agents, usage, statistics, richer Claude cards.
