@@ -64,6 +64,8 @@ toml_edit = "0.22"
 # sysmon: extracts the pinned LibreHardwareMonitor zip (enclosed_name blocks path traversal).
 zip = { version = "2", default-features = false, features = ["deflate"] }
 hmac = "0.12"
+# crypto: Coinbase CDP JWT (ES256). Signing only; no other curve.
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "pem", "std"] }
 # `#[implement]` (drop_target.rs) expands to paths in windows-core.
 windows-core = "0.61"
 # Same version wry resolves; ICoreWebView2_19 (memory target) for the hidden settings webview.
