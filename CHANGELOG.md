@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.1
+
+- Tocando: the main Mochi now dances (no second mini Mochi any more); with no agent task running, the compact island shows the cover, title, artist and time left. New generic `StatusLine.card` and `api.avatar.level(v, {dance})` options.
+- Sistema: removed the top CPU/memory processes list (and its process scan); redesigned view with metric tiles, sparklines, disk/network rows and coloured temperature chips.
+- Clima, Pausas, Agenda, Sistema, Tocando, Mídia: taller views, comfortable padding and themed scrolling so nothing is hidden (generic `.scroll` utility).
+
 ## 0.10.0
 
 Five new modules (all off by default) and media tools.
