@@ -1,6 +1,10 @@
 // Pure rules of the Tocando agora module (no DOM, no Tauri): Node tests load this file.
 
 /** What the Rust worker reports about the player (src-tauri/src/modules/nowplaying/session.rs). */
+// Fixed parts of the Tocando view (nowplaying.css), so the island fits its content without measuring: chrome 56 (as sysmon) +
+// body padding 14 + 14, cover row 56, gap 6, progress (bar 4 + 2 + times 13) 19, gap 6, controls 28. Without a known length the progress and its gap go.
+export const fitHeight = (progress: boolean): number => 56 + 28 + 56 + 6 + 28 + (progress ? 6 + 19 : 0);
+
 export interface Track {
   appId: string;
   app: string;
@@ -89,6 +93,3 @@ export function wantTick(o: { playing: boolean; paused?: boolean; mode: string; 
   if (!o.playing || o.paused) return false;
   return (o.mode === "compact" && o.hasLength && o.cardShown === true) || (o.mode === "expanded" && o.view === "nowplaying");
 }
-
-/** One line for the notice. */
-export const trackLine = (t: Track) => (t.artist ? `${t.title} · ${t.artist}` : t.title || t.app);

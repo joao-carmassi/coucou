@@ -33,6 +33,7 @@ vi.mock("../../src/modules/timer/timer", async (orig) => {
 });
 import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
+import { State } from "../../src/core/state";
 import { MODULES as REAL } from "../../src/modules/index";
 import { MODULE_INFO } from "../../src/modules/catalog";
 import { info, steps, PROVIDERS } from "../../src/modules/integrations/store";
@@ -521,6 +522,34 @@ describe("media panel", () => {
     (T.hosts.media.el.querySelector(".media-more") as HTMLElement).click();
     snap("media-menu", T.hosts.media.el);
   });
+  it("menu groups conversions under Converter and the submenu opens/closes by keyboard", () => {
+    const el = T.hosts.media.el;
+    const top = () => [...el.querySelectorAll(".media-menu:not(.media-submenu) > .media-menu-row")].map((r) => r.textContent);
+    const sub = el.querySelector(".media-submenu") as HTMLElement;
+    const key = (k: string) => document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
+    expect(top()).toContain("Converter ▸");
+    expect(top()).not.toContain("Para JPG");
+    expect([...sub.querySelectorAll(".media-menu-row")].map((r) => r.textContent)).toEqual(["Para JPG", "Para WebP", "Reduzir 50%", "Reduzir 25%", "Comprimir", "Sem metadados"]);
+    expect(sub.style.display).toBe("none");
+    (el.querySelector(".media-menu-sub") as HTMLElement).focus();
+    key("ArrowRight");
+    expect(sub.style.display).toBe("");
+    expect(document.activeElement!.textContent).toBe("Para JPG");
+    key("ArrowLeft");
+    expect(sub.style.display).toBe("none");
+    expect(document.activeElement!.textContent).toBe("Converter ▸");
+    key("Enter");
+    key("Escape");
+    expect(sub.style.display).toBe("none");
+    expect((el.querySelector(".media-menu") as HTMLElement).style.display).toBe(""); // first Esc: only the submenu
+    key("Escape");
+    expect((el.querySelector(".media-menu") as HTMLElement).style.display).toBe("none"); // second Esc: the menu
+  });
+  it("a kind with no conversions has no Converter entry", async () => {
+    const cells = T.hosts.media.el.querySelectorAll(".media-more");
+    (cells[2] as HTMLElement).click(); // notes.pdf
+    expect(T.hosts.media.el.querySelector(".media-menu-sub")).toBeNull();
+  });
   it("list that failed", async () => {
     T.answers.media_list = () => { throw new Error("Error: sem acesso"); };
     await go("overview"); T.hosts.media.sync();
@@ -600,6 +629,121 @@ describe("clock and timer", () => {
     snap("timer-stopwatch-running", T.hosts.timer.el);
     (T.hosts.timer.el.querySelector(".text-link") as HTMLElement).click();
     vi.setSystemTime(NOW);
+  });
+});
+
+// ── Pausas: Hoje and 7 dias ─────────────────────────────────────────────────────────────────
+
+describe("eyecare", () => {
+  it("today, then the week tab", async () => {
+    T.answers.eyecare_usage = () => ({
+      "2026-03-04": { "code.exe": 9000 }, "2026-03-06": { "code.exe": 14_400, "chrome.exe": 3600 },
+      "2026-03-09": { "chrome.exe": 7200, "slack.exe": 600 },
+      "2026-03-10": { "code.exe": 5400, "chrome.exe": 2700, "windowsterminal.exe": 1500, "slack.exe": 420, "spotify.exe": 30, "notepad.exe": 10 },
+    });
+    T.answers.eyecare_breaks = () => ({ days: { "2026-03-08": [3, 1], "2026-03-09": [5, 2], "2026-03-10": [4, 3] }, last: NOW.getTime() - 42 * MIN });
+    await go("overview");
+    snap("eyecare-today", await showing("eyecare"));
+    expect(T.hosts.eyecare.height).toBe(292);
+    (T.hosts.eyecare.el.querySelectorAll(".eyecare-tabs button")[1] as HTMLElement).click();
+    snap("eyecare-week", T.hosts.eyecare.el);
+    expect(T.hosts.eyecare.height).toBe(272);
+    delete T.answers.eyecare_usage; delete T.answers.eyecare_breaks;
+  });
+});
+
+// ── Uso do plano: Claude off, on (with a model weekly), then an error after Atualizar ────────
+
+describe("planusage", () => {
+  const at = NOW.getTime();
+  const win = (label: string, usedPct: number | null, inMin: number | null) => ({ label, usedPct, resetsAt: inMin == null ? null : at + inMin * MIN });
+  it("Claude off, on, and failing", async () => {
+    const settings = State.settings as unknown as Record<string, unknown>;
+    settings.planusageClaudeNet = false;
+    T.handlers["planusage-changed"].forEach((fn) => fn({ payload: [{ agent: "codex", source: "local", at, windows: [win("5 h", 82.4, 130), win("semana", 31, 4 * 1440 + 200)] }] }));
+    snap("planusage-claude-off", await showing("planusage"));
+    expect(T.hosts.planusage.height).toBe(278);
+    settings.planusageClaudeNet = true;
+    T.answers.planusage_claude = () => ({ agent: "claude", source: "network", at, windows: [win("5 h", 12, 40), win("semana", 57, 2 * 1440), win("weekly_opus", 93, 2 * 1440)] });
+    const again = async () => { (T.hosts.planusage.el.querySelector(".planusage-head .text-link") as HTMLElement).click(); await flush(); };
+    await again();
+    snap("planusage-claude-on", T.hosts.planusage.el);
+    expect(T.hosts.planusage.height).toBe(300);
+    T.answers.planusage_claude = () => { throw new Error("Login do Claude Code não encontrado"); };
+    await again();
+    snap("planusage-claude-error", T.hosts.planusage.el);
+    expect(T.hosts.planusage.height).toBe(256);
+    settings.planusageClaudeNet = false;
+    delete T.answers.planusage_claude;
+  });
+});
+
+// ── Estatísticas de IA: Hoje, 7 dias, 30 dias ───────────────────────────────────────────────
+
+describe("aistats", () => {
+  it("today, then the 7 and 30 day tabs", async () => {
+    const tok = (o: Record<string, number>) => ({ input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0, req: 0, ...o });
+    T.answers.aistats_refresh = () => ({
+      approx: true, more: false,
+      days: [
+        { day: "2026-02-12", tok: tok({ input: 900_000, output: 40_000 }), models: { "gpt-5": tok({ input: 900_000, output: 40_000 }) }, projects: {} },
+        { day: "2026-03-06", tok: tok({ input: 20_000, output: 90_000, cache_read: 1_800_000, cache_write: 60_000, req: 120 }),
+          models: { "claude-opus-4-5-20251101": tok({ input: 20_000, output: 90_000, cache_read: 1_800_000, cache_write: 60_000, req: 120 }) }, projects: { coucou: 1_970_000 } },
+        { day: "2026-03-10", tok: tok({ input: 45_000, output: 120_000, cache_read: 3_200_000, cache_write: 150_000, reasoning: 8000, req: 214 }),
+          models: {
+            "claude-opus-4-5-20251101": tok({ input: 30_000, output: 80_000, cache_read: 2_600_000, cache_write: 120_000, req: 150 }),
+            "claude-haiku-4-5-20251001": tok({ input: 5000, output: 10_000, cache_read: 300_000, cache_write: 30_000, req: 40 }),
+            "gpt-5-codex": tok({ input: 10_000, output: 30_000, cache_read: 300_000, reasoning: 8000, req: 24 }),
+          },
+          projects: { coucou: 2_500_000, "site-novo": 540_000, dotfiles: 200_000 } },
+      ],
+    });
+    await go("overview");
+    snap("aistats-today", await showing("aistats"));
+    expect(T.hosts.aistats.height).toBe(278);
+    const tab = (i: number) => (T.hosts.aistats.el.querySelectorAll(".aistats-tabs button")[i] as HTMLElement).click();
+    tab(1);
+    snap("aistats-week", T.hosts.aistats.el);
+    expect(T.hosts.aistats.height).toBe(298);
+    tab(2);
+    snap("aistats-month", T.hosts.aistats.el);
+    delete T.answers.aistats_refresh;
+  });
+});
+
+// ── Clima: no city, Agora, 7 dias, then an error after Atualizar ─────────────────────────────
+
+describe("weather", () => {
+  it("no city, now, the week tab, and a failed refresh", async () => {
+    const settings = State.settings as unknown as Record<string, unknown>;
+    settings.weatherPlace = null;
+    await go("overview");
+    snap("weather-nocity", await showing("weather"));
+    expect(T.hosts.weather.height).toBe(128);
+    const codes = [2, 2, 3, 61, 80, 95, 3, 1, 0, 0, 45, 71];
+    T.answers.weather_forecast = () => ({
+      current: { time: "2026-03-10T12:20", temp: 27.4, feels: 29.1, humidity: 64, wind: 14.2, code: 2, isDay: true, windDir: 48, uv: 6.8 },
+      hours: codes.map((code, i) => ({ time: `2026-03-10T${String(12 + i).padStart(2, "0")}:00`, temp: 27 - i * 0.8, code, rain: [0, 5, 20, 70, 85, 90, 40, 10, 0, 0, 0, 30][i] })),
+      days: [[21, 29, 2, 90], [19, 26, 61, 70], [17, 23, 3, 20], [12, 20, 0, 0], [14, 24, 1, 5], [18, 31, 95, 60], [16, 22, 45, 10]]
+        .map(([min, max, code, rain], i) => ({ date: `2026-03-${10 + i}`, min, max, code, rain })),
+    });
+    settings.weatherPlace = { name: "Campinas", admin: "São Paulo", country: "Brasil", lat: -22.9, lon: -47.06 };
+    T.hosts.weather.sync();
+    await flush();
+    T.hosts.weather.sync();
+    snap("weather-now", T.hosts.weather.el);
+    expect(T.hosts.weather.height).toBe(314);
+    (T.hosts.weather.el.querySelectorAll(".weather-tabs button")[1] as HTMLElement).click();
+    snap("weather-week", T.hosts.weather.el);
+    expect(T.hosts.weather.height).toBe(280);
+    T.answers.weather_forecast = () => { throw new Error("sem conexão com o serviço de clima"); };
+    (T.hosts.weather.el.querySelector(".weather-head .text-link") as HTMLElement).click();
+    await flush();
+    T.hosts.weather.sync();
+    snap("weather-error", T.hosts.weather.el);
+    expect(T.hosts.weather.height).toBe(128);
+    settings.weatherPlace = null;
+    delete T.answers.weather_forecast;
   });
 });
 

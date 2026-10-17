@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CACHE_MS, cacheKey, describe, dayLabel, fmtTemp, hourLabel, isFresh, needsPoll, placeLabel, POLL_MS, statusParts, statusText, glanceMinutes } from "../src/modules/weather/logic.ts";
+import { CACHE_MS, cacheKey, describe, dayLabel, fmtTemp, hourLabel, isFresh, needsPoll, placeLabel, POLL_MS, statusParts, statusText, glanceMinutes, sky, tone, uvLevel, compass, span, fitHeight, HOURS_SHOWN, DAYS_SHOWN } from "../src/modules/weather/logic.ts";
 import { readFileSync } from "node:fs";
 import type { Forecast } from "../src/modules/weather/logic.ts";
 
@@ -86,11 +86,63 @@ test("glanceMinutes: 0 and junk are off, whole minutes, capped at a day", () => 
   assert.equal(glanceMinutes(99999), 1440);
 });
 
-test("the strips never scroll: no overflow-x/auto/scroll rule on them, pin is a direct child of a relative body", () => {
+test("the strips never scroll: no overflow-x/auto/scroll rule on them; the pin sits on the card, the head keeps room for it", () => {
   const css = readFileSync(new URL("../src/modules/weather/weather.css", import.meta.url), "utf8");
-  const strips = css.split("\n").filter((l) => /\.weather-(hours|days)/.test(l)).join("\n");
+  const strips = css.split("\n").filter((l) => /\.weather-(hours|hour|days|day)\b/.test(l)).join("\n");
   assert.doesNotMatch(strips, /overflow(-x|-y)?:\s*(auto|scroll)/);
-  assert.match(css, /\.weather-body\s*\{[^}]*position:\s*relative[^}]*padding:\s*14px 48px/);
+  assert.doesNotMatch(css, /animation|@keyframes|transition/); // no shimmer or slide-in on text
   const view = readFileSync(new URL("../src/modules/weather/view.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(view, /weather-head"[^]*?pin\.el\)\)/);
+  assert.match(view, /card\(null, body, pin\.el\)/);
+  assert.match(view, /weather-head pin-room/);
+});
+
+test("drawn skies: WMO codes to a sky, day and night", () => {
+  assert.equal(sky(0), "clear");
+  assert.equal(sky(1, false), "night");
+  assert.equal(sky(2), "partly");
+  assert.equal(sky(2, false), "partlyNight");
+  assert.equal(sky(3), "cloud");
+  assert.equal(sky(48), "fog");
+  assert.equal(sky(53), "drizzle");
+  assert.equal(sky(65), "rain");
+  assert.equal(sky(81), "rain");
+  assert.equal(sky(86), "snow");
+  assert.equal(sky(95), "storm");
+  assert.equal(sky(100), "cloud"); // unknown: a plain cloud, never a throw
+});
+
+test("temperature tone is judged in Celsius in both units", () => {
+  assert.equal(tone(5, "C"), "cold");
+  assert.equal(tone(18, "C"), "cool");
+  assert.equal(tone(27, "C"), "warm");
+  assert.equal(tone(33, "C"), "hot");
+  assert.equal(tone(41, "F"), "cold"); // 5 °C
+  assert.equal(tone(91, "F"), "hot"); // ~33 °C
+});
+
+test("UV bands, compass points and the week scale", () => {
+  assert.deepEqual(uvLevel(1), { text: "baixo", level: "low" });
+  assert.equal(uvLevel(4).text, "moderado");
+  assert.equal(uvLevel(7).level, "high");
+  assert.equal(uvLevel(9).text, "muito alto");
+  assert.equal(uvLevel(12).text, "extremo");
+  assert.equal(compass(0), "N");
+  assert.equal(compass(90), "L");
+  assert.equal(compass(225), "SO");
+  assert.equal(compass(350), "N");
+  assert.equal(compass(-90), "O");
+  assert.deepEqual(span([{ min: 13, max: 24 }, { min: 11, max: 19 }]), { lo: 11, hi: 24 });
+  assert.deepEqual(span([{ min: 20, max: 20 }]), { lo: 20, hi: 21 }); // never a zero span
+  assert.deepEqual(span([]), { lo: 0, hi: 1 });
+});
+
+test("the island fits the Clima content: no dead space, never past 320", () => {
+  assert.equal(HOURS_SHOWN, 12);
+  assert.equal(DAYS_SHOWN, 7);
+  assert.equal(fitHeight("note"), 128);
+  assert.equal(fitHeight("now", 12), 314);
+  assert.equal(fitHeight("now", 0), 258);
+  assert.equal(fitHeight("week", 0, 7), 280);
+  assert.equal(fitHeight("week", 0, 0), 148);
+  for (const n of [0, 5, 7, 30]) assert.ok(fitHeight("week", 0, n) <= 320);
 });

@@ -193,7 +193,7 @@ function generalSection(): HTMLElement {
     ),
     colorsRows(),
     h("div", { class: "row" },
-      h("label", { text: "Atalho da paleta" }),
+      h("label", { text: "Atalho para abrir a ilha" }),
       paletteKey,
       h("span", { class: "hint", text: "ex.: Ctrl+Alt+K · vazio = sem atalho global" }),
     ),

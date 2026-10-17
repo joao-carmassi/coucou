@@ -25,7 +25,7 @@ impl Module for Claude {
     }
 
     fn start(&self, ctx: &ModuleCtx, s: &Settings) {
-        hooks::ensure_hook_exe(&ctx.app);
+        crate::core::relay::ensure_client_exe(&ctx.app);
         relay::subscribe(ctx, pipe::CHANNEL);
         set_alert(ctx, s);
         let app = ctx.app.clone();

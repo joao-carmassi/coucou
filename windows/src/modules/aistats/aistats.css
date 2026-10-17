@@ -1,0 +1,72 @@
+/* Estatísticas de IA: this module's classes, all prefixed "aistats-". Reuse kit classes; never redefine them.
+   Heights are fixed (logic.ts fitHeight adds them up), nothing animates. Claude is amber, Codex is cyan. */
+.aistats-view { padding: 12px 16px 12px 84px; gap: 10px; font: 400 11.5px var(--font); color: var(--dim); }
+
+/* Head: period, reading status, Atualizar, Hoje / 7 dias / 30 dias (the settings' .seg on a track) */
+.aistats-head { display: flex; align-items: center; gap: 10px; height: 22px; flex: none; min-width: 0; }
+.aistats-when { font: 600 12.5px var(--font); color: var(--ink); white-space: nowrap; }
+.aistats-head .grow { flex: 1; }
+.aistats-head .text-link { font-size: 10.5px; }
+.aistats-tabs { margin-left: 0; padding: 2px; gap: 2px; border-radius: 999px; background: var(--surface-track); }
+.aistats-tabs button { cursor: pointer; }
+
+.aistats-panel { display: flex; flex-direction: column; gap: 10px; flex: none; min-width: 0; }
+.aistats-none { height: 16px; line-height: 16px; color: var(--dim-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Stat tiles */
+.aistats-tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; height: 54px; }
+.aistats-tile {
+  display: flex; flex-direction: column; justify-content: space-between; min-width: 0;
+  padding: 6px 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.035); border: 1px solid var(--surface-edge);
+}
+.aistats-k { font: 600 9.5px/11px var(--font); text-transform: uppercase; letter-spacing: 0.6px; color: var(--dim-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aistats-v { font: 600 15px/17px var(--font); color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aistats-foot { font-size: 10.5px; line-height: 12px; color: var(--dim-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.aistats-tile .aistats-bar { margin: 4px 0 3px; }
+
+/* Bars */
+.aistats-bar { display: block; height: 3px; border-radius: 999px; background: var(--surface-track); overflow: hidden; flex: none; }
+.aistats-bar > i { display: block; height: 100%; border-radius: inherit; background: var(--amber); }
+.aistats-bar.ok > i { background: var(--green-2); }
+
+/* Middle: Hoje = models | projects; 7 / 30 dias = chart | models | projects. 96 px with four rows. */
+.aistats-mid { display: grid; gap: 18px; min-width: 0; }
+.aistats-mid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.aistats-mid.three { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr); height: 96px; }
+.aistats-sec { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.aistats-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; height: 14px; flex: none; }
+.aistats-list { display: flex; flex-direction: column; gap: 4px; }
+.aistats-row { display: flex; flex-direction: column; gap: 2px; height: 16px; min-width: 0; }
+.aistats-line { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; line-height: 11px; min-width: 0; }
+.aistats-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--surface-text); }
+.aistats-num { flex: none; font-variant-numeric: tabular-nums; color: var(--dim-2); }
+
+/* Daily chart: one column per day split Claude / Codex (today full colour), dashed average line */
+.aistats-chart { gap: 6px; }
+.aistats-plot { position: relative; flex: 1; min-height: 0; display: grid; gap: 2px; border-bottom: 1px solid var(--surface-edge); }
+.aistats-col { height: 100%; display: flex; align-items: flex-end; justify-content: center; min-width: 0; opacity: 0.5; }
+.aistats-col.today { opacity: 1; }
+.aistats-col:hover { opacity: 0.85; }
+.aistats-stack { display: flex; flex-direction: column; width: 100%; max-width: 16px; border-radius: 3px 3px 1px 1px; overflow: hidden; }
+.aistats-stack > i { display: block; flex: none; }
+.aistats-avg { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed rgba(255, 255, 255, 0.3); pointer-events: none; }
+.aistats-axis { display: grid; gap: 2px; margin-top: -3px; text-align: center; font-size: 10px; line-height: 13px; color: var(--dim-3); font-variant-numeric: tabular-nums; }
+.aistats-axis.ends { display: flex; justify-content: space-between; }
+.aistats-axis .today { color: var(--ink); }
+
+/* Foot: Claude / Codex split and the quiet cost note */
+.aistats-end { display: flex; align-items: center; gap: 8px; height: 16px; min-width: 0; font-size: 10.5px; }
+.aistats-end .grow { flex: 1; }
+.aistats-who { display: inline-flex; align-items: center; gap: 5px; flex: none; color: var(--surface-text); font-variant-numeric: tabular-nums; }
+.aistats-who > i { width: 6px; height: 6px; border-radius: 50%; }
+.aistats-split { display: flex; flex: 0 1 140px; min-width: 40px; height: 4px; border-radius: 999px; background: var(--surface-track); overflow: hidden; }
+.aistats-split > i { display: block; height: 100%; }
+.aistats-stack > .claude, .aistats-split > .claude, .aistats-who.claude > i { background: var(--amber); }
+.aistats-stack > .codex, .aistats-split > .codex, .aistats-who.codex > i { background: var(--cyan); }
+.aistats-note { color: var(--dim-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.aistats-note.approx { color: var(--dim-3); }
+
+/* Tab switch: 160 ms fade-in of the new panel; one-shot CSS, paused with the rest while the island is away. */
+.aistats-panel.fade { animation: aistats-fade 160ms ease-out; }
+@keyframes aistats-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .aistats-panel.fade { animation: none; } }

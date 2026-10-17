@@ -1,0 +1,10 @@
+{
+  "id": "aistats",
+  "label": "Estatísticas de IA",
+  "default": false,
+  "order": 20,
+  "settingsDefaults": {
+    "aistatsKeepDays": 90
+  },
+  "presets": ["tudo", "vitrine"]
+}

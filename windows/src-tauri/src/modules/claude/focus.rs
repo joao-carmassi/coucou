@@ -6,7 +6,13 @@
 // bare console. "Open terminal" brings that window forward; without one it opens
 // a new terminal in the session folder.
 
-use windows::core::BOOL;
+use windows::core::{Interface, BOOL};
+use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED};
+use windows::Win32::System::Variant::VARIANT;
+use windows::Win32::UI::Accessibility::{
+    CUIAutomation, IUIAutomation, IUIAutomation6, IUIAutomationSelectionItemPattern, TreeScope_Descendants,
+    UIA_ControlTypePropertyId, UIA_NamePropertyId, UIA_SelectionItemPatternId, UIA_TabItemControlTypeId,
+};
 use windows::Win32::Foundation::{HWND, LPARAM};
 use windows::Win32::System::Console::{
     AttachConsole, FreeConsole, GetConsoleWindow, GetStdHandle, SetConsoleCtrlHandler, SetStdHandle,
@@ -16,7 +22,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_MENU,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetAncestor, GetForegroundWindow, GetWindow, GetWindowLongW,
+    EnumWindows, GetAncestor, GetClassNameW, GetForegroundWindow, GetWindow, GetWindowLongW,
     GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
     SetForegroundWindow, ShowWindow, GA_ROOTOWNER, GWL_EXSTYLE, GW_OWNER, SW_RESTORE, WS_EX_TOOLWINDOW,
 };
@@ -52,7 +58,7 @@ fn app_windows() -> Vec<Candidate> {
 /// terminal: that may be a different session's. Brings it forward and says whether there was one: a window Windows
 /// would not let us raise still flashes in the taskbar, and opening a second
 /// terminal on top of that would only add to the confusion.
-pub fn existing_terminal(pids: &[u32]) -> bool {
+pub fn existing_terminal(pids: &[u32], title: Option<&str>, cwd: Option<&str>) -> bool {
     // The console a process is attached to names its window exactly. Matching by
     // process id cannot: Windows Terminal hosts every window in one process, and
     // consoles Coucou launches get handed to it outside the process chain.
@@ -67,6 +73,11 @@ pub fn existing_terminal(pids: &[u32]) -> bool {
     let Some(hwnd) = hwnd else { return false };
     if !bring_forward(hwnd) {
         crate::core::log::line("could not bring the terminal window forward".to_string());
+    }
+    // Windows Terminal hosts many sessions in one window: best effort, pick this session's tab.
+    let hints = tab_hints(title, cwd);
+    if !hints.is_empty() && is_terminal_window(hwnd) {
+        select_wt_tab(hwnd, hints);
     }
     true
 }
@@ -125,5 +136,112 @@ fn bring_forward(hwnd: HWND) -> bool {
         SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
         let _ = SetForegroundWindow(hwnd);
         GetForegroundWindow() == hwnd
+    }
+}
+
+/// What a tab of this session may be called: its title first, then its folder's name.
+fn tab_hints(title: Option<&str>, cwd: Option<&str>) -> Vec<String> {
+    let folder = cwd.and_then(|c| c.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next());
+    [title, folder].into_iter().flatten().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+}
+
+/// The first tab whose name holds a hint, hints in order of trust, case-insensitive. No hints, no pick.
+fn pick_tab(names: &[String], hints: &[String]) -> Option<usize> {
+    let lower: Vec<String> = names.iter().map(|n| n.trim().to_lowercase()).collect();
+    let hints: Vec<String> = hints.iter().map(|h| h.trim().to_lowercase()).filter(|h| !h.is_empty()).collect();
+    // Hints in order of trust; for each, an exact name beats a partial one, and short hints (1-2 chars) only match exactly.
+    hints.iter().find_map(|h| {
+        lower.iter().position(|n| n == h).or_else(|| {
+            (h.chars().count() >= 3).then(|| lower.iter().position(|n| n.contains(h.as_str()))).flatten()
+        })
+    })
+}
+
+fn is_terminal_window(hwnd: HWND) -> bool {
+    let mut class = [0u16; 64];
+    let n = unsafe { GetClassNameW(hwnd, &mut class) };
+    String::from_utf16_lossy(&class[..n.max(0) as usize]) == "CASCADIA_HOSTING_WINDOW_CLASS"
+}
+
+/// Budget for each UIA call; past it the call fails and the plain window focus stands.
+const UIA_BUDGET_MS: u32 = 300;
+/// Budget for the whole search; past it the plain window focus stands.
+const UIA_TOTAL: std::time::Duration = std::time::Duration::from_millis(300);
+
+/// Selects the Windows Terminal tab that matches a hint. UI Automation, read plus Select only
+/// (never keystrokes), on the click's own thread. False on any failure, e.g. an elevated terminal.
+fn select_wt_tab(hwnd: HWND, hints: Vec<String>) -> bool {
+    unsafe { select_tab(hwnd, &hints) }.is_some()
+}
+
+unsafe fn select_tab(hwnd: HWND, hints: &[String]) -> Option<()> {
+    // The thread may already be COM-initialised in another mode: that is fine, UIA works in either.
+    let inited = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
+    let started = std::time::Instant::now();
+    let done = (|| {
+        let ui: IUIAutomation = CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok()?;
+        if let Ok(ui6) = ui.cast::<IUIAutomation6>() {
+            let _ = ui6.SetConnectionTimeout(UIA_BUDGET_MS);
+            let _ = ui6.SetTransactionTimeout(UIA_BUDGET_MS);
+        }
+        let cond = ui.CreatePropertyCondition(UIA_ControlTypePropertyId, &VARIANT::from(UIA_TabItemControlTypeId.0)).ok()?;
+        // One round trip: the names come cached with the tabs, not one cross-process call each.
+        let cache = ui.CreateCacheRequest().ok()?;
+        cache.AddProperty(UIA_NamePropertyId).ok()?;
+        let tabs = ui.ElementFromHandle(hwnd).ok()?.FindAllBuildCache(TreeScope_Descendants, &cond, &cache).ok()?;
+        let mut names = Vec::new();
+        for i in 0..tabs.Length().ok()? {
+            // Overall guard: the per-call timeouts add up over many tabs.
+            if started.elapsed() > UIA_TOTAL {
+                return None;
+            }
+            names.push(tabs.GetElement(i).and_then(|e| e.CachedName()).map(|n| n.to_string()).unwrap_or_default());
+        }
+        let tab = tabs.GetElement(pick_tab(&names, hints)? as i32).ok()?;
+        let pattern: IUIAutomationSelectionItemPattern = tab.GetCurrentPatternAs(UIA_SelectionItemPatternId).ok()?;
+        if started.elapsed() > UIA_TOTAL {
+            return None;
+        }
+        pattern.Select().ok()
+    })();
+    if inited {
+        CoUninitialize();
+    }
+    done
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn v(a: &[&str]) -> Vec<String> {
+        a.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn title_beats_folder() {
+        let names = v(&["pwsh", "coucou", "Refatorar painel"]);
+        assert_eq!(pick_tab(&names, &v(&["refatorar", "coucou"])), Some(2));
+        assert_eq!(pick_tab(&names, &v(&["nada", "COUCOU"])), Some(1));
+    }
+
+    #[test]
+    fn no_hints_no_pick() {
+        assert_eq!(pick_tab(&v(&["a"]), &[]), None);
+        assert_eq!(pick_tab(&v(&["a"]), &v(&["", "  "])), None);
+        assert_eq!(pick_tab(&v(&["a"]), &v(&["z"])), None);
+    }
+
+    #[test]
+    fn exact_beats_partial_and_short_hints_only_exact() {
+        let names = v(&["coucou-old", "Coucou"]);
+        assert_eq!(pick_tab(&names, &v(&["coucou"])), Some(1));
+        assert_eq!(pick_tab(&v(&["abc", "a"]), &v(&["a"])), Some(1));
+        assert_eq!(pick_tab(&v(&["abc"]), &v(&["ab"])), None);
+    }
+
+    #[test]
+    fn hints_from_title_and_cwd() {
+        assert_eq!(tab_hints(Some(" T "), Some("C:\\x\\proj\\")), v(&["T", "proj"]));
+        assert_eq!(tab_hints(None, None), Vec::<String>::new());
     }
 }

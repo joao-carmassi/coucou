@@ -5,7 +5,6 @@
 pub mod analyze;
 pub mod loopback;
 pub mod session;
-pub mod volume;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Sender};
@@ -13,7 +12,7 @@ use std::sync::{Arc, Mutex};
 
 use tauri::AppHandle;
 
-use crate::core::host::{blocking, Module, ModuleCtx, Spawner};
+use crate::core::host::{Module, ModuleCtx, Spawner};
 use crate::core::settings::Settings;
 use session::{Action, Msg, Snapshot};
 
@@ -87,26 +86,6 @@ pub fn nowplaying_capture(app: AppHandle, on: bool) {
     set_capture(&app, on);
 }
 
-/// 0..1 volume of the player's audio session (matched by exe name, see volume.rs); None when it has no session.
-#[tauri::command]
-pub async fn nowplaying_volume_get() -> Result<Option<f32>, String> {
-    let id = session::LAST.lock().unwrap().as_ref().map(|s| s.app_id.clone()).unwrap_or_default();
-    if id.is_empty() {
-        return Ok(None);
-    }
-    blocking(move || volume::get(&id)).await?
-}
-
-/// Sets the player's volume (0..1); returns false when no audio session matched.
-#[tauri::command]
-pub async fn nowplaying_volume_set(level: f32) -> Result<bool, String> {
-    let id = session::LAST.lock().unwrap().as_ref().map(|s| s.app_id.clone()).unwrap_or_default();
-    if id.is_empty() {
-        return Ok(false);
-    }
-    Ok(blocking(move || volume::set(&id, level)).await?? > 0)
-}
-
 pub const PREFIXES: &[&str] = &["nowplaying_"];
 
 pub fn modules() -> Vec<Box<dyn Module>> {
@@ -115,6 +94,6 @@ pub fn modules() -> Vec<Box<dyn Module>> {
 
 pub fn handler() -> crate::core::host::Handler {
     crate::core::host::handler(tauri::generate_handler![
-        nowplaying_state, nowplaying_control, nowplaying_capture, nowplaying_volume_get, nowplaying_volume_set,
+        nowplaying_state, nowplaying_control, nowplaying_capture,
     ])
 }

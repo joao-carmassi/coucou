@@ -6,21 +6,21 @@ import { extOf, type DropAction } from "../upload/api";
 export const IMAGE_EXT = ["png", "jpg", "jpeg", "webp", "gif"] as const;
 export const VIDEO_EXT = ["mp4", "mkv", "mov", "webm", "avi"] as const;
 
-export interface ToolSpec { id: string; label: string; op: string; arg?: string; accepts: readonly string[]; order: number; hideFor?: string }
+export interface ToolSpec { id: string; label: string; op: string; arg?: string; accepts: readonly string[]; order: number; hideFor?: string; group?: "convert" }
 
 export const TOOLS: readonly ToolSpec[] = [
-  { id: "to-png", label: "Para PNG", op: "convert", arg: "png", accepts: IMAGE_EXT, order: 10, hideFor: "png" },
-  { id: "to-jpg", label: "Para JPG", op: "convert", arg: "jpg", accepts: IMAGE_EXT, order: 11, hideFor: "jpg" },
-  { id: "to-webp", label: "Para WebP", op: "convert", arg: "webp", accepts: IMAGE_EXT, order: 12, hideFor: "webp" },
-  { id: "resize-50", label: "Reduzir 50%", op: "resize", arg: "50", accepts: IMAGE_EXT, order: 20 },
-  { id: "resize-25", label: "Reduzir 25%", op: "resize", arg: "25", accepts: IMAGE_EXT, order: 21 },
-  { id: "compress", label: "Comprimir", op: "compress", accepts: ["png", "jpg", "jpeg", "webp"], order: 30 },
-  { id: "strip", label: "Sem metadados", op: "strip", accepts: ["png", "jpg", "jpeg", "webp"], order: 31 },
+  { id: "to-png", label: "Para PNG", op: "convert", arg: "png", accepts: IMAGE_EXT, order: 10, hideFor: "png", group: "convert" },
+  { id: "to-jpg", label: "Para JPG", op: "convert", arg: "jpg", accepts: IMAGE_EXT, order: 11, hideFor: "jpg", group: "convert" },
+  { id: "to-webp", label: "Para WebP", op: "convert", arg: "webp", accepts: IMAGE_EXT, order: 12, hideFor: "webp", group: "convert" },
+  { id: "resize-50", label: "Reduzir 50%", op: "resize", arg: "50", accepts: IMAGE_EXT, order: 20, group: "convert" },
+  { id: "resize-25", label: "Reduzir 25%", op: "resize", arg: "25", accepts: IMAGE_EXT, order: 21, group: "convert" },
+  { id: "compress", label: "Comprimir", op: "compress", accepts: ["png", "jpg", "jpeg", "webp"], order: 30, group: "convert" },
+  { id: "strip", label: "Sem metadados", op: "strip", accepts: ["png", "jpg", "jpeg", "webp"], order: 31, group: "convert" },
   { id: "clipboard", label: "Copiar imagem", op: "clipboard", accepts: IMAGE_EXT, order: 40 },
   { id: "ocr", label: "Extrair texto (OCR)", op: "ocr", accepts: IMAGE_EXT, order: 41 },
-  { id: "gif", label: "Criar GIF", op: "gif", accepts: VIDEO_EXT, order: 10 },
-  { id: "vcompress", label: "Comprimir vídeo", op: "vcompress", accepts: VIDEO_EXT, order: 11 },
-  { id: "audio", label: "Extrair áudio", op: "audio", accepts: VIDEO_EXT, order: 12 },
+  { id: "gif", label: "Criar GIF", op: "gif", accepts: VIDEO_EXT, order: 10, group: "convert" },
+  { id: "vcompress", label: "Comprimir vídeo", op: "vcompress", accepts: VIDEO_EXT, order: 11, group: "convert" },
+  { id: "audio", label: "Extrair áudio", op: "audio", accepts: VIDEO_EXT, order: 12, group: "convert" },
   { id: "pdf-info", label: "Info do PDF", op: "info", accepts: ["pdf"], order: 10 },
 ];
 

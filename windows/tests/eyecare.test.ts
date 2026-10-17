@@ -39,3 +39,25 @@ test("exclusion list: lowercase, deduplicated, any separator", () => {
   assert.deepEqual(parseExcluded("Chrome.exe, code.exe;CHROME.EXE\n x.exe"), ["chrome.exe", "code.exe", "x.exe"]);
   assert.deepEqual(parseExcluded("  "), []);
 });
+
+test("break rounds: sums, streak, time since the last one", async () => {
+  const { breaksOf, streak, since, NO_BREAKS } = await import("../src/modules/eyecare/logic.ts");
+  const b = { days: { "2026-03-08": [3, 1], "2026-03-09": [4, 2], "2026-03-10": [2, 0] } as Record<string, [number, number]>, last: 1 };
+  assert.deepEqual(breaksOf(b, ["2026-03-09", "2026-03-10", "2026-03-11"]), [6, 2]);
+  assert.equal(streak(b, new Date(2026, 2, 10, 9)), 2, "today has none yet: counted from yesterday");
+  b.days["2026-03-10"] = [2, 1];
+  assert.equal(streak(b, new Date(2026, 2, 10, 9)), 3);
+  assert.equal(streak(b, new Date(2026, 2, 12, 9)), 0, "a day without breaks ends it");
+  assert.equal(streak(NO_BREAKS, new Date()), 0);
+  const now = 10 * 86_400_000;
+  assert.deepEqual([0, now - 30_000, now - 42 * 60_000, now - 125 * 60_000, now - 86_400_000, now - 3 * 86_400_000].map((t) => since(t, now)),
+    [null, "agora", "há 42 min", "há 2 h 05", "há 1 dia", "há 3 dias"]);
+});
+
+test("view heights: fixed parts add up, the week does not depend on rows", async () => {
+  const { fitHeight } = await import("../src/modules/eyecare/logic.ts");
+  assert.equal(fitHeight("today", 0), 212);
+  assert.equal(fitHeight("today", 5), 292);
+  assert.equal(fitHeight("week", 0), 272);
+  assert.ok(fitHeight("today", 5) <= 320);
+});

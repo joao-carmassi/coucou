@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.12.5
+
+- Claude finished card: the answer sits in an inset panel with its own background (code blocks stand out) and the card grows to fit it (up to the panel limit, then the panel scrolls).
+
+## 0.12.4
+
+- Clima redesigned (Agora / 7 dias tabs; hero, wind/humidity/rain/UV tiles, 12-hour grid, 7-day range bars; forecast now 7 days with wind direction and UV).
+- Inner tabs (Pausas, Estatísticas de IA) fade between panels.
+- Pausas: the reminder tile follows the interval setting right away.
+- Tocando: height fits the content (no dead space under the controls).
+
+## 0.12.3
+
+- Estatísticas de IA and Uso do plano redesigned in the Pausas style (period tabs, tiles, bars, daily chart; plan windows with colour thresholds and reset countdown).
+- Tocando: volume slider removed; a new track shows the compact card (cover, title, artist, time left) and keeps it for the focus time (3.5 s when a line is pinned).
+- Mídia: file conversions grouped in a "Converter" submenu of the right-click menu.
+- Core: notices can carry a card and last up to 10 min; `api.status.anyPinned()`.
+
+## 0.12.2
+
+- Uso do plano: its own tab icon; the view sizes itself to its content (no scroll with two providers, scroll only past the panel limit).
+- Pausas redesigned: Hoje / 7 dias tabs, break counters (taken of due), time since the last break, streak, per-app bars and a 7-day chart. Breaks are now recorded locally (counters only, `eyecare-breaks.json`, cleared by "Apagar dados").
+
+## 0.12.1
+
+- Removed the three buttons on the home card (open, flip, Utilidades) and the Utilidades view; the whole card still opens on click.
+- Ctrl+Alt+K no longer opens a search field: it opens the island on the home, navigable by keyboard (Left/Right or Ctrl+Tab switch tabs, Enter opens the card, Esc folds). The palette was removed.
+- Uso do plano: own tab icon; connection failures say what failed (timeout / no connection / other) and the cause goes to the log.
+
+## 0.12.0
+
+Wave 2: other agents, usage, statistics, richer Claude cards.
+
+- New module **Agentes** (off by default): Codex, Cursor, Gemini CLI, Copilot CLI and OpenCode on the island. Hook installer per agent with backup, diff and an explicit click; removal only touches Coucou's own entries. Approval (allow/deny) only for Codex and Cursor shell, and only with the approve switch on. Cursor asks before every shell command once installed.
+- New module **Uso do plano** (off by default): Codex limits read locally; Claude limits are opt-in (network + the Claude Code token, never refreshed). Pinnable line, notice at 90%.
+- New module **Estatísticas** (off by default): tokens and estimated cost per day/model/project from local logs, counters only, read on demand when the view is open.
+- Claude: finished card shows mode/effort/model chips and the full answer as safe Markdown; board card shows a live diff of the last edit; Windows Terminal tab is selected by UI Automation when possible; Claude Desktop chip.
+- Board: two-face cards, "Utilidades" view with every action, "Último" chip; core gains `actions.all()` / `actions.run()`.
+- Core: `core/cfgfile` (checked config edits) and `relay::ensure_client_exe` shared by modules.
+
 ## 0.11.1
 
 - Pinned/last-opened lines are plain text: no shimmer, no slide-in; width changes in 16 px steps with hysteresis.

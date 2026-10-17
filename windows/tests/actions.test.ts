@@ -1,9 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ActionList, fold } from "../src/core/actions.ts";
+import { ActionList } from "../src/core/actions.ts";
 
 const mk = (id: string, title: string, extra: object = {}) => ({ id, title, run() {}, ...extra });
-const titles = (l: ActionList, q: string) => l.search(q).map((e) => e.title);
 
 test("stamps owner.id and the disposer removes", () => {
   const l = new ActionList();
@@ -25,7 +24,7 @@ test("duplicate key warns and the first keeps it", () => {
   assert.equal(warns.length, 2);
 });
 
-test("when() hides from all, search and byKey", () => {
+test("when() hides from all and byKey", () => {
   const l = new ActionList();
   let on = false;
   l.add("m", mk("a", "Alpha", { key: "a", when: () => on }));
@@ -34,27 +33,6 @@ test("when() hides from all, search and byKey", () => {
   on = true;
   assert.equal(l.byKey("a")?.key, "m.a");
   assert.equal(l.run("m.a", () => {}), true);
-});
-
-test("search: prefix > word start > substring, accents folded", () => {
-  const l = new ActionList();
-  l.add("m", mk("1", "Abrir configuração"));
-  l.add("m", mk("2", "Iniciar foco"));
-  l.add("m", mk("3", "Ir ao foco"));
-  l.add("m", mk("4", "Desfocar"));
-  assert.deepEqual(titles(l, "foc"), ["Iniciar foco", "Ir ao foco", "Desfocar"]);
-  assert.deepEqual(titles(l, "ir"), ["Ir ao foco", "Abrir configuração"]);
-  assert.deepEqual(titles(l, "CONFIGURACAO"), ["Abrir configuração"]);
-  assert.equal(fold("Ção"), "cao");
-  assert.deepEqual(titles(l, "zzz"), []);
-});
-
-test("keywords match after titles; extra entries are searched too", () => {
-  const l = new ActionList();
-  l.add("m", mk("1", "Zeta", { keywords: ["pomodoro"] }));
-  const out = l.search("po", [{ key: "#t", title: "Ir para Portas", run() {} }]);
-  assert.deepEqual(out.map((e) => e.title), ["Ir para Portas", "Zeta"]);
-  assert.equal(l.search("").length, 1);
 });
 
 test("run: a throw or a rejection reaches onError", async () => {

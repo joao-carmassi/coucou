@@ -20,7 +20,7 @@ export interface BoardCard {
   hint?: string;
   /** Pixels the island grows by for this card. */
   room?: number;
-  /** The arrow button on the card works (pillOpen is answered for this pill). */
+  /** A click on the card (with no `open`) calls pillOpen for this pill. */
   target?: boolean;
 }
 /** News a module's pill tells: finished/error cards show it in place of a result. */

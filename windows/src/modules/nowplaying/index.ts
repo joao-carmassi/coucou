@@ -6,7 +6,7 @@ import { svg } from "../../kit/dom";
 import { BAND, type Disposer, type IslandApi, type ModuleDef } from "../../core/moduleApi";
 import { NowPlayingBridge as Bridge } from "./bridge";
 import { ICONS } from "./icons";
-import { compactCard, danceLevel, trackKey, trackLine, wantCapture, wantTick, clampSens, type Cfg, type Track } from "./logic";
+import { compactCard, fitHeight, danceLevel, trackKey, wantCapture, wantTick, clampSens, type Cfg, type Track } from "./logic";
 import { NP } from "./store";
 import { buildView } from "./view";
 
@@ -60,7 +60,9 @@ function start(api: IslandApi): Disposer {
     // A new track peeks at the island (not when it is already open on the player, nor on the first read).
     const key = trackKey(t);
     if (!initial && t?.playing && key !== announced && key !== trackKey(was) && api.island.mode() !== "expanded") {
-      api.island.notice({ text: trackLine(t), priority: BAND.ACTIVE + 10, ms: 3500, key: "track", view: "nowplaying", peek: true });
+      // The same card as the source; the focus time (until the island hides) unless a line is pinned, then it is brief.
+      const pinned = api.status.anyPinned();
+      api.island.notice({ ...compactCard(t, Date.now()), priority: BAND.ACTIVE + 10, ms: pinned ? 3500 : api.island.focusMs(), key: "track", view: "nowplaying", peek: true });
     }
     if (t?.playing) announced = key;
     reconcile();
@@ -111,7 +113,7 @@ export const nowplayingModule: ModuleDef = {
   id: "nowplaying",
   views: [{
     name: "nowplaying",
-    layout: { height: 200, botX: 54, botY: null, botDiameter: 46, botCenter: { top: 42, h: 158 } },
+    layout: { height: fitHeight(true), botX: 54, botY: null, botDiameter: 46 }, // the view reports the real height
     build: (ctx) => buildView(ctx),
   }],
   tabs: [{ view: "nowplaying", title: "Tocando", icon: () => svg(ICONS.note, 13), order: 35 }],

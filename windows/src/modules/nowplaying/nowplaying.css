@@ -17,12 +17,10 @@
 .np-progress[hidden], .np-empty[hidden], .np-player[hidden] { display: none; }
 .np-bar { height: 4px; border-radius: 999px; background: var(--surface-track); overflow: hidden; }
 .np-bar > i { display: block; height: 100%; border-radius: inherit; background: var(--amber); transition: width 1s linear; }
-.np-times { display: flex; justify-content: space-between; font: 400 10.5px var(--font); font-variant-numeric: tabular-nums; color: var(--dim); margin-top: 2px; }
+.np-times { display: flex; justify-content: space-between; font: 400 10.5px var(--font); font-variant-numeric: tabular-nums; color: var(--dim); margin-top: 2px; line-height: 13px; }
 .np-ctl { display: flex; align-items: center; gap: 6px; }
 .np-btn { all: unset; cursor: pointer; display: grid; place-items: center; width: 30px; height: 28px; border-radius: 8px; color: var(--ink); }
 .np-btn:hover:not(:disabled) { background: var(--surface-track); }
 .np-btn:disabled { opacity: 0.35; cursor: default; }
-.np-vol { width: 90px; accent-color: var(--amber); }
-.np-hint { font: 400 10.5px var(--font); color: var(--dim); }
 @media (prefers-reduced-motion: reduce) { .np-eq > i, .np-bar > i { transition: none; } }
 .np-body { position: relative; }

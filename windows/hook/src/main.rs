@@ -67,15 +67,32 @@ const MAX_LAST_MESSAGE: usize = 6_000;
 /// less than this anyway.
 const MAX_FIELD_LEN: usize = 2_000;
 
+mod formats;
 mod win;
+use formats::Format;
 use win::connect;
 
+/// Prints a line of stdout, if there is one.
+fn print_line(line: Option<String>) {
+    if let Some(json) = line {
+        let mut out = std::io::stdout();
+        let _ = writeln!(out, "{json}");
+        let _ = out.flush();
+    }
+}
+
 fn main() {
+    let args = parse_args(std::env::args().skip(1));
+    let format = Format::parse(&args.format);
     // Coucou's own Claude Code runs (Mochi's chat) must never reach the island.
     if std::env::var_os("COUCOU_INTERNAL").is_some_and(|v| !v.is_empty()) {
+        print_line(formats::fallback(format, ""));
         std::process::exit(0);
     }
-    let Some(Event { line: payload, waits: waits_for_answer, tool_input }) = read_event() else { std::process::exit(0) };
+    let Some(Event { line: payload, waits: waits_for_answer, event, tool_input }) = read_event(&args, format) else {
+        print_line(formats::fallback(format, ""));
+        std::process::exit(0)
+    };
 
     // Only a permission request waits for a human, so only it gets the long budget.
     let budget = if waits_for_answer { DECISION_BUDGET } else { FIRE_AND_FORGET_BUDGET };
@@ -89,14 +106,14 @@ fn main() {
         let _ = tx.send(talk(&payload, waits_for_answer));
     });
 
-    if let Ok(Some(answer)) = rx.recv_timeout(budget) {
-        if let Some(json) = reply_json(&answer, tool_input.as_ref()) {
-            let mut out = std::io::stdout();
-            let _ = writeln!(out, "{json}");
-            let _ = out.flush();
-        }
-    }
-    // Nothing printed: Claude Code asks in the terminal, as if we were not here.
+    let answered = match rx.recv_timeout(budget) {
+        Ok(Some(answer)) if format == Format::Claude => reply_json(&answer, tool_input.as_ref()),
+        Ok(Some(answer)) => formats::reply(format, &answer),
+        _ => None,
+    };
+    // No word: the agent asks in its own window, as if we were not here (Cursor
+    // is told so in as many words, because it blocks on empty output).
+    print_line(answered.or_else(|| formats::fallback(format, &event)));
     std::process::exit(0);
 }
 
@@ -444,76 +461,80 @@ fn title_in(line: &str) -> Option<String> {
 struct Event {
     line: String,
     waits: bool,
+    /// Claude-like name, after `formats::normalise`.
+    event: String,
     tool_input: Option<serde_json::Value>,
 }
 
 /// Reads stdin and returns the payload to forward plus the event name.
-fn read_event() -> Option<Event> {
+fn read_event(args: &Args, format: Format) -> Option<Event> {
     let mut raw = Vec::new();
-    if std::io::stdin().read_to_end(&mut raw).is_err() || raw.is_empty() {
+    if std::io::stdin().read_to_end(&mut raw).is_err() {
         return None;
     }
-    // Some shells hand us a UTF-8 BOM; serde_json would choke on it.
-    if raw.starts_with(&[0xEF, 0xBB, 0xBF]) {
-        raw.drain(..3);
-    }
+    build(&raw, args, format)
+}
 
-    let mut payload = serde_json::from_slice::<serde_json::Value>(&raw).ok()?;
+/// The stdin bytes of one hook call as the event to forward. None: nothing usable.
+fn build(raw: &[u8], args: &Args, format: Format) -> Option<Event> {
+    // Some shells hand us a UTF-8 BOM; serde_json would choke on it.
+    let raw = raw.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(raw);
+    if raw.is_empty() {
+        return None;
+    }
+    let mut payload = serde_json::from_slice::<serde_json::Value>(raw).ok()?;
     let map = payload.as_object_mut()?;
 
     // argv: "coucou-hook.exe [--channel <c>] [--agent <n>] [--format <f>] [--entry <e>] [<EventName>]"
     // --agent tags the payload with coucou_agent so the app routes to the right pill;
-    // --channel picks the app-side subscriber (absent = the legacy one).
-    let args = parse_args(std::env::args().skip(1));
+    // --channel picks the app-side subscriber (absent = the legacy one);
+    // --format picks the agent's dialect (absent = claude).
+    let claude = format == Format::Claude;
     if !args.agent.is_empty() {
-        map.insert("coucou_agent".into(), serde_json::Value::String(args.agent));
+        map.insert("coucou_agent".into(), serde_json::Value::String(args.agent.clone()));
     }
     if !args.channel.is_empty() {
-        map.insert("coucou_channel".into(), serde_json::Value::String(args.channel));
+        map.insert("coucou_channel".into(), serde_json::Value::String(args.channel.clone()));
     }
-    let arg_event = args.event;
-    let event = map
+    let raw_event = map
         .get("hook_event_name")
         .and_then(|v| v.as_str())
         .map(str::to_string)
         .filter(|s| !s.is_empty())
-        .unwrap_or(arg_event);
-    map.insert("hook_event_name".into(), serde_json::Value::String(event.clone()));
-    // Only a permission request waits for a human; tell the app so it keeps the connection.
-    let waits = waits_for_reply(&event);
-    if waits {
-        map.insert("coucou_wait".into(), serde_json::Value::Bool(true));
-    }
+        .unwrap_or_else(|| args.event.clone());
+    // Claude's names from here on. Only a permission request waits for a human;
+    // normalise tells the app so it keeps the connection.
+    let event = formats::normalise(format, map, &raw_event);
+    let waits = formats::waits(format, &event);
 
     let tool = map.get("tool_name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
     // Before anything is cut or dropped: what an edit did, and a question whole.
-    let change = (event == "PostToolUse" && EDIT_TOOLS.contains(&tool.as_str()))
+    let change = (claude && event == "PostToolUse" && EDIT_TOOLS.contains(&tool.as_str()))
         .then(|| map.get("tool_response").and_then(change_of))
         .flatten();
     // A few lines of what the tool gave back, to show under its step.
-    let result = (event == "PostToolUse")
+    let result = (claude && event == "PostToolUse")
         .then(|| map.get("tool_response").and_then(|response| result_of(&tool, response)))
         .flatten();
-    let tool_input = (tool == QUESTION_TOOL || tool == PLAN_TOOL).then(|| map.get("tool_input").cloned()).flatten();
+    let tool_input = (claude && (tool == QUESTION_TOOL || tool == PLAN_TOOL)).then(|| map.get("tool_input").cloned()).flatten();
     // A plan waiting for approval: shown whole on the island, not cut like a field.
-    let plan = (event == "PermissionRequest" && tool == PLAN_TOOL)
+    let plan = (claude && event == "PermissionRequest" && tool == PLAN_TOOL)
         .then(|| map.get("tool_input").and_then(|input| input.get("plan")).and_then(|v| v.as_str()).map(|text| clip(text, MAX_PLAN)))
         .flatten();
     // A question that got its answers, wherever they were picked: the island's
     // journal shows them under the question.
-    let answers = (event == "PostToolUse" && tool == QUESTION_TOOL)
+    let answers = (claude && event == "PostToolUse" && tool == QUESTION_TOOL)
         .then(|| map.get("tool_response").and_then(|response| response.get("answers")).filter(|v| v.is_object()).cloned())
         .flatten();
     if let Some(answers) = answers {
         map.insert("answers".into(), answers);
     }
     // An edit asking for permission: what it would do, to look at before allowing.
-    let proposal = (event == "PermissionRequest" && EDIT_TOOLS.contains(&tool.as_str()))
+    let proposal = (claude && event == "PermissionRequest" && EDIT_TOOLS.contains(&tool.as_str()))
         .then(|| map.get("tool_input").and_then(|input| proposal_of(&tool, input)))
         .flatten();
 
-    let tail = TRANSCRIPT_EVENTS
-        .contains(&event.as_str())
+    let tail = (claude && TRANSCRIPT_EVENTS.contains(&event.as_str()))
         .then(|| map.get("transcript_path").and_then(|v| v.as_str()).and_then(tail_of))
         .flatten();
     let title = tail.as_deref().and_then(title_of);
@@ -564,7 +585,9 @@ fn read_event() -> Option<Event> {
         // Which Claude account (profile) this session belongs to.
         ("config_dir", "CLAUDE_CONFIG_DIR"),
     ] {
-        if !map.contains_key(key) {
+        // Claude Code's own variables mean nothing to another agent.
+        let claude_only = matches!(key, "session_pid" | "entrypoint" | "config_dir");
+        if !map.contains_key(key) && (claude || !claude_only) {
             let value = std::env::var(var).unwrap_or_default();
             map.insert(key.into(), serde_json::Value::String(value));
         }
@@ -598,7 +621,7 @@ fn read_event() -> Option<Event> {
 
     let mut line = payload.to_string();
     line.push('\n');
-    Some(Event { line, waits, tool_input })
+    Some(Event { line, waits, event, tool_input })
 }
 
 /// Caps every string in the payload. A single Write can carry a whole file.
@@ -621,8 +644,7 @@ fn truncate_strings(value: &mut serde_json::Value) {
     }
 }
 
-/// What argv said. `format` and `entry` are parsed but intentionally not forwarded yet
-/// (deferred per spec); every format normalises as claude.
+/// What argv said. `entry` is parsed but intentionally not forwarded yet (deferred per spec).
 #[derive(Debug, Default, PartialEq)]
 struct Args {
     event: String,
@@ -655,11 +677,6 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Args {
         *slot = it.next().unwrap_or_default();
     }
     a
-}
-
-/// Does this event block on the island's answer?
-fn waits_for_reply(event: &str) -> bool {
-    event == "PermissionRequest"
 }
 
 /// Connect, send, and — for a permission request — wait for the island's word.
@@ -719,11 +736,60 @@ mod tests {
         assert_eq!(args(&[]), Args::default());
     }
 
+    /// The line without what depends on the machine running the test.
+    fn stable(line: &str) -> serde_json::Value {
+        let mut v: serde_json::Value = serde_json::from_str(line).unwrap();
+        for k in ["terminal_pids", "term_program", "wt_session", "term_session_id", "vscode_pid", "session_pid", "entrypoint", "wsl_distro", "config_dir"] {
+            v.as_object_mut().unwrap().remove(k);
+        }
+        v
+    }
+
+    #[test]
+    fn claude_line_is_what_it_always_was() {
+        let raw = br#"{"hook_event_name":"PermissionRequest","session_id":"s1","cwd":"C:/p","tool_name":"Bash","tool_input":{"command":"ls"},"tool_response":"x","transcript_path":"t"}"#;
+        let a = args(&["--channel", "agents", "--agent", "x"]);
+        let e = build(raw, &a, Format::Claude).unwrap();
+        assert!(e.waits && e.event == "PermissionRequest" && e.line.ends_with('\n'));
+        assert_eq!(
+            stable(&e.line),
+            serde_json::json!({
+                "hook_event_name": "PermissionRequest", "session_id": "s1", "cwd": "C:/p", "tool_name": "Bash",
+                "tool_input": { "command": "ls" }, "coucou_agent": "x", "coucou_channel": "agents", "coucou_wait": true
+            })
+        );
+        // The event name may come from argv, a BOM is skipped, and a fire-and-forget event does not wait.
+        let e = build(b"\xEF\xBB\xBF{\"session_id\":\"s\",\"cwd\":\"C:/p\"}", &args(&["Stop"]), Format::Claude).unwrap();
+        assert!(!e.waits);
+        assert_eq!(stable(&e.line), serde_json::json!({ "session_id": "s", "cwd": "C:/p", "hook_event_name": "Stop" }));
+        for bad in [&b""[..], b"\xEF\xBB\xBF", b"nope", b"[1]"] {
+            assert!(build(bad, &a, Format::Claude).is_none());
+        }
+    }
+
+    #[test]
+    fn cursor_shell_line_waits_and_without_a_pipe_still_answers_ask() {
+        let raw = br#"{"hook_event_name":"beforeShellExecution","conversation_id":"c","workspace_roots":["C:/w"],"command":"ls","user_email":"a@b.c"}"#;
+        let e = build(raw, &args(&["--channel", "agents", "--agent", "cursor", "--format", "cursor"]), Format::Cursor).unwrap();
+        assert!(e.waits);
+        assert_eq!(
+            stable(&e.line),
+            serde_json::json!({
+                "hook_event_name": "PermissionRequest", "session_id": "c", "cwd": "C:/w", "workspace_roots": ["C:/w"],
+                "tool_name": "Shell", "tool_input": { "command": "ls" },
+                "coucou_agent": "cursor", "coucou_channel": "agents", "coucou_wait": true
+            })
+        );
+        // No usable stdin: no event, and main prints the ask reply so Cursor never blocks.
+        assert!(build(b"", &args(&[]), Format::Cursor).is_none());
+        assert_eq!(formats::fallback(Format::Cursor, "").as_deref(), Some(r#"{"continue":true,"permission":"ask"}"#));
+    }
+
     #[test]
     fn only_permission_request_waits() {
-        assert!(waits_for_reply("PermissionRequest"));
+        assert!(formats::waits(Format::Claude, "PermissionRequest"));
         for e in ["Stop", "PreToolUse", "PostToolUse", "SessionStart", ""] {
-            assert!(!waits_for_reply(e));
+            assert!(!formats::waits(Format::Claude, e));
         }
     }
 

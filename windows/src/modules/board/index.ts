@@ -12,10 +12,15 @@ const HOUSE = "M12 3.2 2.8 10.6V21h6.6v-5.4h5.2V21h6.6V10.6L12 3.2z";
 
 export const board: ModuleDef = {
   id: "board",
-  views: [{ name: "overview", layout: { height: BOARD_H, botX: 68, botY: null, botDiameter: 58 }, build: buildBoard }],
+  views: [
+    { name: "overview", layout: { height: BOARD_H, botX: 68, botY: null, botDiameter: 58 }, build: buildBoard },
+  ],
   tabs: [{ view: "overview", title: "Início", icon: () => svg(HOUSE, 13), order: 0, home: true }],
   start: (api) => {
-    const offs = [api.provide("board.host", true), startPrimary(api)];
+    const offs = [
+      api.provide("board.host", true),
+      startPrimary(api),
+    ];
     return () => offs.reverse().forEach((o) => o());
   },
 };

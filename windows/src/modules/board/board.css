@@ -76,3 +76,12 @@
 .card.opens:hover {
   background: color-mix(in srgb, var(--card), #fff 2.5%);
 }
+
+/* The "Último" chip (home) */
+.board-last {
+  position: absolute; top: 4px; left: 8px; right: 8px; z-index: 2;
+  font: 600 9px var(--font); color: var(--dim-3); text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;
+}
+
+.left .board-last { text-align: left; }

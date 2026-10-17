@@ -54,6 +54,7 @@ describe("eyecare module", () => {
     await tick(61_000);
     expect(calls.invoke.filter((c) => c.cmd === "eyecare_checkpoint")).toHaveLength(1);
     expect(notice()).toContain("Descanse os olhos");
+    expect(calls.invoke.filter((c) => c.cmd === "eyecare_break")).toEqual([{ cmd: "eyecare_break", args: { taken: false } }]);
     expect(vi.getTimerCount()).toBeGreaterThanOrEqual(1);
   });
 
@@ -64,6 +65,7 @@ describe("eyecare module", () => {
     await tick(20 * 60_000 + 100);
     expect(calls.invoke.slice(n).filter((c) => c.cmd === "eyecare_checkpoint")).toHaveLength(1);
     expect(notice()).not.toContain("Beba");
+    expect(calls.invoke.slice(n).filter((c) => c.cmd === "eyecare_break")).toEqual([{ cmd: "eyecare_break", args: { taken: true } }]);
     Registry.apply({ eyecare: false });
     const after = eye();
     await tick(3 * 3600_000);
@@ -98,6 +100,23 @@ describe("eyecare module", () => {
     await tick(3 * 3600_000);
     expect(calls.invoke.filter((c) => c.cmd === "eyecare_checkpoint").length).toBe(n + 1);
     expect(vi.getTimerCount()).toBe(0);
+    Registry.apply({ eyecare: false });
+  });
+
+  it("20 -> 30 updates the tile text and rearms with 30 min", async () => {
+    State.settings.eyecareInterval = 20;
+    os.idle = 1000;
+    Registry.apply({ eyecare: true });
+    await tick(5);
+    expect(document.body.textContent).toContain("lembrete a cada 20 min");
+    State.settings.eyecareInterval = 30;
+    await changed();
+    expect(document.body.textContent).toContain("lembrete a cada 30 min");
+    const n = calls.invoke.filter((c) => c.cmd === "eyecare_checkpoint").length;
+    await tick(25 * 60_000);
+    expect(calls.invoke.filter((c) => c.cmd === "eyecare_checkpoint").length).toBe(n);
+    await tick(5 * 60_000 + 100);
+    expect(calls.invoke.filter((c) => c.cmd === "eyecare_checkpoint").length).toBe(n + 1);
     Registry.apply({ eyecare: false });
   });
 });

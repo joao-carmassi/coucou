@@ -105,7 +105,7 @@ export function buildSessionsView(c: Claude, ctx: ViewContext): ViewHost {
     const act = running
       ? h("button", { class: "btn secondary sess-act", text: "Focar", onclick: () => void run(async () => {
           // The bridge reports failure as a falsy result, never by throwing.
-          if (!(await ClaudeBridge.openTerminal(s.cwd, hook?.wslDistro ?? null, [l?.pid ?? s.pid, ...(hook?.terminalPids ?? [])].filter((p): p is number => !!p))))
+          if (!(await ClaudeBridge.openTerminal(s.cwd, hook?.wslDistro ?? null, [l?.pid ?? s.pid, ...(hook?.terminalPids ?? [])].filter((p): p is number => !!p), s.title, s.cwd)))
             throw new Error("Não foi possível abrir o terminal.");
         }) })
       : h("button", { class: "btn secondary sess-act", text: "Retomar", onclick: () => void run(() => ClaudeBridge.sessionLaunch({ profile: s.profile, cwd: s.cwd, resume: s.id, attach: null })) });

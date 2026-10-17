@@ -91,7 +91,6 @@ export const VIEW_LAYOUTS: Record<string, ViewLayout> = {
   confused: { height: 160, botX: 76, botY: null, botDiameter: 66 },
   note: { height: 160, botX: 60, botY: null, botDiameter: 50 },
   settings: { height: 160, botX: 54, botY: null, botDiameter: 46 },
-  palette: { height: 250, botX: 54, botY: null, botDiameter: 46 },
   greeting: { height: 150, botX: 320, botY: 90, botDiameter: 0 },
 };
 

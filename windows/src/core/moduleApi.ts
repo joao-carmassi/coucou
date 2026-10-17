@@ -93,7 +93,7 @@ export interface Notice {
   text: string;
   /** BAND scale; >= BAND.URGENT ignores presence quiet. Default BAND.NOTICE. */
   priority?: number;
-  /** On-screen time once shown; default 4000, clamped to 1500..15000. */
+  /** On-screen time once shown; default 4000, clamped to 1500..600000 (api.island.focusMs() for "until the island hides"). */
   ms?: number;
   /** The same owner + key replaces in place (the on-screen time restarts). */
   key?: string;
@@ -101,8 +101,10 @@ export interface Notice {
   view?: string;
   /** May reveal a hidden island to compact (never while presence is quiet, unless urgent). */
   peek?: boolean;
+  /** Shown as the richer compact card (cover, second line, trailing text) instead of the plain `text`. */
+  card?: StatusCard;
 }
-/** A command for the palette (api.actions.add) and, with `key`, for Alt+<key>. */
+/** A command (api.actions.add); with `key`, run by Alt+<key>. */
 export interface ActionDef {
   /** Local id; the core stamps "<moduleId>.<id>". */
   id: string;
@@ -110,11 +112,13 @@ export interface ActionDef {
   keywords?: readonly string[];
   /** One [a-z0-9]: Alt+<key> while the island has the keyboard. The first to claim it keeps it; duplicates warn. */
   key?: string;
-  /** Not offered (palette, shortcut) while this says false. */
+  /** Not offered (shortcut) while this says false. */
   when?(): boolean;
   /** A throw or rejection goes to api.island.error. */
   run(): void | Promise<void>;
 }
+/** A read-only view of a registered action: no `run` closure leaves its module. */
+export interface ActionInfo { key: string; title: string; owner: string; keyHint?: string }
 /** Where home is (hover / click on the compact island); to hold the island open on a card use api.island.request. */
 export interface HomeRequest { view: string; priority: number }
 export interface IslandHooks {
@@ -188,6 +192,8 @@ export interface IslandApi {
     source(key: string, def: SourceDef): StatusSource;
     /** True while the user pinned this module's source `key`. */
     pinned(key: string): boolean;
+    /** True while the user pinned any source line (of any module). */
+    anyPinned(): boolean;
     /** Pins (on) or releases (off) this module's source `key`; pinning replaces any other pinned line. */
     pin(key: string, on: boolean): void;
   };
@@ -280,8 +286,10 @@ export interface IslandApi {
     redraw(): void;
   };
   actions: {
-    /** Adds a command to the palette (and Alt+<key>); removed by the disposer or when this module stops. */
+    /** Adds a command (Alt+<key> when it has a `key`); removed by the disposer or when this module stops. */
     add(def: ActionDef): Disposer;
+    /** Every action allowed now, any owner. */
+    all(): readonly ActionInfo[];
   };
   provide<K extends keyof IslandHooks>(hook: K, fn: IslandHooks[K]): Disposer;
   /** Offers a service under a namespaced key ("<module>.<name>"; the types live in that module's api.ts). Removed when this module stops. */

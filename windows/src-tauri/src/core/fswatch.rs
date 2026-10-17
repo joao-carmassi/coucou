@@ -1,4 +1,3 @@
-#![allow(dead_code)] // no consumer until the module waves land
 // Debounced directory watcher on ReadDirectoryChangesW. One blocking thread (via the caller's
 // Spawner) per watch, parked on kernel events: zero cost while nothing changes, no polling.
 

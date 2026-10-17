@@ -110,7 +110,34 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
   const el = panel({ cls: "media-view", side: { title: "Mídia", sub: "capturas e arquivos" }, main });
 
   menu.style.display = "none";
-  const closeMenu = () => (menu.style.display = "none");
+  const subMenu = h("div", { class: "media-menu media-submenu" });
+  subMenu.style.display = "none";
+  const closeSub = () => (subMenu.style.display = "none");
+  const closeMenu = () => {
+    menu.style.display = "none";
+    closeSub();
+    document.removeEventListener("keydown", menuKeys, true);
+  };
+  /** Keyboard for the open menu: arrows move, Right/Enter open "Converter", Left/Esc go back one level. */
+  function menuKeys(e: KeyboardEvent) {
+    const subOpen = subMenu.style.display !== "none";
+    const scope = subOpen && subMenu.contains(document.activeElement) ? subMenu : menu;
+    const rows = [...scope.querySelectorAll<HTMLElement>(".media-menu-row")];
+    const at = rows.indexOf(document.activeElement as HTMLElement);
+    const parent = menu.querySelector<HTMLElement>(".media-menu-sub");
+    const stop = () => { e.preventDefault(); e.stopPropagation(); };
+    if (e.key === "Escape" || e.key === "ArrowLeft") {
+      // Esc with no submenu falls through to the global handler, which closes the menu.
+      if (!subOpen) return;
+      stop(); closeSub(); parent?.focus();
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      stop();
+      const d = e.key === "ArrowDown" ? 1 : -1;
+      rows[at < 0 ? (d > 0 ? 0 : rows.length - 1) : (at + d + rows.length) % rows.length]?.focus();
+    } else if ((e.key === "ArrowRight" || e.key === "Enter") && document.activeElement === parent) {
+      stop(); openSub(true);
+    }
+  }
   grid.addEventListener("scroll", closeMenu, { passive: true });
 
   /** The opt-in ffmpeg download: shows size and source first; nothing starts until the click. */
@@ -178,12 +205,22 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
       Promise.resolve(fn()).catch(fail);
     };
     clear(menu);
-    const entry = (label: string, fn: () => Promise<void> | void) =>
-      menu.append(h("button", { class: "media-menu-row", text: label, onclick: run(fn) }));
+    clear(subMenu);
+    closeSub();
+    const entry = (label: string, fn: () => Promise<void> | void, into: HTMLElement = menu) =>
+      into.append(h("button", { class: "media-menu-row", text: label, onclick: run(fn) }));
     // Only with the Claude module on (it provides this hook).
     const launch = api.use<LaunchFile>(CLAUDE_SERVICE.launchFile);
     if (launch) entry("Abrir no Claude", async () => void (await launch(item.path, true)));
-    for (const t of toolsFor(item.path)) entry(t.label, () => ctl.tools.run(t, item.path));
+    const tools = toolsFor(item.path);
+    for (const t of tools) if (t.group !== "convert") entry(t.label, () => ctl.tools.run(t, item.path));
+    for (const t of tools) if (t.group === "convert") entry(t.label, () => ctl.tools.run(t, item.path), subMenu);
+    if (subMenu.childElementCount) {
+      const row = h("button", { class: "media-menu-row media-menu-sub", text: "Converter ▸", onclick: () => openSub(true) });
+      row.setAttribute("aria-haspopup", "menu");
+      row.addEventListener("mouseenter", () => openSub(false));
+      menu.append(row);
+    }
     entry("Abrir", () => MediaBridge.open(item.path));
     entry("Abrir com…", () => MediaBridge.openWith(item.path));
     entry("Mostrar na pasta", () => MediaBridge.reveal(item.path));
@@ -192,13 +229,36 @@ export function buildMediaView(ctl: MediaCtl, ctx: ViewContext): ViewHost {
       items = items.filter((i) => i.path !== item.path);
       draw();
     });
+    // Hovering any other top row closes the submenu.
+    for (const r of menu.querySelectorAll<HTMLElement>(".media-menu-row:not(.media-menu-sub)")) r.addEventListener("mouseenter", closeSub);
+    if (!subMenu.parentElement) main.append(subMenu);
     const box = main.getBoundingClientRect();
+    menu.style.maxHeight = `${Math.max(120, box.height - 8)}px`; // scrolls only if the panel is truly too short
     menu.style.display = "";
     // Pinned inside the panel when there is no room.
     const top = Math.max(2, Math.min(y - box.top, box.height - menu.offsetHeight - 4));
     const left = Math.max(2, Math.min(x - box.left, box.width - menu.offsetWidth - 4));
     menu.style.top = `${top}px`;
     menu.style.left = `${left}px`;
+    document.removeEventListener("keydown", menuKeys, true);
+    document.addEventListener("keydown", menuKeys, true);
+  }
+
+  /** Beside the "Converter" row; flips left near the right edge, shifts up near the bottom. */
+  function openSub(focus: boolean) {
+    const row = menu.querySelector<HTMLElement>(".media-menu-sub");
+    if (!row) return;
+    const box = main.getBoundingClientRect();
+    subMenu.style.maxHeight = `${Math.max(120, box.height - 8)}px`;
+    subMenu.style.display = "";
+    const ml = parseFloat(menu.style.left) || 0;
+    const mt = parseFloat(menu.style.top) || 0;
+    const right = ml + menu.offsetWidth - 2;
+    const left = right + subMenu.offsetWidth <= box.width - 2 ? right : Math.max(2, ml - subMenu.offsetWidth + 2);
+    const top = Math.max(2, Math.min(mt + row.offsetTop - menu.scrollTop, box.height - subMenu.offsetHeight - 4));
+    subMenu.style.left = `${left}px`;
+    subMenu.style.top = `${top}px`;
+    if (focus) subMenu.querySelector<HTMLElement>(".media-menu-row")?.focus();
   }
 
   // At most THUMB_JOBS requests in flight; one retry, then a neutral placeholder.

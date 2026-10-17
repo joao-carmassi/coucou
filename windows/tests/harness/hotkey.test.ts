@@ -1,4 +1,4 @@
-// The palette and the central key handler, driven through the real island.
+// The global hotkey opens the island on the home view; keyboard navigation and Alt+<key>, through the real island.
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { calls } from "./setup";
 import { dummyProbe } from "./dummyModule";
@@ -21,9 +21,6 @@ const key = (k: string, init: KeyboardEventInit = {}) => {
   window.dispatchEvent(e);
   return e;
 };
-const input = () => document.querySelector<HTMLInputElement>("[data-palette]")!;
-const type = (v: string) => { input().value = v; input().dispatchEvent(new Event("input")); };
-const rows = () => [...document.querySelectorAll("#views .view.on .settings-rows > button")].map((b) => b.textContent);
 const focusCalls = () => calls.invoke.filter((c) => c.cmd === "focus_window").map((c) => (c.args as { focused: boolean }).focused);
 
 beforeAll(async () => {
@@ -37,71 +34,63 @@ beforeAll(async () => {
 });
 afterAll(() => vi.useRealTimers());
 beforeEach(async () => {
-  island.open("dummy-a");
+  island.open("dummy-b");
   await tick(100);
   island.collapse();
   await tick(600);
   calls.invoke.length = 0;
 });
 
-describe("palette", () => {
-  it("opens from compact, takes the keyboard, filters, Enter runs and collapses back", async () => {
-    const run = vi.fn();
-    const off = a().actions.add({ id: "go", title: "Fazer coisa", run });
-    island.openPalette();
+describe("hotkey", () => {
+  it("opens the home view expanded and takes the keyboard; Esc folds", async () => {
+    island.openFromHotkey();
     await tick(100);
-    expect(State.view).toBe("palette");
-    expect(focusCalls()).toContain(true);
-    type("coisa");
-    expect(rows()).toEqual(["Fazer coisa"]);
-    key("Enter");
-    expect(run).toHaveBeenCalledOnce();
-    await tick(600);
-    expect(State.mode).toBe("compact");
-    off();
-  });
-
-  it("lists a go-to entry per tab; Enter goes there", async () => {
-    island.openPalette();
-    await tick(100);
-    type("dummy-b");
-    expect(rows()).toEqual(["Ir para dummy-b"]);
-    key("Enter");
-    await tick(100);
-    expect(State.view).toBe("dummy-b");
-  });
-
-  it("Esc from an expanded view returns to it; from compact collapses", async () => {
-    island.open("dummy-a");
-    await tick(100);
-    island.openPalette();
-    await tick(100);
-    const e = key("Escape");
-    expect(e.defaultPrevented).toBe(true);
-    await tick(100);
-    expect(State.view).toBe("dummy-a");
     expect(State.mode).toBe("expanded");
-    island.collapse();
-    await tick(600);
-    island.openPalette();
-    await tick(100);
+    expect(State.view).toBe(State.defaultView());
+    expect(focusCalls()).toContain(true);
     key("Escape");
     await tick(600);
     expect(State.mode).toBe("compact");
   });
 
+  it("Left/Right move between tabs, Enter clicks the card that opens", async () => {
+    island.openFromHotkey();
+    await tick(100);
+    key("ArrowRight");
+    await tick(100);
+    expect(State.view).toBe("dummy-b");
+    key("ArrowLeft");
+    await tick(100);
+    expect(State.view).toBe("dummy-a");
+    const open = vi.fn();
+    const card = document.querySelector("#views .view.on")!.appendChild(document.createElement("div"));
+    card.className = "opens";
+    card.addEventListener("click", open);
+    key("Enter");
+    expect(open).toHaveBeenCalledOnce();
+    card.remove();
+  });
+
+  it("arrows do nothing when the island was not opened by the hotkey", async () => {
+    island.open("dummy-a");
+    await tick(100);
+    key("ArrowRight");
+    await tick(100);
+    expect(State.view).toBe("dummy-a");
+  });
+
   it("a pinned request blocks it", async () => {
     const off = a().island.request({ view: "dummy-b", priority: 50, pin: true });
     await tick(100);
-    island.openPalette();
+    island.openFromHotkey();
     await tick(100);
-    expect(State.view).toBe("dummy-b");
-    key("k", { ctrlKey: true });
     expect(State.view).toBe("dummy-b");
     off();
     await tick(100);
   });
+});
 
+describe("keys", () => {
   it("Alt+key runs the action; Ctrl+Alt+key (AltGr) does nothing; repeat ignored", async () => {
     const run = vi.fn();
     const off = a().actions.add({ id: "k", title: "K", key: "k", run });
@@ -133,16 +122,5 @@ describe("palette", () => {
     key("Tab", { ctrlKey: true, shiftKey: true });
     await tick(100);
     expect(State.view).toBe("dummy-a");
-  });
-
-  it("a module's own y handler does not fire from the palette", async () => {
-    const fired = vi.fn();
-    const handler = (e: KeyboardEvent) => { if (e.key === "y" && a().island.view() === "dummy-a") fired(); };
-    window.addEventListener("keydown", handler);
-    island.openPalette();
-    await tick(100);
-    key("y");
-    expect(fired).not.toHaveBeenCalled();
-    window.removeEventListener("keydown", handler);
   });
 });

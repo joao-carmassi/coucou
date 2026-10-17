@@ -16,7 +16,9 @@ pub const PREFIXES: &[&str] = &["weather_"];
 const FORECAST_URL: &str = "https://api.open-meteo.com/v1/forecast";
 const GEOCODE_URL: &str = "https://geocoding-api.open-meteo.com/v1/search";
 const HOURS: usize = 12;
-const CURRENT: &str = "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m";
+const CURRENT: &str =
+    "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_direction_10m,uv_index";
+const DAYS: &str = "7";
 const HOURLY: &str = "temperature_2m,weather_code,precipitation_probability";
 const DAILY: &str = "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max";
 
@@ -30,6 +32,10 @@ pub struct Current {
     pub wind: f64,
     pub code: u32,
     pub is_day: bool,
+    /// Degrees the wind blows from; null when the service left it out.
+    pub wind_dir: Option<f64>,
+    /// UV index; null when the service left it out (the view shows "–").
+    pub uv: Option<f64>,
 }
 
 /// `rain` is the precipitation probability, in percent.
@@ -80,7 +86,7 @@ pub fn forecast_url(lat: f64, lon: f64, fahrenheit: bool) -> Result<reqwest::Url
             ("current", CURRENT.to_string()),
             ("hourly", HOURLY.to_string()),
             ("daily", DAILY.to_string()),
-            ("forecast_days", "5".to_string()),
+            ("forecast_days", DAYS.to_string()),
             ("timezone", "auto".to_string()),
             ("temperature_unit", unit.to_string()),
             ("wind_speed_unit", "kmh".to_string()),
@@ -128,6 +134,8 @@ pub fn parse_forecast(v: &Value) -> Result<Forecast, String> {
         wind: num(cur, "wind_speed_10m")?,
         code: num(cur, "weather_code")? as u32,
         is_day: num(cur, "is_day")? == 1.0,
+        wind_dir: cur.get("wind_direction_10m").and_then(Value::as_f64),
+        uv: cur.get("uv_index").and_then(Value::as_f64),
     };
 
     // Hourly times are whole hours; the current time carries minutes, so the window starts at the current hour.
@@ -259,7 +267,7 @@ mod tests {
     fn sample() -> Value {
         json!({
             "current": { "time": "2026-10-15T14:20", "temperature_2m": 21.4, "apparent_temperature": 20.1,
-                "relative_humidity_2m": 60, "is_day": 1, "weather_code": 3, "wind_speed_10m": 12.5 },
+                "relative_humidity_2m": 60, "is_day": 1, "weather_code": 3, "wind_speed_10m": 12.5, "uv_index": 4.5 },
             "hourly": {
                 "time": ["2026-10-15T00:00", "2026-10-15T14:00", "2026-10-15T15:00", "2026-10-15T16:00"],
                 "temperature_2m": [15.0, 21.0, 22.0, 20.5],
@@ -281,6 +289,8 @@ mod tests {
         let f = parse_forecast(&sample()).unwrap();
         assert_eq!(f.current.code, 3);
         assert!(f.current.is_day);
+        assert_eq!(f.current.uv, Some(4.5));
+        assert_eq!(f.current.wind_dir, None, "an optional field left out reads as null, not an error");
         assert_eq!(f.hours.len(), 3, "midnight hour is in the past");
         assert_eq!(f.hours[0].time, "2026-10-15T14:00");
         assert_eq!(f.hours[2].rain, 80.0);
@@ -336,6 +346,8 @@ mod tests {
         assert!(c.contains("latitude=-23.5"));
         assert!(c.contains("temperature_unit=celsius"));
         assert!(c.contains("wind_speed_unit=kmh"));
+        assert!(c.contains("forecast_days=7"));
+        assert!(c.contains("uv_index"));
         let f = forecast_url(0.0, 0.0, true).unwrap().to_string();
         assert!(f.contains("temperature_unit=fahrenheit"));
     }

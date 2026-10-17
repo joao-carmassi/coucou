@@ -6,6 +6,7 @@ import type { Pill } from "../../core/state";
 import { askPill } from "../../kit/ask";
 import { clear, h, svg } from "../../kit/dom";
 import { card } from "../../kit/card";
+import { last } from "./last";
 import { homeBody, homeLayout, setSlim, setSolo } from "../../kit/home";
 import { ICONS } from "../../kit/icons";
 import { tile } from "../../kit/tile";
@@ -34,21 +35,10 @@ export function buildBoard(ctx: ViewContext): ViewHost {
   const askLook = (id: string) => askPill(api.useAll<BoardPillOf>("board.pill"), id);
 
   const leftBody = homeBody();
-  const jump = h(
-    "button",
-    {
-      class: "icon-btn jump",
-      title: "Abrir",
-      onclick: () => {
-        const id = api.pills.front()?.id;
-        if (id) api.call("pillOpen", id);
-      },
-    },
-    svg(ICONS.arrowUpRight, 8),
-  );
-  const left = card(null, leftBody, jump);
+  const left = card(null, leftBody);
   const pills = h("div", { class: "pills" });
-  const right = card(null, pills);
+  const chip = h("div", { class: "board-last" });
+  const right = card(null, chip, pills);
   const el = homeLayout({ left, right });
 
   let shown: BoardCard | null = null;
@@ -56,11 +46,17 @@ export function buildBoard(ctx: ViewContext): ViewHost {
   let pillKey = "";
   let room = 0;
 
-  // A session-like card is clickable as a whole; the arrow and other buttons keep their own click.
+  // A card that opens something is clickable as a whole (its own `open`, else the owner's pillOpen); buttons inside keep their own click.
+  const opener = (): (() => void) | null => {
+    if (shown?.open) return shown.open.bind(shown);
+    const id = api.pills.front()?.id;
+    return shown?.target && id ? () => void api.call("pillOpen", id) : null;
+  };
   left.addEventListener("click", (e) => {
-    if (!shown?.open || (e.target as Element).closest("button")) return;
+    const open = opener();
+    if (!open || (e.target as Element).closest("button")) return;
     actions.blip();
-    shown.open();
+    open();
   });
 
   const focus = (id: string) => {
@@ -111,30 +107,39 @@ export function buildBoard(ctx: ViewContext): ViewHost {
     get height() {
       return room ? BOARD_H + room : undefined;
     },
-    sync() {
+    sync,
+  };
+
+  function sync() {
       const task = api.pills.front();
       const next = task ? (askCard(task.id) ?? plainCard(task)) : null;
       const key = next ? `${task!.id}~${next.key}` : "";
       if (key !== cardKey || (!shown && !next && !leftBody.firstChild)) {
         cardKey = key;
         clear(leftBody);
-        leftBody.append(next ? next.build(actions) : emptyCard());
+        leftBody.append(!next ? emptyCard() : next.build(actions));
       }
       shown = next;
       shown?.sync?.();
+      // The "Último" chip: the last action run from the board, until that action disappears.
+      const lastInfo = last.key ? api.actions.all().find((a) => a.key === last.key) : undefined;
+      if (!lastInfo) last.key = null;
+      chip.textContent = lastInfo ? `Último: ${lastInfo.title}` : "";
+      chip.style.display = lastInfo ? "" : "none";
 
-      jump.style.display = shown?.target ? "" : "none";
       const nextRoom = shown?.room ?? 0;
       if (nextRoom !== room) {
         room = nextRoom;
         onResize();
       }
-      left.classList.toggle("opens", !!shown?.open);
-      left.title = shown?.open ? (shown.hint ?? "") : "";
+      const opens = !!opener();
+      left.classList.toggle("opens", opens);
+      left.title = opens ? (shown!.hint ?? "") : "";
 
       const others = api.pills.others().slice(0, 6);
       // Nothing else active: the left card takes the full width. Few others: a narrow right column, one per row.
       setSolo(el, others.length === 0);
+      (others.length === 0 ? left : right).prepend(chip); // solo hides the right column
       setSlim(el, others.length > 0 && others.length <= 3);
       pills.dataset.cols = others.length > 3 ? "2" : "1";
       const nextPills = others.map((t) => { const look = askLook(t.id); return `${t.id}:${look?.badge ?? t.badge ?? ""}:${look?.label ?? t.label}`; }).join("|");
@@ -143,8 +148,7 @@ export function buildBoard(ctx: ViewContext): ViewHost {
         clear(pills);
         for (const t of others) pills.append(buildPill(t));
       }
-    },
-  };
+  }
 }
 
 function lighten(hex: string, amount: number): string {

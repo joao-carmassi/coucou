@@ -155,7 +155,8 @@ describe("weather module", () => {
     T.host!.sync();
     await tick();
     T.host!.sync();
-    const btn = document.querySelector<HTMLButtonElement>(".weather-body > .pin-btn")!;
+    // The pin sits on the card, beside the scrolling body (as Uso do plano), so it never scrolls or pushes the head.
+    const btn = document.querySelector<HTMLButtonElement>(".weather-body + .pin-btn")!;
     expect(btn.title).toBe("Fixar na ilha");
     btn.click();
     expect(State.settings.pinnedLine).toBe("weather.now");

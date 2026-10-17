@@ -7,7 +7,6 @@ import { State } from "../core/state";
 import { card } from "../kit/card";
 import type { IslandViewName } from "../core/layout";
 import type { TabDef, ViewHost } from "../core/moduleApi";
-import { Actions, type Entry } from "../core/actions";
 
 export type { ViewHost } from "../core/moduleApi";
 
@@ -162,65 +161,14 @@ function buildSettings(actions: ViewActions): ViewHost {
   };
 }
 
-// ── Palette ───────────────────────────────────────────────────────────────────
-
-export interface PaletteView extends ViewHost {
-  /** Empties the query and the selection (on open). */
-  reset(): void;
-  move(delta: number): void;
-  current(): Entry | null;
-}
-
-const MAX_MATCHES = 6;
-
-/** The input and its matches; the island's key handler drives arrows/Enter/Esc, the view only draws and takes typing and clicks. */
-function buildPalette(actions: ViewActions, pick: (e: Entry) => void): PaletteView {
-  const input = h("input", { class: "island-field", type: "text", placeholder: "Digite um comando…", autocomplete: "off", spellcheck: false, "data-palette": true }) as HTMLInputElement;
-  const list = h("div", { class: "settings-rows", style: "gap:2px;flex:1 1 auto;min-height:0;overflow-y:auto" });
-  let at = 0;
-  let shown: Entry[] = [];
-  let sig = "";
-
-  const entries = (): Entry[] => {
-    const tabs: Entry[] = State.tabs.map((t) => ({ key: `#tab.${t.view}`, title: `Ir para ${t.title}`, run: () => actions.setView(t.home ? State.defaultView() : t.view) }));
-    return Actions.search(input.value, tabs).slice(0, MAX_MATCHES);
-  };
-  const draw = () => {
-    shown = entries();
-    at = Math.min(at, Math.max(0, shown.length - 1));
-    const next = `${shown.map((e) => e.key + e.title).join("|")}#${at}`;
-    if (next === sig) return;
-    sig = next;
-    list.replaceChildren(...(shown.length
-      ? shown.map((e, i) => h("button", { class: i === at ? "link-btn on" : "link-btn", style: "text-align:left;padding:4px 8px;border-radius:6px;" + (i === at ? "background:rgba(255,255,255,0.12)" : ""), text: e.title, onclick: () => pick(e) }))
-      : [h("div", { class: "sub", text: "Nada encontrado." })]));
-  };
-  input.addEventListener("input", () => { at = 0; draw(); });
-
-  const el = h("div", { class: "view", style: "transform:none" }, card(null, h("div", { class: "stack", style: "padding:18px 16px 14px 84px;gap:6px;justify-content:flex-start" }, input, list)));
-  return {
-    el,
-    sync: draw,
-    focus: () => input.focus({ preventScroll: true }),
-    reset() { input.value = ""; at = 0; sig = ""; },
-    move(d) {
-      if (!shown.length) return;
-      at = (at + d + shown.length) % shown.length;
-      draw();
-    },
-    current: () => shown[at] ?? null,
-  };
-}
-
 // ── Registry ──────────────────────────────────────────────────────────────────
 
 /** The greeting has no DOM view: the island draws it on its own canvas. */
-export function buildViews(actions: ViewActions, pick: (e: Entry) => void): Map<string, ViewHost> {
+export function buildViews(actions: ViewActions): Map<string, ViewHost> {
   const map = new Map<string, ViewHost>();
   map.set("empty", buildEmpty());
   map.set("confused", buildConfused());
   map.set("note", buildNote());
   map.set("settings", buildSettings(actions));
-  map.set("palette", buildPalette(actions, pick));
   return map;
 }
