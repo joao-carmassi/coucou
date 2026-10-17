@@ -202,6 +202,7 @@ const PROJECT = {
     { id: 898, state: "running", workflow: "Release", branch: null, title: "tag", actor: "ana", url: "u", startedAt: ago(MIN), updatedAt: ago(MIN) }],
   pull: { number: 12, title: "Add the crew", url: "u", state: "open", author: "ana", additions: 417, deletions: 23, changedFiles: 4, review: "approved", comments: 2, at: ago(HOUR) },
   deploy: { environment: "production", state: "success", url: "https://coucou.example", creator: "mochi-dev", sha: "abc1234", at: ago(2 * HOUR) },
+  branches: [{ name: "main", at: ago(9 * MIN), state: "failure" }, { name: "feat/crew", at: ago(HOUR), state: "pending" }, { name: "fix/ring", at: ago(DAY), state: "success" }, { name: "docs", at: ago(3 * DAY), state: "none" }],
   missing: [],
 };
 const DAYS = { items: [
@@ -214,6 +215,7 @@ const dead = (i: number) => (i * 7) % 11 % 5 === 0;
 const CONTRIB = { total: 1234, start: "2025-11-11", counts: Array.from({ length: 120 }, (_, i) => (dead(i) ? 0 : (i * 3) % 9 + 1)), levels: Array.from({ length: 120 }, (_, i) => (dead(i) ? 0 : 1 + ((i * 3) % 9) % 4)) };
 const GH = {
   login: "mochi-dev", profileUrl: "https://github.com/mochi-dev", totalStars: 1284, fetchedAt: NOW.getTime(), contributions: CONTRIB,
+  reviews: [{ number: 31, title: "Fix the ring", url: "u", repo: "ana/other", author: "ana", at: ago(2 * HOUR), draft: false }, { number: 8, title: "Wip crew", url: "u", repo: "mochi-dev/coucou", author: "bob", at: ago(DAY), draft: true }], reviewsTotal: 7,
   activity: [
     ACT("pr_merged", "mochi-dev/coucou", "Add the crew", "#12 · merged", 5 * MIN, { kind: "pull", repo: "mochi-dev/coucou", number: 12 }),
     ACT("push", "mochi-dev/coucou", "3 commits", "main", 40 * MIN, { kind: "commits", repo: "mochi-dev/coucou", head: "abc", count: 3, branch: "main", author: null, from: null, to: null }),

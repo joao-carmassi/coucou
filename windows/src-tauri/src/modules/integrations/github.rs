@@ -428,6 +428,25 @@ pub struct Snapshot {
     /// Unix milliseconds of the last complete refresh, so the panel can say how
     /// old what it shows is when GitHub can't be reached.
     pub fetched_at: u64,
+    /// Open pull requests waiting on a review from you, newest first.
+    pub reviews: Vec<ReviewAsk>,
+    /// How many wait in all; `reviews` holds the first few.
+    pub reviews_total: u32,
+}
+
+/// A pull request somebody asked you to review.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewAsk {
+    pub number: u64,
+    pub title: String,
+    pub url: String,
+    /// "owner/name".
+    pub repo: String,
+    pub author: Option<String>,
+    /// When the pull request was opened (ISO 8601 in UTC: sorts as text).
+    pub at: String,
+    pub draft: bool,
 }
 
 /// The contribution calendar, day by day from `start`. Two flat lists rather
@@ -520,6 +539,8 @@ struct Cache {
     merged: Option<String>,
     /// The same for the latest pull request somebody else opened.
     opened: Option<String>,
+    /// The same for the latest pull request that asked you for a review.
+    asked: Option<String>,
 }
 
 static CACHE: LazyLock<Mutex<Cache>> = LazyLock::new(|| Mutex::new(Cache::default()));
@@ -626,6 +647,49 @@ fn parse_opened(viewer: &Value) -> Vec<Opened> {
         })
         .filter(|pull| seen.insert((pull.repo.clone(), pull.number)))
         .collect()
+}
+
+/// The search for review requests sits in the answer's root, beside `viewer`.
+fn parse_reviews(data: &Value) -> (u32, Vec<ReviewAsk>) {
+    let total = int(data, "/reviews/issueCount").max(0) as u32;
+    let asks = nodes(data, "/reviews/nodes")
+        .iter()
+        .filter_map(|n| {
+            let number = n.get("number")?.as_u64()?;
+            let repo = text(n.pointer("/repository/nameWithOwner"))?;
+            Some(ReviewAsk {
+                number,
+                title: text(n.get("title")).unwrap_or_default(),
+                url: text(n.get("url")).unwrap_or_else(|| format!("{WEB}/{repo}/pull/{number}")),
+                author: text(n.pointer("/author/login")),
+                at: text(n.get("createdAt"))?,
+                draft: flag(n, "isDraft"),
+                repo,
+            })
+        })
+        .collect();
+    (total, asks)
+}
+
+/// A request for your review newer than the latest known (`seen`), which is
+/// None on the first refresh: it only learns how things stand.
+fn asked(seen: Option<&str>, now: &[ReviewAsk]) -> Option<News> {
+    let seen = seen?;
+    let ask = now.iter().filter(|a| a.at.as_str() > seen).max_by(|a, b| a.at.cmp(&b.at))?;
+    let target = Target::Pull { repo: ask.repo.clone(), number: ask.number };
+    let event = IntegrationEvent {
+        success: true,
+        label: format!("Revisão pedida: {}#{}", short_name(&ask.repo), ask.number),
+        detail: Some(ask.title.clone()).filter(|t| !t.is_empty()),
+        open: Some(json!({
+            "target": target,
+            "label": format!("#{}", ask.number),
+            "url": ask.url,
+            "title": format!("#{} {}", ask.number, ask.title),
+            "says": "revisão pedida",
+        })),
+    };
+    Some((event, target))
 }
 
 /// A piece of news, and what to ask GitHub about to say more of it on the card.
@@ -833,6 +897,9 @@ pub async fn refresh(app: AppHandle) {
                 // one that is unmuted later does not tell what happened meanwhile.
                 let newest_merge = merged.iter().map(|m| m.at.clone()).max().unwrap_or_default();
                 let newest_pull = opened.iter().map(|p| p.at.clone()).max().unwrap_or_default();
+                let newest_ask = snapshot.reviews.iter().map(|a| a.at.clone()).max().unwrap_or_default();
+                let wanted: Vec<ReviewAsk> =
+                    snapshot.reviews.iter().filter(|a| !muted.contains(&a.repo)).cloned().collect();
                 merged.retain(|m| !muted.contains(&m.repo));
                 opened.retain(|p| !muted.contains(&p.repo));
                 let news = cache
@@ -840,11 +907,14 @@ pub async fn refresh(app: AppHandle) {
                     .as_ref()
                     .and_then(|before| broke(&before.repos, &snapshot.repos, &muted))
                     .or_else(|| went_in(cache.merged.as_deref(), &merged))
-                    .or_else(|| came_in(cache.opened.as_deref(), &opened, &snapshot.login));
+                    .or_else(|| came_in(cache.opened.as_deref(), &opened, &snapshot.login))
+                    .or_else(|| asked(cache.asked.as_deref(), &wanted));
                 let seen = cache.merged.take().filter(|seen| *seen >= newest_merge);
                 cache.merged = Some(seen.unwrap_or(newest_merge));
                 let seen = cache.opened.take().filter(|seen| *seen >= newest_pull);
                 cache.opened = Some(seen.unwrap_or(newest_pull));
+                let seen = cache.asked.take().filter(|seen| *seen >= newest_ask);
+                cache.asked = Some(seen.unwrap_or(newest_ask));
                 cache.snapshot = Some(snapshot);
                 news
             };
@@ -901,6 +971,8 @@ const CONTRIBUTED_REPOS: usize = MAX_REPOS * 2;
 const MERGED_PULLS: usize = 5;
 /// Open pull requests looked at for news, the newest of each project.
 const OPENED_PULLS: usize = 3;
+/// Requests for your review kept: the panel shows five, news looks at all.
+const REVIEW_ASKS: usize = 10;
 /// How long a project whose runs the token may not read is left alone.
 const REFUSED_FOR: u64 = 3600;
 
@@ -910,7 +982,7 @@ const REFUSED_FOR: u64 = 3600;
 /// contributed to elsewhere — as far as the token can see, which for a
 /// fine-grained token means your own repositories, organisations it was made
 /// for, and public ones — and asks for no more of them than it shows.
-const PROFILE_QUERY: &str = "query($stars: Int!, $owned: Int!, $contributed: Int!, $merged: Int!, $opened: Int!) { viewer { login url \
+const PROFILE_QUERY: &str = "query($stars: Int!, $owned: Int!, $contributed: Int!, $merged: Int!, $opened: Int!, $reviews: Int!) { viewer { login url \
     contributionsCollection { contributionCalendar { totalContributions \
     weeks { firstDay contributionDays { contributionCount contributionLevel } } } } \
     starred: repositories(ownerAffiliations: OWNER, first: $stars, orderBy: {field: PUSHED_AT, direction: DESC}) { \
@@ -920,7 +992,10 @@ const PROFILE_QUERY: &str = "query($stars: Int!, $owned: Int!, $contributed: Int
     repositoriesContributedTo(first: $contributed, includeUserRepositories: true, \
     orderBy: {field: PUSHED_AT, direction: DESC}) { nodes { ...Project } } \
     merged: pullRequests(states: MERGED, first: $merged, orderBy: {field: UPDATED_AT, direction: DESC}) { \
-    nodes { number title url mergedAt repository { nameWithOwner } } } } } \
+    nodes { number title url mergedAt repository { nameWithOwner } } } } \
+    reviews: search(query: \"is:pr is:open archived:false user-review-requested:@me\", type: ISSUE, first: $reviews) { \
+    issueCount nodes { ... on PullRequest { number title url createdAt isDraft author { login } \
+    repository { nameWithOwner } } } } } \
     fragment Project on Repository { nameWithOwner url isPrivate isArchived pushedAt \
     stargazerCount primaryLanguage { name color } \
     pullRequests(states: OPEN, first: $opened, orderBy: {field: CREATED_AT, direction: DESC}) { \
@@ -930,7 +1005,7 @@ async fn fetch() -> Result<(Snapshot, Vec<Merged>, Vec<Opened>), GhError> {
     let gh = Gh::from_store()?;
     let sizes = json!({
         "stars": STAR_REPOS, "owned": MAX_REPOS, "contributed": CONTRIBUTED_REPOS,
-        "merged": MERGED_PULLS, "opened": OPENED_PULLS,
+        "merged": MERGED_PULLS, "opened": OPENED_PULLS, "reviews": REVIEW_ASKS,
     });
     let (data, _) = gh.graphql_with(PROFILE_QUERY, sizes).await?;
     let viewer = data.get("viewer").ok_or(GhError::BadResponse)?;
@@ -948,7 +1023,10 @@ async fn fetch() -> Result<(Snapshot, Vec<Merged>, Vec<Opened>), GhError> {
 
     let merged = parse_merged(viewer);
     let opened = parse_opened(viewer);
+    let (reviews_total, reviews) = parse_reviews(&data);
     Ok((Snapshot {
+        reviews,
+        reviews_total,
         profile_url: text(viewer.get("url")).unwrap_or_else(|| format!("{WEB}/{login}")),
         contributions: parse_contributions(viewer.pointer("/contributionsCollection/contributionCalendar")),
         login,
@@ -1300,10 +1378,21 @@ pub struct Project {
     /// The pull request touched most recently, whoever opened it.
     pub pull: Option<Pull>,
     pub deploy: Option<Deploy>,
+    /// The branches pushed to most recently, with the state of their last commit's checks.
+    pub branches: Vec<BranchCi>,
     /// Sections the token may not read for this repository, by the name of
     /// the permission that would open them. The sheet says so rather than
     /// looking empty.
     pub missing: Vec<&'static str>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct BranchCi {
+    pub name: String,
+    /// When the branch's newest commit was made.
+    pub at: String,
+    /// success, failure, pending or none (no checks ran on that commit).
+    pub state: &'static str,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -1370,7 +1459,9 @@ const PROJECT_QUERY: &str = "query($owner: String!, $name: String!, $languages: 
     number title url state isDraft mergedAt updatedAt additions deletions changedFiles \
     reviewDecision author { login } comments { totalCount } } } \
     deployments(first: 1, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { \
-    environment createdAt commitOid creator { login } latestStatus { state environmentUrl createdAt } } } } }";
+    environment createdAt commitOid creator { login } latestStatus { state environmentUrl createdAt } } } \
+    refs(refPrefix: \"refs/heads/\", first: 6, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) { \
+    nodes { name target { ... on Commit { committedDate statusCheckRollup { state } } } } } } }";
 
 /// Runs shown as the CI streak.
 const STREAK: usize = 8;
@@ -1424,6 +1515,9 @@ pub async fn project(full_name: &str, force: bool) -> Result<Project, String> {
     }
     if refused(&errors, "deployments") {
         missing.push(permission::DEPLOYMENTS);
+    }
+    if refused(&errors, "statusCheckRollup") {
+        missing.push(MISSING_BRANCHES);
     }
     let runs = match gh.get(&format!("/repos/{owner}/{name}/actions/runs?per_page={STREAK}")).await {
         Ok(reply) => parse_runs(&reply.json),
@@ -1532,6 +1626,25 @@ fn parse_deploy(node: &Value) -> Option<Deploy> {
     })
 }
 
+/// What `missing` says when the token can't read checks: not a GitHub
+/// permission name like the others, so the sheet words it itself.
+const MISSING_BRANCHES: &str = "branches";
+
+fn parse_branches(repo: &Value) -> Vec<BranchCi> {
+    nodes(repo, "/refs/nodes")
+        .iter()
+        .filter_map(|n| {
+            let state = match n.pointer("/target/statusCheckRollup/state").and_then(Value::as_str) {
+                Some("SUCCESS") => "success",
+                Some("FAILURE") | Some("ERROR") => "failure",
+                Some("PENDING") | Some("EXPECTED") => "pending",
+                _ => "none",
+            };
+            Some(BranchCi { name: text(n.get("name"))?, at: text(n.pointer("/target/committedDate"))?, state })
+        })
+        .collect()
+}
+
 fn parse_project(repo: &Value, runs: Vec<Run>, missing: Vec<&'static str>) -> Option<Project> {
     let full_name = text(repo.get("nameWithOwner"))?;
     Some(Project {
@@ -1547,6 +1660,7 @@ fn parse_project(repo: &Value, runs: Vec<Run>, missing: Vec<&'static str>) -> Op
         runs,
         pull: repo.pointer("/pullRequests/nodes/0").and_then(parse_pull),
         deploy: repo.pointer("/deployments/nodes/0").and_then(parse_deploy),
+        branches: parse_branches(repo),
         missing,
     })
 }
@@ -1798,6 +1912,8 @@ mod tests {
             profile_url: String::new(),
             total_stars: 0,
             activity: Vec::new(),
+            reviews: Vec::new(),
+            reviews_total: 0,
             repos: builds
                 .iter()
                 .map(|(name, build)| Repo {
@@ -1890,6 +2006,48 @@ mod tests {
         assert_eq!(target, Target::Pull { repo: "edu/coucou".into(), number: 7 });
         // Nothing but your own since.
         assert!(came_in(Some("2026-10-01T15:00:00Z"), &opened, "edu").is_none());
+    }
+
+    #[test]
+    fn review_requests_are_read_and_announced_once() {
+        let pr = |n: u64, at: &str| json!({
+            "number": n, "title": format!("Pull {n}"), "url": format!("https://github.com/o/r/pull/{n}"),
+            "createdAt": at, "isDraft": n == 2, "author": { "login": "kirzen" }, "repository": { "nameWithOwner": "o/r" },
+        });
+        let data = json!({ "reviews": { "issueCount": 12, "nodes": [
+            pr(3, "2026-10-01T16:00:00Z"), pr(2, "2026-10-01T15:00:00Z"),
+            json!({ "number": 9, "createdAt": "2026-10-01T17:00:00Z" }), // no repository: skipped
+        ] } });
+        let (total, asks) = parse_reviews(&data);
+        assert_eq!((total, asks.len()), (12, 2));
+        assert_eq!((asks[0].number, asks[0].draft, asks[1].draft), (3, false, true));
+        assert_eq!(asks[0].author.as_deref(), Some("kirzen"));
+        // Empty, or the field missing altogether (a token the search refuses).
+        assert_eq!(parse_reviews(&json!({ "reviews": { "issueCount": 0, "nodes": [] } })), (0, vec![]));
+        assert_eq!(parse_reviews(&json!({ "reviews": null })), (0, vec![]));
+
+        // The first look only learns; a newer request is news, then it is not.
+        assert!(asked(None, &asks).is_none());
+        let (event, target) = asked(Some("2026-10-01T15:30:00Z"), &asks).unwrap();
+        assert_eq!(event.label, "Revisão pedida: r#3");
+        assert_eq!(target, Target::Pull { repo: "o/r".into(), number: 3 });
+        assert!(asked(Some("2026-10-01T16:00:00Z"), &asks).is_none());
+    }
+
+    #[test]
+    fn branches_map_check_states_and_a_refusal_is_named() {
+        let repo = json!({ "refs": { "nodes": [
+            { "name": "main", "target": { "committedDate": "2026-10-01T10:00:00Z", "statusCheckRollup": { "state": "SUCCESS" } } },
+            { "name": "a", "target": { "committedDate": "2026-10-01T09:00:00Z", "statusCheckRollup": { "state": "ERROR" } } },
+            { "name": "b", "target": { "committedDate": "2026-10-01T08:00:00Z", "statusCheckRollup": { "state": "EXPECTED" } } },
+            { "name": "c", "target": { "committedDate": "2026-10-01T07:00:00Z", "statusCheckRollup": null } },
+            { "name": "d", "target": {} },
+        ] } });
+        let states: Vec<_> = parse_branches(&repo).iter().map(|b| (b.name.clone(), b.state)).collect();
+        assert_eq!(states, [("main".into(), "success"), ("a".into(), "failure"), ("b".into(), "pending"), ("c".into(), "none")]);
+        assert!(parse_branches(&json!({})).is_empty());
+        let errors = vec![json!({ "type": "FORBIDDEN", "path": ["repository", "refs", "nodes", 0, "target", "statusCheckRollup"] })];
+        assert!(refused(&errors, "statusCheckRollup"));
     }
 
     const NOW: u64 = 1_000_000;

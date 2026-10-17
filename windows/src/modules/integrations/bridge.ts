@@ -259,8 +259,29 @@ export interface GithubProject {
   runs: GithubRun[];
   pull: GithubPull | null;
   deploy: GithubDeploy | null;
-  /** The permissions the token lacks to read some of this, as GitHub names them. */
+  /** The branches pushed to last, newest first, with the checks of their newest commit. */
+  branches: GithubBranchCi[];
+  /** The permissions the token lacks to read some of this, as GitHub names them ("branches" is the checks'). */
   missing: string[];
+}
+
+export interface GithubBranchCi {
+  name: string;
+  /** ISO 8601: when the newest commit was made. */
+  at: string;
+  state: "success" | "failure" | "pending" | "none";
+}
+
+/** A pull request somebody asked you to review. */
+export interface GithubReviewAsk {
+  number: number;
+  title: string;
+  url: string;
+  /** "owner/name". */
+  repo: string;
+  author: string | null;
+  at: string;
+  draft: boolean;
 }
 
 export interface GithubRun {
@@ -313,6 +334,10 @@ export interface GithubData {
   contributions: GithubContributions | null;
   /** Unix ms of the last complete refresh. */
   fetchedAt: number;
+  /** Pull requests waiting on a review from you, newest first. */
+  reviews: GithubReviewAsk[];
+  /** How many wait in all; `reviews` holds the first few. */
+  reviewsTotal: number;
 }
 
 export interface GithubContributions {

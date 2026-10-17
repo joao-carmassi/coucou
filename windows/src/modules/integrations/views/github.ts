@@ -15,7 +15,7 @@ import { timeAgo } from "../../../kit/format";
 import { rt } from "../store";
 import { GITHUB, cleanups, info as infos, integrationSettings, later, redraw } from "../store";
 import { App } from "../../../kit/app";
-import { type GithubActivity, type GithubBuild, type GithubCommentsDetail, type GithubCommitsDetail, type GithubContributions, type GithubData, type GithubDay, type GithubDeploy, type GithubDetail, type GithubEntry, type GithubFile, type GithubIssueDetail, type GithubJob, type GithubLabel, type GithubProject, type GithubPull, type GithubPullDetail, type GithubReleaseDetail, type GithubRemark, type GithubRepo, type GithubRunDetail, type GithubTarget, type GithubThread, type GithubTimed, type IntegrationNews, IntegrationsBridge } from "../bridge";
+import { type GithubActivity, type GithubBranchCi, type GithubBuild, type GithubCommentsDetail, type GithubCommitsDetail, type GithubContributions, type GithubData, type GithubDay, type GithubDeploy, type GithubDetail, type GithubEntry, type GithubFile, type GithubIssueDetail, type GithubJob, type GithubLabel, type GithubProject, type GithubPull, type GithubPullDetail, type GithubReleaseDetail, type GithubRemark, type GithubRepo, type GithubReviewAsk, type GithubRunDetail, type GithubTarget, type GithubThread, type GithubTimed, type IntegrationNews, IntegrationsBridge } from "../bridge";
 import type { BotEmoteName, BotStateName } from "../../../core/layout";
 import type { Disposer, FreeMochi, ViewContext, ViewHost } from "../../../core/moduleApi";
 
@@ -498,6 +498,17 @@ function eventRow(
     rowWhere(where),
     ago != null ? agoAtom(ago) : null,
   );
+}
+
+const REVIEWS_SHOWN = 5;
+
+/** A pull request waiting on your review; it opens in the sheet pull requests already have. */
+function reviewRow(r: GithubReviewAsk, login: string): HTMLElement {
+  return eventRow({
+    kind: "pr_opened", repo: r.repo, title: `#${r.number} ${r.title}`,
+    detail: [r.author, r.draft ? "rascunho" : null].filter(Boolean).join(" · ") || null,
+    url: r.url, target: { kind: "pull", repo: r.repo, number: r.number },
+  }, login, timeAgo(r.at));
 }
 
 function activityRow(a: GithubActivity, login: string): HTMLElement {
@@ -1017,6 +1028,32 @@ function ciBlock(p: GithubProject): HTMLElement {
   });
 }
 
+const BRANCH_STATE: Record<GithubBranchCi["state"], GithubBuild["state"]> = {
+  success: "success", failure: "failure", pending: "running", none: "neutral",
+};
+
+/** One line per recently pushed branch: the checks of its newest commit. */
+function branchesBlock(p: GithubProject): HTMLElement | null {
+  if (p.missing.includes("branches")) {
+    return block({
+      icon: roundIcon(COLOR.grey, svg(ICONS.lock, 9, { stroke: 2.2 })),
+      title: "sem permissão para CI por branch",
+      sub: line("Adicione “Commit statuses: Read-only” e “Checks: Read-only” ao token no GitHub."),
+    });
+  }
+  if (p.branches.length === 0) return null;
+  const rows = p.branches.map((b) => {
+    const state = BRANCH_STATE[b.state];
+    return block({
+      icon: roundIcon(BUILD_STYLE[state].color, stateMark(state, 9)),
+      title: b.name,
+      right: ago(b.at),
+      sub: line(b.state === "none" ? "sem checks" : BUILD_STYLE[state].label),
+    });
+  });
+  return h("div", { class: "gh-branches" }, heading("CI por branch"), ...rows);
+}
+
 const PULL_STYLE: Record<GithubPull["state"], { color: string; icon: string }> = {
   open: { color: COLOR.indigo, icon: ICONS.pullRequest },
   draft: { color: COLOR.dim, icon: ICONS.pullRequest },
@@ -1131,6 +1168,7 @@ function projectSheet(p: GithubProject): HTMLElement {
     facts,
     ciBlock(p),
     pullBlock(p),
+    branchesBlock(p),
     deployBlock(p),
     languageBar(p),
   );
@@ -2333,6 +2371,14 @@ export function buildGithub(ctx: ViewContext): ViewHost {
         }),
       );
       return section;
+    }
+    if (d.reviews.length > 0) {
+      const rest = d.reviewsTotal - Math.min(d.reviews.length, REVIEWS_SHOWN);
+      section.append(
+        heading(`Revisões pedidas a você · ${d.reviewsTotal}`, rest > 0 ? h("span", { text: `+${rest}` }) : undefined),
+        ...d.reviews.slice(0, REVIEWS_SHOWN).map((r) => reviewRow(r, d.login)),
+      );
+      if (d.activity.length > 0) section.append(heading("Atividade recente"));
     }
     if (d.activity.length === 0) {
       section.append(empty("Nada nos últimos 30 dias."));
