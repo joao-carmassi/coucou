@@ -521,6 +521,34 @@ describe("media panel", () => {
     (T.hosts.media.el.querySelector(".media-more") as HTMLElement).click();
     snap("media-menu", T.hosts.media.el);
   });
+  it("menu groups conversions under Converter and the submenu opens/closes by keyboard", () => {
+    const el = T.hosts.media.el;
+    const top = () => [...el.querySelectorAll(".media-menu:not(.media-submenu) > .media-menu-row")].map((r) => r.textContent);
+    const sub = el.querySelector(".media-submenu") as HTMLElement;
+    const key = (k: string) => document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
+    expect(top()).toContain("Converter ▸");
+    expect(top()).not.toContain("Para JPG");
+    expect([...sub.querySelectorAll(".media-menu-row")].map((r) => r.textContent)).toEqual(["Para JPG", "Para WebP", "Reduzir 50%", "Reduzir 25%", "Comprimir", "Sem metadados"]);
+    expect(sub.style.display).toBe("none");
+    (el.querySelector(".media-menu-sub") as HTMLElement).focus();
+    key("ArrowRight");
+    expect(sub.style.display).toBe("");
+    expect(document.activeElement!.textContent).toBe("Para JPG");
+    key("ArrowLeft");
+    expect(sub.style.display).toBe("none");
+    expect(document.activeElement!.textContent).toBe("Converter ▸");
+    key("Enter");
+    key("Escape");
+    expect(sub.style.display).toBe("none");
+    expect((el.querySelector(".media-menu") as HTMLElement).style.display).toBe(""); // first Esc: only the submenu
+    key("Escape");
+    expect((el.querySelector(".media-menu") as HTMLElement).style.display).toBe("none"); // second Esc: the menu
+  });
+  it("a kind with no conversions has no Converter entry", async () => {
+    const cells = T.hosts.media.el.querySelectorAll(".media-more");
+    (cells[2] as HTMLElement).click(); // notes.pdf
+    expect(T.hosts.media.el.querySelector(".media-menu-sub")).toBeNull();
+  });
   it("list that failed", async () => {
     T.answers.media_list = () => { throw new Error("Error: sem acesso"); };
     await go("overview"); T.hosts.media.sync();
