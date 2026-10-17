@@ -1,5 +1,5 @@
 /* Clima: current conditions, hour strip and day strip. Prefix weather-; kit classes are reused, never redefined. */
-.weather-body { padding: 4px 16px 4px 84px; gap: 6px; }
+.weather-body { padding: 14px 12px 14px 84px; gap: 8px; }
 .weather-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
 .weather-head .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .weather-now { display: flex; align-items: center; gap: 10px; }

@@ -5,11 +5,11 @@ import type { ViewContext, ViewHost } from "../../core/moduleApi";
 import { EyecareBridge } from "./bridge";
 import { appName, dayKey, dayTotal, fmtDur, lastDays, topApps, type Days } from "./logic";
 
-const TOP = 4;
+const TOP = 6;
 
 export function buildView(ctx: ViewContext): ViewHost {
-  const body = h("div", { class: "stack eyecare-view" });
-  body.style.padding = "4px 16px 4px 84px";
+  const body = h("div", { class: "stack scroll eyecare-view" });
+  body.style.padding = "14px 12px 14px 84px";
   const el = view(card(null, body));
   let busy = false;
 

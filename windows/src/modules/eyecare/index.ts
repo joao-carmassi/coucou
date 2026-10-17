@@ -3,7 +3,7 @@
 import "./eyecare.css";
 import { svg } from "../../kit/dom";
 import { ICONS } from "../../kit/icons";
-import { BAND, type Disposer, type IslandApi, type ModuleDef } from "../../core/moduleApi";
+import { BAND, PANEL_H, type Disposer, type IslandApi, type ModuleDef } from "../../core/moduleApi";
 import { EyecareBridge } from "./bridge";
 import { BREAKS, enabledKinds, intervalMin, pickKind, shouldNotify } from "./logic";
 import { buildView } from "./view";
@@ -47,7 +47,7 @@ function start(api: IslandApi): Disposer {
 
 export const eyecareModule: ModuleDef = {
   id: "eyecare",
-  views: [{ name: "eyecare", layout: { height: 190, botX: 54, botY: null, botDiameter: 46 }, build: (ctx) => buildView(ctx) }],
+  views: [{ name: "eyecare", layout: { height: PANEL_H, botX: 54, botY: null, botDiameter: 46 }, build: (ctx) => buildView(ctx) }],
   tabs: [{ view: "eyecare", title: "Pausas", icon: () => svg(ICONS.eye, 13, { stroke: 2 }), order: 100 }],
   start,
 };
