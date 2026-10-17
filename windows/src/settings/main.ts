@@ -13,9 +13,11 @@ import { presetsOf, diffImport, matchSections, presetModules } from "./hub";
 let settings: Settings = { ...DEFAULT_SETTINGS };
 // ModuleSettings reads State.settings (this same object) and saves patches of its own keys.
 State.settings = settings;
+let repaintPin: () => void = () => {};
 const put = (s: Settings) => {
   settings = s;
   State.settings = s;
+  repaintPin();
 };
 let version = "";
 
@@ -23,8 +25,8 @@ const root = document.getElementById("settings-root")!;
 
 /** Only the core's own fields: module keys are saved by their sections as patches, and a stale copy here must not undo them. */
 async function save() {
-  const { soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, hideWhenBusy, autostart, modulesEnabled, mochiColors, mochiSleepMinutes, paletteHotkey } = settings;
-  await Bridge.saveSettings({ soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, focusHoldMinutes, screen, hideWhenBusy, autostart, modulesEnabled, mochiColors, mochiSleepMinutes, paletteHotkey });
+  const { soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, screen, hideWhenBusy, autostart, modulesEnabled, mochiColors, mochiSleepMinutes, paletteHotkey } = settings; // focusHoldMinutes (legacy) stays as the file has it
+  await Bridge.saveSettings({ soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, screen, hideWhenBusy, autostart, modulesEnabled, mochiColors, mochiSleepMinutes, paletteHotkey });
 }
 
 // ── Reusable bits ─────────────────────────────────────────────────────────────
@@ -122,17 +124,6 @@ function generalSection(): HTMLElement {
     void save();
   });
 
-  const hold = h("input", {
-    type: "number", min: "0", max: "120", step: "1",
-    value: String(Math.round(settings.focusHoldMinutes ?? 1)),
-    style: "width:72px",
-  }) as HTMLInputElement;
-  hold.addEventListener("change", () => {
-    settings.focusHoldMinutes = Math.max(0, Math.min(120, Math.round(Number(hold.value)) || 0));
-    hold.value = String(settings.focusHoldMinutes);
-    void save();
-  });
-
   const sleepMin = h("input", {
     type: "number", min: "0", max: "240", step: "1",
     value: String(Math.round(settings.mochiSleepMinutes ?? 10)),
@@ -181,15 +172,10 @@ function generalSection(): HTMLElement {
       h("span", { class: "hint", text: "segundos depois de você sair da ilha" }),
     ),
     h("div", { class: "row" },
-      h("label", { text: "Ocultar sozinha" }),
+      h("label", { text: "Tempo de foco" }),
       hide,
-      h("span", { class: "hint", text: "segundos minimizada, depois some · nunca" }),
+      h("span", { class: "hint", text: "segundos minimizada, depois some · é também o tempo em que a ilha lembra a última aba e a última linha aberta · nunca (1 min para lembrar)" }),
       hideNever,
-    ),
-    h("div", { class: "row" },
-      h("label", { text: "Voltar à aba" }),
-      hold,
-      h("span", { class: "hint", text: "minutos depois de fechar a ilha (0 = sempre no início) · tarefa em andamento volta sempre" }),
     ),
     h("div", { class: "row" },
       h("label", { text: "A ilha fica em" }),
@@ -221,6 +207,30 @@ function generalSection(): HTMLElement {
     ),
   );
 }
+
+// ── Pinned line ───────────────────────────────────────────────────────────────
+
+/** Which one-line source is pinned on the compact island (setting `pinnedLine`, "<moduleId>.<key>"), with a way to release it. */
+function pinnedSection(): HTMLElement {
+  const text = h("span", { class: "hint" });
+  const release = h("button", { type: "button", text: "Soltar" }) as HTMLButtonElement;
+  release.addEventListener("click", () => {
+    settings.pinnedLine = "";
+    void Bridge.saveSettings({ pinnedLine: "" });
+    repaintPin();
+  });
+  repaintPin = () => {
+    const id = settings.pinnedLine ?? "";
+    const mod = MODULE_INFO.find((m) => id.startsWith(`${m.id}.`));
+    text.textContent = id ? `Fixada: ${mod?.label ?? id}${mod && effectiveOn(mod.id) ? "" : " (módulo desligado: ignorada)"}` : "Nenhuma linha fixada. Fixe pelo botão da aba de um módulo.";
+    release.hidden = !id;
+  };
+  repaintPin();
+  return h("section", { "data-hub": "linha", "data-title": "Linha da ilha" },
+    h("h2", {}, h("span", { text: "Linha da ilha" })),
+    h("div", { class: "row" }, h("label", { text: "Linha fixa" }), text, release));
+}
+const effectiveOn = (id: string) => resolveEnabled(MODULE_INFO, settings.modulesEnabled)[id] === true;
 
 // ── Modules section ───────────────────────────────────────────────────────────
 
@@ -459,6 +469,7 @@ async function main() {
         h("aside", { class: "hub-side" }, search, nav),
         h("main", { class: "hub-main" },
           generalSection(),
+          pinnedSection(),
           presetsSection(),
           modulesBox,
           sectionsBox,

@@ -1,0 +1,12 @@
+{
+  "id": "weather",
+  "label": "Clima",
+  "default": false,
+  "order": 15,
+  "presets": ["tudo", "vitrine"],
+  "settingsDefaults": {
+    "weatherPlace": null,
+    "weatherUnits": "C",
+    "weatherGlanceEvery": 0
+  }
+}

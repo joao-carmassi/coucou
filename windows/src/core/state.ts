@@ -34,10 +34,10 @@ export interface Settings {
   soundEnabled: boolean;
   soundVolume: number;
   autoCloseInterval: number;
-  /** Seconds minimized before hiding; 0 = never. */
+  /** The user's "tempo de foco": seconds minimized before hiding; 0 = never (core/holds.ts focusMs). */
   compactHideInterval: number;
-  /** Minutes a held task view stays the place the island reopens on; 0 = off. */
-  focusHoldMinutes: number;
+  /** The one pinned compact line, "<moduleId>.<key>"; "" = none. Ignored while its module is off. */
+  pinnedLine: string;
   screen: "primary" | "cursor";
   /** Hide the island (and hold non-urgent notices) while a full-screen app or a call is in front. */
   hideWhenBusy: boolean;
@@ -61,7 +61,7 @@ export const DEFAULT_SETTINGS: Settings = {
   soundVolume: 0.12,
   autoCloseInterval: 15,
   compactHideInterval: 60,
-  focusHoldMinutes: 1,
+  pinnedLine: "",
   screen: "primary",
   hideWhenBusy: true,
   autostart: false,

@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.11.1
+
+- Pinned/last-opened lines are plain text: no shimmer, no slide-in; width changes in 16 px steps with hysteresis.
+- Pin button sits at the top-right corner of the view (no longer pushes content down; views reserve room with `.pin-room`).
+- Clima: taller view, hours and days strips without inner scrollbars; new setting to show the weather on the island every 15/30/60/120 min (even with the island hidden; skips on Pause or when busy).
+- Sistema: height fits the content without scroll when temperatures are off (with temperatures: same height plus scroll); the usage line also shows after leaving the view during the focus time; GPU % added to the line (one PDH query, only while pinned).
+- Fix: timer-glance test flake (timer clock read at call time).
+
+## 0.11.0
+
+One-line island feedback, reworked.
+
+- One "Tempo de foco": the time the island stays minimized before hiding is now also the focus time (board primary pick). During it the compact line shows the last module you opened. The old "Voltar à aba" control is gone (`focusHoldMinutes` stays in settings.json but is no longer read).
+- Pinned line: Tocando, Clima and Sistema ("Uso do PC": CPU and RAM %) can be pinned from their views (only one pinned at a time). It stays on the compact island until you unpin it, or its module has had nothing to show for 5 minutes. Approvals, questions, "pronto", reminders and the timer still pass over it, then it returns. Hub "Linha da ilha" shows what is pinned.
+- Tocando and Clima no longer show their line unprompted: pin them, or see them for the focus time after leaving their tab.
+- Timer: optional glance (every focus-time interval the timer's remaining time peeks, even with the island hidden).
+- Sistema: height now follows what is visible (hide temperatures and the view shrinks).
+- Core: `api.status.source/pin/pinned`, `api.island.focusMs`, `BAND.PINNED`, kit `pinButton`, source `icon` is drawn, urgent lines show beside other pills.
+
+## Unreleased
+
+- One "Tempo de foco": `compactHideInterval` now also times the board's primary pick and the implicit tab focus (the separate "Voltar à aba" control is gone and its value is not migrated: the reopen window is now the hide interval; `focusHoldMinutes` stays in settings.json, unused).
+- Pinned line: new generic `api.status.source(key, { label, view? })`, setting `pinnedLine` (one at a time), `BAND.PINNED = 35`, last-opened module line for the focus time, auto-release after 5 min without content, `StatusLine.icon`/`dim`/`view` drawn, kit pin button, Hub section "Linha da ilha".
+- Tocando and Clima publish their compact line as sources with a pin button in their views (they no longer show it unprompted). A pinned Clima refreshes every 30 min while the island is visible.
+- Timer: optional glance (`timerGlance`) shows the remaining time every focus time, even when the island is hidden.
+
+## 0.10.1
+
+- Tocando: the main Mochi now dances (no second mini Mochi any more); with no agent task running, the compact island shows the cover, title, artist and time left. New generic `StatusLine.card` and `api.avatar.level(v, {dance})` options.
+- Sistema: removed the top CPU/memory processes list (and its process scan); redesigned view with metric tiles, sparklines, disk/network rows and coloured temperature chips.
+- Clima, Pausas, Agenda, Sistema, Tocando, Mídia: taller views, comfortable padding and themed scrolling so nothing is hidden (generic `.scroll` utility).
+
+## 0.10.0
+
+Five new modules (all off by default) and media tools.
+
+- Tocando (`nowplaying`): what is playing through Windows media controls (title, artist, cover, play/pause/next/previous, progress when known), per-app volume, and Mochi dancing to the music (local loopback analysis only while playing and visible). Alt+P / Alt+N.
+- Sistema (`sysmon`): CPU, RAM, GPU, disk, network and temperatures while the view is open; opt-in alerts; CPU temperature through LibreHardwareMonitor (read locally, or an opt-in pinned download with SHA-256).
+- Clima (`weather`): current weather and forecast from Open-Meteo for a city you pick; no keys, no location lookup.
+- Agenda (`calendar`): ICS calendar links (kept in Credential Manager) with recurring events and time zones, plus a reminder notice before each event.
+- Pausas (`eyecare`): break reminders and screen time per app, stored only on this machine.
+- Mídia: drop an image, PDF or video on the island and pick a tool: convert, resize, compress, strip metadata, copy, OCR, GIF/compress/audio (ffmpeg from PATH or an opt-in pinned download).
+- Core: generic `user_idle_ms` and `foreground_now`; `api.provide`-based drop actions for the upload card.
+
 ## 0.9.0
 
 Core foundation for the next modules (everything new is generic API, no module names in the core).

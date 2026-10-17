@@ -2,8 +2,13 @@
 //  - HoldList: sticky holds, an explicit `api.island.hold`. They do NOT expire by time (only with `opts.idleMs`);
 //    they end by their disposer, the module stopping, or the user picking the home view.
 //  - LastView: the implicit focus, the last view the user left (switching tab, or the island leaving `expanded`).
-//    It only counts for `focusHoldMinutes` after that.
+//    It only counts for the focus time (`focusMs`) after that.
 // Release-on-action is not built in: a module that wants it calls its hold's disposer from the action handler.
+
+/** The one "tempo de foco": how long the minimized island stays up before hiding (`compactHideInterval`, seconds). 0 = never hides: 60 s. */
+export function focusMs(hideSeconds: number): number {
+  return hideSeconds > 0 ? hideSeconds * 1000 : 60_000;
+}
 
 interface Hold { owner: string; view: string; idleMs?: number; seen: number }
 

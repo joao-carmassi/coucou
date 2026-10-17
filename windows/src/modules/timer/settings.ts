@@ -3,7 +3,7 @@ import type { ModuleSettings } from "../../core/moduleSettings";
 import { h } from "../../kit/dom";
 import { pomoCfg, type PomoCfg } from "./pomodoro";
 
-type Cfg = { timerPomodoro: unknown; timerPomodoroAuto: boolean };
+type Cfg = { timerPomodoro: unknown; timerPomodoroAuto: boolean; timerGlance: boolean };
 
 function timerSettingsSection(ms: ModuleSettings): { el: HTMLElement } {
   const cfg = ms.get<Cfg>();
@@ -27,7 +27,10 @@ function timerSettingsSection(ms: ModuleSettings): { el: HTMLElement } {
       num("Foco (min)", "work", 600), num("Pausa curta (min)", "short", 600), num("Pausa longa (min)", "long", 600),
       num("Pausa longa a cada (ciclos)", "every", 24),
       h("div", { class: "row" }, h("label", { text: "Iniciar a próxima fase sozinho" }),
-        toggle(cfg.timerPomodoroAuto !== false, (v) => void ms.save({ timerPomodoroAuto: v }), "Iniciar a próxima fase sozinho"))),
+        toggle(cfg.timerPomodoroAuto !== false, (v) => void ms.save({ timerPomodoroAuto: v }), "Iniciar a próxima fase sozinho")),
+      h("div", { class: "row" }, h("label", { text: "Espiar o tempo restante" }),
+        toggle(cfg.timerGlance === true, (v) => void ms.save({ timerGlance: v }), "Espiar o tempo restante"),
+        h("span", { class: "hint", text: "a cada tempo de foco, com um timer rodando, a ilha mostra o tempo restante por instantes, mesmo oculta" }))),
   };
 }
 

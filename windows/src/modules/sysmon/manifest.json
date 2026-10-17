@@ -1,0 +1,18 @@
+{
+  "id": "sysmon",
+  "label": "Sistema",
+  "default": false,
+  "order": 14,
+  "settingsDefaults": {
+    "sysmonShow": { "cpu": true, "ram": true, "gpu": true, "disk": true, "net": true, "temp": true },
+    "sysmonAlerts": false,
+    "sysmonCpuMax": 90,
+    "sysmonRamMax": 90,
+    "sysmonDiskMax": 95,
+    "sysmonTempMax": 85,
+    "sysmonLhm": false,
+    "sysmonLhmPort": 8085
+  },
+  "machineKeys": ["sysmonLhm", "sysmonLhmPort"],
+  "presets": ["tudo", "vitrine"]
+}

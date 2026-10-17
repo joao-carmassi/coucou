@@ -114,7 +114,7 @@ function start(api: IslandApi): Disposer {
    * background and swaps the path in when it lands, so a slow disk never stalls the animation.
    */
   function swallow(path: string) {
-    Up.droppedFile = { name: path.split(/[\\/]/).pop() || "file", path };
+    Up.droppedFile = { name: path.split(/[\\/]/).pop() || "file", path, source: path };
     Up.ingested = false;
     tens = 0;
     done = false;
@@ -134,7 +134,7 @@ function start(api: IslandApi): Disposer {
     api.island.redraw();
     Up.ingest = App.inboxIngest(path);
     Up.ingest
-      .then((file) => { Up.droppedFile = { name: file.name, path: file.path }; Up.ingested = true; api.island.redraw(); })
+      .then((file) => { Up.droppedFile = { name: file.name, path: file.path, source: path }; Up.ingested = true; api.island.redraw(); })
       .catch((err) => { UploadSeq.deactivate(); api.avatar.morph(0); api.island.error(err); });
   }
 

@@ -6,10 +6,11 @@ import { Avatar } from "./avatar";
 import { Bridge, onEvent } from "./bridge";
 import { Compact } from "./compact";
 import { Hooks, Services, onMode } from "./hooks";
+import { Pin } from "./pin";
 import { moduleSettings } from "./moduleSettings";
 import { dropPills, focusPill, putPill } from "./pills";
 import { Requests } from "./requests";
-import { Holds } from "./holds";
+import { Holds, focusMs } from "./holds";
 import { Sound } from "./sound";
 import { checkMood, glowOf, registerEmote, registerMood } from "../mochi/moods";
 import { createMiniBot, freeMochi, mochiSprite } from "../mochi/minibots";
@@ -110,6 +111,18 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
         if (Compact.set(id, line)) host.redraw();
         expire("status", line?.ttlMs);
       },
+      source(key, def) {
+        const src = Pin.add(id, key, def);
+        const dispose: Disposer = () => { scope.remove(dispose); if (Pin.remove(src)) host.redraw(); };
+        scope.add(dispose);
+        return { set: (line) => { if (Pin.setLine(src, line)) host.redraw(); }, dispose };
+      },
+      pinned: (key) => Pin.pinned() === `${id}.${key}`,
+      pin(key, on) {
+        const sid = `${id}.${key}`;
+        if (on) Pin.set(sid);
+        else if (Pin.pinned() === sid) Pin.set("");
+      },
     },
     avatar: {
       publish(sig: AvatarSignal | null) {
@@ -121,7 +134,7 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
       gulp: () => host.avatarGulp(),
       tint: (c) => host.avatarTint(c),
       bodyColor: () => host.avatarBodyColor(),
-      level: (v) => host.avatarLevel(v),
+      level: (v, opts) => host.avatarLevel(v, opts),
       glow: glowOf,
       defineMood(local, def) {
         const name = `${id}.${local}` as const;
@@ -154,6 +167,7 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
         const off: Disposer = () => { scope.remove(off); r(); };
         return scope.add(off);
       },
+      focusMs: () => focusMs(State.settings.compactHideInterval),
       busy: () => Requests.busy(),
       setView: (v) => host.setView(v),
       close: () => host.collapse(),

@@ -117,3 +117,34 @@
   place-items: center;
   cursor: default;
 }
+
+/* ── Scroll area ────────────────────────────────────────────────────────────
+   A vertical scroll region for content that may outgrow its view. Put it on a flex child
+   (`min-height: 0` lets it shrink below its content); in a column it stays centred while
+   it fits (`safe`) and starts at the top, fully reachable, once it does not. */
+.scroll,
+.stack.scroll {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  justify-content: safe center;
+}
+.scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+}
+.scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Pin button (kit/pin.ts): a module view's "pin to the island" toggle */
+.pin-btn { position: absolute; top: 10px; right: 12px; z-index: 2; display: inline-grid; place-items: center; width: 24px; height: 24px; border: 0; border-radius: 8px; background: transparent; color: var(--dim); cursor: pointer; }
+.pin-btn:hover { background: var(--surface-track); color: var(--ink); }
+.pin-btn.on { color: var(--amber); }

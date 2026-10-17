@@ -66,7 +66,7 @@ afterAll(() => vi.useRealTimers());
 beforeEach(() => {
   Registry.apply({ ...ALL, board: false }); // a fresh board: no pick or close time from the last test
   Registry.apply(ALL);
-  set({ boardPrimary: "claude", focusHoldMinutes: 1 });
+  set({ boardPrimary: "claude", compactHideInterval: 60 });
   for (const [id, label] of [["claude", "Claude"], ["alpha", "Alpha"], ["vercel", "Vercel"]]) probe[id]!.pills.set({ id: `${id}-pill`, label, color: "#88aaff", mood: "idle" }); // nothing leaks between tests
   probe.vercel!.pills.focus("vercel-pill"); // not the default: the default has to be applied
   fold();
@@ -123,8 +123,8 @@ describe("board primary", () => {
     expect(front()).toBe("vercel-pill");
   });
 
-  it("0 minutes: back to the default at once", () => {
-    set({ focusHoldMinutes: 0 });
+  it("a tiny focus time: back to the default at once", () => {
+    set({ compactHideInterval: 0.001 });
     reopen();
     clickPill("Vercel");
     fold();
@@ -192,8 +192,8 @@ describe("board primary: a folded island reverts the pick", () => {
     expect(State.mode).not.toBe("expanded");
   });
 
-  it("0 minutes reverts at the fold", () => {
-    set({ focusHoldMinutes: 0 });
+  it("a tiny focus time reverts at the fold", () => {
+    set({ compactHideInterval: 0.001 });
     reopen();
     clickPill("Vercel");
     fold();
