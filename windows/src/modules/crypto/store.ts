@@ -1,7 +1,7 @@
 // The module's caches (memory only): prices ~60 s, portfolio ~2 min. Nothing fetches on its own: the view calls load()
 // while on screen, and the pinned line calls loadPrices() from its one interval. A reply that a newer request of the
 // same kind superseded is dropped.
-import { fiatOf, FOLIO_MS, isFresh, parseCoins, PRICE_MS } from "./logic";
+import { fiatOf, folioShape, FOLIO_MS, isFresh, parseCoins, PRICE_MS } from "./logic";
 import type { Cached, CryptoCfg, Fiat, Portfolio, Price } from "./logic";
 
 export const priceKey = (coins: readonly string[], fiat: Fiat) => `${coins.join(",")}|${fiat}`;
@@ -21,6 +21,9 @@ export class CryptoStore {
   folio: Cached<Portfolio> | null = null;
   pendingPrices: string | null = null;
   pendingFolio: string | null = null;
+  /** First reading of this session, for the change shown: per "COIN|FIAT", and the total for one folioShape. */
+  basePrice = new Map<string, { v: number; at: number }>();
+  baseTotal: { shape: string; v: number; at: number } | null = null;
   /** Set by the module: a reply landed. */
   onChange: () => void = () => {};
   private seqP = 0;
@@ -38,6 +41,10 @@ export class CryptoStore {
       if (seq !== this.seqP) return;
       this.prices = { key, at: Date.now(), ...r };
       this.pendingPrices = null;
+      for (const p of r.data ?? []) {
+        const k = `${p.coin}|${fiat}`;
+        if (p.price != null && !this.basePrice.has(k)) this.basePrice.set(k, { v: p.price, at: this.prices.at });
+      }
       this.onChange();
     });
   }
@@ -50,6 +57,8 @@ export class CryptoStore {
       if (seq !== this.seqF) return;
       this.folio = { key: fiat, at: Date.now(), ...r };
       this.pendingFolio = null;
+      const shape = r.data && folioShape(fiat, r.data);
+      if (r.data && shape !== this.baseTotal?.shape) this.baseTotal = { shape: shape as string, v: r.data.total, at: this.folio.at };
       this.onChange();
     });
   }
@@ -58,6 +67,8 @@ export class CryptoStore {
   reset(): void {
     this.prices = this.folio = null;
     this.pendingPrices = this.pendingFolio = null;
+    this.basePrice.clear();
+    this.baseTotal = null;
     this.seqP++;
     this.seqF++;
   }
