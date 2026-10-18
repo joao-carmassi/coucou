@@ -100,7 +100,6 @@ fn save_settings(app: AppHandle, shared: State<Shared>, host: State<ModuleHost>,
     }
     // After the Shared lock is released: a module's start may need it.
     host.sync(&app, &settings);
-    core::companion::sync(&app, &settings);
     set_palette_hotkey(&app, &settings);
     // Keep the other window in step (island ⇄ settings window).
     let _ = app.emit("settings-changed", settings);
@@ -241,7 +240,7 @@ fn log_line(message: String) {
 /// click-through island occluded at launch and marks the page hidden. Timers and
 /// sounds keep running but requestAnimationFrame stops, so the island never
 /// grows and never pushes its rect — heard, not seen, not clickable.
-pub(crate) const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion --autoplay-policy=no-user-gesture-required";
+const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion --autoplay-policy=no-user-gesture-required";
 
 /// In a dev build the pages are served by Vite, so the second window needs the
 /// absolute dev URL; a bundled build resolves it inside the app bundle.
@@ -371,9 +370,6 @@ pub fn run() {
         crate::core::inbox::inbox_ingest,
         crate::core::presence::presence_now,
         crate::core::presence::presence_watch,
-        crate::core::companion::companion_visible,
-        crate::core::companion::companion_moved,
-        crate::core::companion::companion_click,
     ]);
     let mods = modules::handlers();
 
@@ -433,7 +429,6 @@ pub fn run() {
 
             log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
             handle.state::<ModuleHost>().sync(&handle, &loaded);
-            core::companion::sync(&handle, &loaded);
             set_palette_hotkey(&handle, &loaded);
             Ok(())
         })

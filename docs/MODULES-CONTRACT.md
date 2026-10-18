@@ -692,20 +692,3 @@ Prices of chosen coins; portfolio value from Coinbase and OKX through READ-ONLY 
 ## TLS roots (reqwest, all modules)
 
 - reqwest uses `rustls-tls-native-roots`: the app now trusts every CA installed in the Windows certificate store, including ones added by antivirus or corporate proxies (TLS inspection). Pinned downloads still check size + SHA-256, and secrets-bearing calls keep their host allowlists.
-
-## Companion (core feature F59, default off, Rust prefix `companion_`, no module id)
-
-Mochi in a floating 180x180 window of his own. Core, not a module: no module API, no manifest. Modules keep publishing to the avatar as before; the island mirrors it.
-
-- **S0 verdict**: a window built at runtime works (branch `feat/spike-window`, a7ab6dd), so there is no restart and no boot-time window.
-- **Settings** (core keys, read in core): `companionEnabled` (false), `companionPos` (`{x, y}`, physical px; empty = bottom-right of the primary display). An old file loads with both at default.
-- **Lifecycle** (`core/companion.rs`): `companion::sync` runs at boot and on every `save_settings`. On: the window is built on the main thread, hidden, with the same `BROWSER_ARGS` as every webview, then `make_non_activating`, placed from `companionPos` through the pure `clamp(pos, size, monitors)` (a lost monitor sends it to the primary). Off: the window is `destroy()`ed (no webview left). A build queued while the setting went off builds nothing.
-- **Click-through**: a window region (`platform::set_hit_ellipse`) limits the mouse to Mochi's body, so the rest of the 180x180 is click-through at the OS level with no polling. This replaces the brief's pointermove hit-test + `set_ignore_cursor_events`, which cannot work: a click-through window gets no pointer events. Side effect: the region also clips painting, so hearts and sparks that fly past the body ellipse are cut.
-- **Visibility**: the window is built hidden. The page shows it (`companion_visible`) with the first `companion-avatar` message and hides it when the island would be hidden (presence quiet with `hideWhenBusy`, or Pause). The island keeps the presence watch (one blocked thread, no CPU) while the companion is on.
-- **Events** (generic, in the neutrality allowlist): `companion-avatar` island -> companion, `{state?, color?, emote?, level?, dance?, hidden?}`, a missing field means unchanged; sent only on change (the state message), the level at most 15 per second and only while above zero plus one closing 0; none per frame. `companion-ready` companion -> island (the page is listening: send the state again).
-- **Island**: while on, it draws no Mochi (canvas hidden), steps no engine for him, its frame loop ignores `engine.busy`/`animating` and the colour ease, so the loop does not stay alive for him. Sounds stay in the island (the companion page is muted).
-- **Frame policy** (`src/companion/policy.ts`, `frameMode`): hidden = no loop at all; tween, particle, level or drag = rAF; only a looping mood = a 100 ms tick; otherwise stopped. A new message re-arms it. The only timer is one 400 ms save after the window stops moving. `CalculateNativeWinOcclusion` is off in `BROWSER_ARGS`, so an occluded page is not throttled by Chromium: this policy is the brake.
-- **Commands** (core, no module gate): `companion_visible(visible)`, `companion_moved()` (saves the position; dropped within 80 px of the island's top centre it sets `companionEnabled=false`, emits `settings-changed` and the window is destroyed), `companion_click()` (same cue as the tray "open": the island comes back).
-- **Capability**: `companion` added to the window list, plus `core:window:allow-start-dragging` (the drag is `startDragging()`).
-- **Settings UI**: toggle "Mochi flutuante" in Geral.
-- **Not verified at runtime** (no GUI session in this build): the window region on a WebView2 transparent window (hit area and clipping), the drag + dock drop, per-monitor DPI placement, `idle-measure.ps1` with the companion on (S0 step 6 also never ran), a real mouse click through the transparent area, and the window over a full-screen game.

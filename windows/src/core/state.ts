@@ -54,8 +54,6 @@ export interface Settings {
   paletteHotkey: string;
   /** Island offset from the display centre, logical px, by display key (Rust island::monitor_key). */
   islandPlacement: Record<string, number>;
-  /** Mochi lives in a floating window of his own (Rust core/companion). */
-  companionEnabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -73,7 +71,6 @@ export const DEFAULT_SETTINGS: Settings = {
   mochiSleepMinutes: 10,
   paletteHotkey: "Ctrl+Alt+K",
   islandPlacement: {},
-  companionEnabled: false,
 };
 
 type Listener = () => void;

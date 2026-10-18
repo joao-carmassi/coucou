@@ -25,8 +25,8 @@ const root = document.getElementById("settings-root")!;
 
 /** Only the core's own fields: module keys are saved by their sections as patches, and a stale copy here must not undo them. */
 async function save() {
-  const { soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, screen, hideWhenBusy, autostart, modulesEnabled, mochiColors, mochiSleepMinutes, paletteHotkey, companionEnabled } = settings; // focusHoldMinutes (legacy) stays as the file has it
-  await Bridge.saveSettings({ soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, screen, hideWhenBusy, autostart, modulesEnabled, mochiColors, mochiSleepMinutes, paletteHotkey, companionEnabled });
+  const { soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, screen, hideWhenBusy, autostart, modulesEnabled, mochiColors, mochiSleepMinutes, paletteHotkey } = settings; // focusHoldMinutes (legacy) stays as the file has it
+  await Bridge.saveSettings({ soundEnabled, soundVolume, autoCloseInterval, compactHideInterval, screen, hideWhenBusy, autostart, modulesEnabled, mochiColors, mochiSleepMinutes, paletteHotkey });
 }
 
 // ── Reusable bits ─────────────────────────────────────────────────────────────
@@ -190,11 +190,6 @@ function generalSection(): HTMLElement {
       h("label", { text: "Dormir após" }),
       sleepMin,
       h("span", { class: "hint", text: "minutos parado (0 = nunca)" }),
-    ),
-    h("div", { class: "row" },
-      h("label", { text: "Mochi flutuante" }),
-      toggle(!!settings.companionEnabled, (v) => { settings.companionEnabled = v; void save(); }),
-      h("span", { class: "hint", text: "o Mochi sai da ilha e fica numa janelinha sua · arraste para mover · solte perto da ilha para guardá-lo de volta" }),
     ),
     colorsRows(),
     h("div", { class: "row" },

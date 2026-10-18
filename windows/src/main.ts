@@ -71,8 +71,6 @@ export async function startIsland(modules: ModuleDef[], catalog: ModuleInfo[]) {
   });
 
 
-  await onEvent<null>("companion-ready", () => island.companionReady());
-
   island.launch();
 
   // In a plain browser there is no wake strip behind the cursor: make the whole
