@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.6
+
+- Crypto: the change next to each price is now the real 24 h change (Coinbase public product stats; BRL uses the USD pair). The change since the session's first reading remains the fallback.
+- Build: the MSVC "Creating library" notice no longer shows up as a compiler warning.
+- Tests: old settings files with the removed companion keys load, and the keys are kept on save.
+- Docs: companion mentions in the wave 0 spec are marked historical, and the 0.13.0 notes were corrected.
+
 ## 0.13.5
 
 - The finished card is measured at its natural height, so the island opens in one movement instead of chasing a growing target.
