@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.5
+
+- The finished card is measured at its natural height, so the island opens in one movement instead of chasing a growing target.
+
 ## 0.13.4
 
 - The island measures the card before it starts opening, so the opening is one movement, not two.
