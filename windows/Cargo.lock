@@ -610,7 +610,7 @@ dependencies = [
 
 [[package]]
 name = "coucou"
-version = "0.13.3"
+version = "0.13.4"
 dependencies = [
  "hmac",
  "image",

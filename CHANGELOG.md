@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.4
+
+- The island measures the card before it starts opening, so the opening is one movement, not two.
+
 ## 0.13.3
 
 - The Claude finished/error card measures its height at the island's final width, so the opening is one smooth step.
