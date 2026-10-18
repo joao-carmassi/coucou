@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.3
+
+- The Claude finished/error card measures its height at the island's final width, so the opening is one smooth step.
+
 ## 0.13.2
 
 - Crypto: redesigned panel (Wallet/Prices tabs, per-source status, coin rows with colors, blurred values) and settings; change is since the session's first reading, not 24 h.
