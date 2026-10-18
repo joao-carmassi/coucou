@@ -75,6 +75,21 @@ describe("crypto module", () => {
     expect(T.host!.el.querySelector(".crypto-total.hide")).not.toBeNull();
   });
 
+  it("Carteira shows each source's state; Preços lists the coins", async () => {
+    Registry.apply({ crypto: true });
+    T.island!.open("crypto");
+    T.host!.sync();
+    await tick();
+    T.host!.sync();
+    const el = T.host!.el;
+    expect(el.querySelectorAll(".crypto-link").length).toBe(3);
+    expect(el.querySelector(".crypto-link.off")?.textContent).toContain("não conectada");
+    expect(el.querySelector(".crypto-hero")?.textContent).toContain("total em BRL");
+    (el.querySelectorAll<HTMLButtonElement>(".crypto-tabs button")[1]).click();
+    expect(el.querySelector(".crypto-tabs button.on")?.textContent).toBe("Preços");
+    expect([...el.querySelectorAll(".crypto-ccy")].map((x) => x.textContent)).toEqual(["BTC", "ETH"]);
+  });
+
   it("pinned: the line shows the prices; stop drops it", async () => {
     Registry.apply({ crypto: true });
     T.island!.open("crypto");

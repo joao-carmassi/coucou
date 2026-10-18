@@ -1,6 +1,36 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { amountText, failedText, fiatOf, isFresh, isPartial, money, parseCoins, priceLine, PRICE_MS } from "../src/modules/crypto/logic.ts";
+import {
+  amountText, changePct, changeText, failedText, fiatOf, fitHeight, folioShape, isFresh, isPartial, linkState, money, parseCoins, priceLine, PRICE_MS,
+} from "../src/modules/crypto/logic.ts";
+
+test("change this session: percent, text and direction; no base, no number", () => {
+  assert.equal(changePct(110, 100), 10);
+  assert.equal(changePct(5, null), null);
+  assert.equal(changePct(5, 0), null);
+  assert.deepEqual(changeText(1.234), { text: "+1,2%", dir: "up" });
+  assert.deepEqual(changeText(-0.44), { text: "−0,4%", dir: "down" });
+  assert.deepEqual(changeText(0.01), { text: "0,0%", dir: "flat" });
+});
+
+test("source state: off, unknown, error, empty, ok with its sum; the shape changes with a new or failed source", () => {
+  const p = { total: 30, rows: [{ ccy: "BTC", amount: 1, value: 20, source: "okx" as const }, { ccy: "ETH", amount: 1, value: 10, source: "okx" as const }], errors: ["coinbase"] };
+  assert.equal(linkState("coinbase", false, p).state, "off");
+  assert.equal(linkState("coinbase", true, p).state, "error");
+  assert.equal(linkState("okx", null, p).state, "unknown");
+  assert.equal(linkState("okx", true, null).state, "unknown");
+  assert.deepEqual(linkState("okx", true, p), { state: "ok", value: 30 });
+  assert.equal(linkState("wallet", true, p).state, "empty");
+  assert.equal(folioShape("BRL", p), folioShape("BRL", { ...p, total: 99, rows: [...p.rows].reverse() }));
+  assert.notEqual(folioShape("BRL", p), folioShape("BRL", { ...p, errors: [] }));
+});
+
+test("fitted height: a note, the rows, never above 320", () => {
+  assert.equal(fitHeight("note"), 128);
+  assert.equal(fitHeight("prices", 2), 102 + 10 + 20 + 42);
+  assert.equal(fitHeight("folio", 1), 102 + 10 + 34 + 10 + 40 + 10 + 20);
+  assert.equal(fitHeight("folio", 20), 320);
+});
 
 const nb = (s: string) => s.replace(/\s/g, " ");
 

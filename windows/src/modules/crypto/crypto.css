@@ -1,22 +1,73 @@
-/* Cripto: this module's classes, all prefixed "crypto-". Reuse kit classes; never redefine them. Nothing animates. */
-.crypto-body { padding: 12px 16px 12px 84px; gap: 8px; font: 400 11.5px var(--font); color: var(--dim); }
+/* Cripto: this module's classes, all prefixed "crypto-". Reuse kit classes; never redefine them.
+   Heights are fixed (logic.ts fitHeight adds them up); only a tab switch fades. Up is green, down is red. */
+.crypto-body { padding: 12px 16px 12px 84px; gap: 10px; font: 400 11.5px var(--font); color: var(--dim); }
+
+/* Head: title, read time, Atualizar, Carteira / Preços (the settings' .seg on a track); room on the right for the pin */
 .crypto-head { display: flex; align-items: center; gap: 10px; height: 22px; flex: none; min-width: 0; }
 .crypto-title { font: 600 12.5px var(--font); color: var(--ink); white-space: nowrap; }
+.crypto-head .crypto-foot { flex: none; }
 .crypto-head .text-link { flex: none; font-size: 10.5px; }
 .crypto-head .text-link:disabled { color: var(--dim-4); }
-.crypto-panel { display: flex; flex-direction: column; gap: 6px; flex: none; min-width: 0; }
-.crypto-k { font: 600 9.5px/11px var(--font); text-transform: uppercase; letter-spacing: 0.6px; color: var(--dim-2); margin-top: 4px; }
-.crypto-foot { font-size: 10.5px; color: var(--dim-3); white-space: nowrap; }
-.crypto-note { font-size: 10.5px; line-height: 14px; color: var(--dim-3); }
-.crypto-list { display: flex; flex-direction: column; gap: 3px; }
-.crypto-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.crypto-ccy { font-weight: 600; color: var(--ink-2); }
-.crypto-src { font-size: 10px; color: var(--dim-3); }
-.crypto-val { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
-.crypto-amt { font-size: 10.5px; color: var(--dim-3); font-variant-numeric: tabular-nums; }
-.crypto-totalrow { display: flex; align-items: baseline; gap: 8px; }
-.crypto-total { font: 600 20px var(--font); color: var(--ink); font-variant-numeric: tabular-nums; }
-.crypto-partial { font-size: 10px; color: var(--amber); }
+.crypto-tabs { flex: none; margin-left: 0; padding: 2px; gap: 2px; border-radius: 999px; background: var(--surface-track); }
+.crypto-tabs button { cursor: pointer; }
+
+.crypto-panel { display: flex; flex-direction: column; gap: 10px; flex: none; min-width: 0; }
+.crypto-k { font: 600 9.5px/11px var(--font); text-transform: uppercase; letter-spacing: 0.6px; color: var(--dim-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crypto-foot { font-size: 10.5px; line-height: 12px; color: var(--dim-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.crypto-note { height: 16px; line-height: 16px; font-size: 10.5px; color: var(--dim-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crypto-note.err { color: var(--red-text); }
+
+/* Hero: the total, its change this session, "parcial" */
+.crypto-hero { display: flex; align-items: baseline; gap: 10px; height: 34px; min-width: 0; }
+.crypto-total { font: 600 28px/34px var(--font); color: var(--ink); letter-spacing: -0.8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.crypto-hero .crypto-chg { font-size: 12px; font-weight: 600; }
+.crypto-tag { flex: none; padding: 1px 7px; border-radius: 999px; font-size: 10px; line-height: 14px; background: var(--surface-plate); color: var(--surface-text); }
+.crypto-tag.warn { background: color-mix(in srgb, var(--amber) 16%, transparent); color: var(--amber); }
+
+/* Change: green up, red down, quiet when flat or unknown */
+.crypto-chg { flex: none; font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.crypto-chg.up { color: var(--green-2); }
+.crypto-chg.down { color: var(--red-text); }
+.crypto-chg.flat, .crypto-chg.none { color: var(--dim-4); }
+
+/* Sources: Coinbase, OKX, Carteiras, each a tile with a dot and its state */
+.crypto-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; height: 40px; }
+.crypto-link {
+  display: flex; flex-direction: column; justify-content: space-between; min-width: 0;
+  padding: 5px 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.035); border: 1px solid var(--surface-edge);
+}
+.crypto-link-line { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 10.5px; line-height: 14px; }
+.crypto-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--dim-5); }
+.crypto-link-text { color: var(--dim-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.crypto-link-val { margin-left: auto; flex: none; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.crypto-link.ok .crypto-dot { background: var(--green-2); }
+.crypto-link.ok .crypto-link-text { color: var(--surface-text); }
+.crypto-link.empty .crypto-dot { background: var(--dim); }
+.crypto-link.error { border-color: color-mix(in srgb, var(--red) 35%, transparent); }
+.crypto-link.error .crypto-dot { background: var(--red); }
+.crypto-link.error .crypto-link-text { color: var(--red-text); }
+.crypto-link.off { background: transparent; border-style: dashed; }
+
+/* Rows: mark, symbol, source, amount, value (20 px, 2 between) */
+.crypto-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; height: 14px; margin-bottom: -4px; }
+.crypto-list { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.crypto-row { display: flex; align-items: center; gap: 8px; height: 20px; min-width: 0; padding: 0 6px; margin: 0 -6px; border-radius: 6px; }
+.crypto-row:hover { background: var(--surface-hover); }
+.crypto-mark {
+  flex: none; width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center;
+  font: 700 9px/1 var(--font); color: var(--c); background: var(--tint);
+}
+.crypto-ccy { flex: none; font-weight: 600; color: var(--ink-2); }
+.crypto-src { font-size: 10px; color: var(--dim-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.crypto-amt { flex: none; font-size: 10.5px; color: var(--dim-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.crypto-val { flex: none; min-width: 72px; text-align: right; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.crypto-val.none { font-weight: 400; color: var(--dim-4); }
+
 /* Hidden figures stay blurred until hover or keyboard focus, so a screen share does not show them. */
-.crypto-total.hide, .crypto-amt.hide, .crypto-val.hide { filter: blur(6px); }
-.crypto-total.hide:hover, .crypto-total.hide:focus, .crypto-list:hover .hide { filter: none; }
+.crypto-panel .hide { filter: blur(6px); }
+.crypto-hero:hover .hide, .crypto-hero:focus-within .hide, .crypto-links:hover .hide, .crypto-list:hover .hide { filter: none; }
+
+/* Tab switch: 160 ms fade-in of the new panel; one-shot CSS, paused with the rest while the island is away. */
+.crypto-panel.fade { animation: crypto-fade 160ms ease-out; }
+@keyframes crypto-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .crypto-panel.fade { animation: none; } }
