@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.2
+
+- Crypto: redesigned panel (Wallet/Prices tabs, per-source status, coin rows with colors, blurred values) and settings; change is since the session's first reading, not 24 h.
+
 ## 0.13.1
 
 - Removed the floating Mochi (companion window).
