@@ -5,7 +5,7 @@ to the **core-only** tree (tag `m3b-core-only`): there is no legacy code to adap
 ported one by one in M5 from `git show m3-ok:<path>`.
 
 Decisions: modules ON by default: `board`, `claude`, `media`, `upload`. OFF: `timer`, `voice`, and the
-seven service modules (`github`, `vercel`, `stripe`, `n8n`, `resend`, `calcom`, `notion`). `voice` and `upload` require `claude`. A disabled module has no tab, view,
+seven service modules (`github`, `vercel`, `stripe`, `n8n`, `resend`, `calcom`, `notion`). `upload` requires `claude` (`voice` stopped requiring it in 0.13, see the last section). A disabled module has no tab, view,
 pill, timer, thread, or listener. One status line: highest priority wins. Commands are NOT
 gated in M4 (a command only answers a request); `host.require(id)` exists for M5.
 Settings stay one FLAT `settings.json`; unknown keys travel in `extra`.
@@ -583,7 +583,7 @@ CPU, memory, disk, network, GPU and temperatures (no fans). Tab "Sistema".
 
 ## board W2: `actions.all`, "Último" chip; hotkey opens the home
 
-- **Core (neutral)**: `api.actions.all(): readonly ActionInfo[]` (`{key, title, owner, keyHint?}` of every action allowed now, any owner; never the `ActionDef`, so no module's `run` closure leaks). A stopped module's actions vanish from `all()`. Reader: `board` (the chip). Actions are run by `Alt+<key>` only; there is no palette, no `actions.run`, no `actions.search`.
+- **Core (neutral)**: `api.actions.all(): readonly ActionInfo[]` (`{key, title, owner, keyHint?}` of every action allowed now, any owner; never the `ActionDef`, so no module's `run` closure leaks). A stopped module's actions vanish from `all()`. Reader: `board` (the chip). Actions are run by `Alt+<key>`, and (0.13, reader: voice) by `api.actions.run(key)`; there is no palette, no `actions.search`.
 - **Board home card**: no buttons. The card is clickable as a whole when the pill's `BoardCard` has `open`, or `target: true` (then the click calls `pillOpen` for that pill). `BoardCard.back`, the flip, the `utilities` view and the "Abrir Utilidades" action are gone.
 - **"Último" chip**: in the home's right column, the title of `last.key` (memory only; cleared when that action disappears). Nothing sets `last.key` today.
 - **Hotkey** (`paletteHotkey`, Ctrl+Alt+K, setting name kept for compatibility; label "Atalho para abrir a ilha"): event `palette` opens the island expanded on `State.defaultView()` and gives it the keyboard (`island.openFromHotkey`; a waiting pinned request is brought back instead). While it is open that way: Left/Right (and Ctrl+Tab / Ctrl+Shift+Tab, always) move between tabs, Enter clicks the `.opens` card of the view, Esc folds. The keyboard flag ends when the island leaves `expanded`.
@@ -634,3 +634,61 @@ Pills, notices and (where a blocking hook exists) an approval card for Codex, Cu
 - **Approval**: Codex (`PermissionRequest`) and Cursor (`beforeShellExecution`) only, only while `agentsApprove` is on. Card `agents-approval` at request priority 95, pinned (under Claude's 100, over questions at 90). The exe answers Cursor with `{"continue":true,"permission":"ask"}` on every path without a decision (Coucou closed, no pipe, bad stdin, timeout, decline). Gemini, Copilot and OpenCode only observe. Nothing is approved without a click or the Y/N key on the card.
 - **Pills** `agent_<id>`: removed 5.2 s after a turn ends. Services provided: `agents.list` (`AgentInfo[]`), `board.card`, `board.pill`, `board.focus` for the owned pills.
 - **Idle**: off = nothing. On = one relay subscription, no thread, no timer, no file watcher. Detection runs only when the settings section opens.
+
+## github, wave 3 (F44, extends `integrations`)
+
+- **Revisões pedidas a você**: `PROFILE_QUERY` gains a root-level `reviews: search(query: "is:pr is:open archived:false user-review-requested:@me", type: ISSUE, first: 10)` (about 1 GraphQL point per scheduled refresh; no new request, command or prefix). `Snapshot` carries `reviews: ReviewAsk[]` (number, title, url, repo, author, at, draft) and `reviewsTotal`. The panel shows a "Revisões pedidas a você" block (up to 5 rows plus "+N", hidden when none) above the recent activity; a row opens the pull request sheet that `github_detail` already serves. A request newer than the last one seen gives pill news "Revisão pedida: <repo>#<n>", once; the first refresh only learns (`asked`, like `came_in`). Muted projects give no news. The seen marker is memory-only. Limit: it keys on the pull request's creation time, so a review re-requested on an old pull request is not news.
+- **CI por branch**: `PROJECT_QUERY` (on click only, cached 60 s) gains `refs(refPrefix: "refs/heads/", first: 6, orderBy: TAG_COMMIT_DATE DESC)` with each tip's `statusCheckRollup.state`. `Project.branches: BranchCi[]` (name, at, state = success | failure | pending | none). A token that refuses `statusCheckRollup` adds `"branches"` to `missing` (the one entry that is not a GitHub permission name) and the sheet says "sem permissão para CI por branch". Limit: it shows commit statuses and check runs of the branch tip, not Actions runs filtered by branch.
+- **Grade**: unchanged (it already shipped). `API_VERSION` unchanged.
+- **Idle**: unchanged; the branch list is fetched on click only.
+- **NOT verified live**: that `user-review-requested:@me` returns direct requests under advanced issue search (if it returns nothing, fall back to `review-requested:<login>` using the login of the same refresh); that a fine-grained token's refusal on private repos has the `statusCheckRollup` path `refused()` looks for; that `TAG_COMMIT_DATE` orders branches by tip date.
+
+## crypto (Cripto, order 21, default off, Rust prefix `crypto_`)
+
+Prices of chosen coins; portfolio value from Coinbase and OKX through READ-ONLY keys plus pasted public wallets (BTC, ETH native, SOL). Tab "Cripto", pinnable one-line source `price` ("Preços cripto", `BTC R$ 612.340 · ETH R$ 21.300`).
+
+- **Manifest / settings keys**: `cryptoCoins` (["BTC","ETH"], max 8), `cryptoFiat` (BRL | USD | EUR), `cryptoOkxRegion` (www | us | eea), `cryptoHideTotal` (true: total, amounts and values blurred until hover/focus). Presets: tudo, vitrine.
+- **Secrets** (`core::secrets`, owner `crypto`, own allowlist in `crypto/mod.rs`): `coinbase-name`, `coinbase-pem`, `okx-key`, `okx-secret`, `okx-pass`, `wallet1`..`wallet8` (`"btc:<addr>"`). Never in settings.json, never returned to the webview (`crypto_status` returns only booleans, `crypto_wallets` only a shortened address), never in logs or errors. Read per request, held on the stack.
+- **Read-only gate**: `crypto_connect` calls Coinbase `GET /api/v3/brokerage/key_permissions` (needs `can_view`, refuses `can_trade` or `can_transfer`, a missing field is a refusal) or OKX `GET /api/v5/account/config` (`perm` must be exactly `read_only`; comma lists with anything else are refused) BEFORE storing. A refused or unverifiable key stores nothing.
+- **Network** (`net.rs`, the only door): https, host allowlist (`api.coinbase.com`, `www|us|eea.okx.com`, `mempool.space`, `ethereum-rpc.publicnode.com`, `api.mainnet-beta.solana.com`), no redirects, no custom port, 10 s, 256 KiB cap, reqwest errors replaced by fixed pt-BR text. GET only, plus POST JSON-RPC limited to `eth_getBalance` and `getBalance`. No order, transfer or withdraw endpoint exists.
+- **Signing**: Coinbase CDP JWT ES256 (`p256`, features `ecdsa pem std`; SEC1 `EC PRIVATE KEY` PEM, `\n` escapes accepted), fresh per request, `exp = nbf + 120`, nonce from std `RandomState` + clock. OKX `base64(HMAC-SHA256(secret, ts + METHOD + path + body))` with `hmac`/`sha2` already present; base64 is hand-written (RFC 4648 vectors tested).
+- **Commands**: `crypto_prices`, `crypto_portfolio` (2-min cache, per fiat), `crypto_connect`, `crypto_status`, `crypto_wallets`, `crypto_wallet_add` are gated by `require("crypto")`. `crypto_disconnect` and `crypto_wallet_remove` work while the module is off. Prices cached 60 s in Rust (failures too). No `Module` impl: no thread, no timer.
+- **Fetch policy / idle**: off = nothing. On = nothing unless the view is open (prices + portfolio once, then cache hits, "Atualizar" forces) or the line is pinned (one `api.interval` of 60 s, `whenVisible`, plus one fetch at start).
+- **Partial totals**: a failing source or an unpriced asset marks the total "parcial". Wallet addresses are validated by charset and length only (no checksum).
+- **Not verified live**: no real Coinbase or OKX key was used. The OKX `perm` string, the Coinbase accounts / key_permissions shapes and JWT acceptance come from docs and unit tests only; mempool.space, publicnode and Solana RPC were not called. Manual checks: a View/Read key shows balances; a Trade key is refused and `cmdkey /list` shows no `crypto-*` entry.
+- **Privacy**: `docs/privacy.html` section Network.
+
+## voz, wave 3 (F42 / F38 / F41)
+
+`voice` no longer `requires` claude and is out of the Claude group (manifest end state: `voiceHotkey`, `voiceEngine`, `voiceLanguage`; Flow and assistant keys arrive with F38 / F41). Without the claude module the review card offers "Copiar" (clipboard) where it offers "Enviar" with it; `requires_follow_claude` (host.rs) and `resolvers.test.ts` use `upload` as the "requires" example now.
+
+- **F42, engine** (`voiceEngine`: `whistle` default | `whisper`; `voiceLanguage`: `auto|pt|en|es|fr|de|it`, whisper only). Rust reads both only in `modules/voice/cfg.rs` (an unknown value falls back to `whistle` / `auto`). `Voice::start/apply` copy them into the module (`voice::configure`).
+- **whisper.cpp offline** (`modules/voice/whisper.rs`): `whisper-cli.exe` from build tag `b5454` (`whisper-bin-x64.zip`, 8 928 640 bytes, sha256 `6ba69e34...6ccb`) and model `ggml-base-q5_1.bin` (59 707 625 bytes, sha256 `422f1ae4...8898`, Hugging Face revision `5359861c739e955e79d9a303bcbc70fb988958b1`). Both fetched only by `voice_download_whisper` (a click in Settings, which shows host, size and SHA-256 first): https only, redirects capped, size cap, SHA-256 while streaming, `.part` then rename, the zip extracted through `core/archive.rs` to `%LOCALAPPDATA%\Coucou\voice\whisper\bin` (the zip keeps its files under `Release/`). `voice_model_status` gains `whisperReady`. Run as a child process on a temp WAV (`-m -f -l -nt -np -t`, language through an allowlist, `min(4, cores)` threads), no window, killed on timeout or module stop; stdout is the text (`parse_stdout` drops empty lines and `[...]` / `(...)` markers). Verified on the pinned build with a short clip.
+- **Live caption: not built.** `whisper-cli` has no streaming without SDL (`whisper-stream`); the card shows the final text only.
+- **`core/archive.rs`** (neutral): `hex`, `sha256_file`, `extract_zip` (enclosed names, entry and size caps), moved unchanged from `modules/sysmon/lhm.rs`, which re-exports the two it uses. Modules never call each other.
+- **Privacy**: Settings text and `docs/privacy.html` say everything runs on the PC and the only network use is the clicked download (github.com, huggingface.co).
+- **Not verified here**: a real microphone take through whisper in pt-BR (only the CLI on a synthetic clip), the download over the app's own HTTP client.
+
+### F38 Flow (dictate into any app)
+
+- **Settings**: `voiceFlowEnabled` (default false). The low-level keyboard hook (`modules/voice/flow.rs`) exists only while `voice` is on AND this is true: `Voice::start/apply` call `flow::set`, `stop` removes it (one thread in `GetMessageW`, spawned through `ctx.spawn`).
+- **Keys**: Right Ctrl held 250 ms or more records while held; release transcribes and pastes. Double tap (two taps under 200 ms, the second pressed within 350 ms of the first release) = hands-free, the next tap ends it. Esc cancels and is swallowed only while a Flow take records. Any other key while Right Ctrl is down is a chord: abort silently. Right Ctrl is never swallowed. Cap 2 min per take. The state machine is pure (`Tap::step`).
+- **Hook rules**: reads only the key code, the injected flag and the time; ignores injected keys (our own `SendInput`); posts a small event to its own queue and returns at once; never stores or logs a key.
+- **Paste**: only if `GetForegroundWindow()` equals the window recorded at start, else the text goes to the voice card (`voice-text`) and `voice-flow {state:"moved"}`. Clipboard: previous `CF_UNICODETEXT` saved, text set together with `ExcludeClipboardContentFromMonitorProcessing`, Ctrl+V by `SendInput`, ~150 ms later the old text is restored if nothing else wrote meanwhile. `shortcut: only text is restored; a copied image or file list is lost`.
+- **Events**: `voice-flow {state: listening|transcribing|pasted|moved|error|idle, chars, message}` drives the status line ("ditando…") and the avatar meter (`voice-level`); the listener exists only while the setting is on. Flow never opens the card or takes focus (errors do show the card).
+- **Limits**: SendInput into an elevated window fails silently and cannot be detected (the Settings text says so); antivirus heuristics may flag keyboard hooks; clipboard managers that ignore the exclusion format may still see the text.
+- **Not verified here**: Flow in Notepad, Chrome, VS Code and Windows Terminal; an elevated target; Win+V history; the idle measure with Flow on (`idle-measure.ps1`, delta < 10 ms).
+
+### F41 Assistant by key
+
+- **Core (neutral, reader = voice, same release)**: `api.actions.run(key): boolean` runs an allowed action by its stamped key (a throw goes to `island.error`; false when unknown, or when the action's module is stopped or its `when` says no) and `ActionInfo.keywords` carries the action's keywords. Both are read only by voice. They replace the old "no `actions.run`" line of board W2; actions are still never run by a palette.
+- **Settings**: `voiceAssistHotkey` (default `""` = off; suggested `Ctrl+Alt+Space`) registers a second hotkey `voice-assist` ("Assistente de voz"); `voiceSpeak` (default false). Rust reads the hotkey in `cfg.rs`; `voiceSpeak` is read by the island only.
+- **Flow**: the hotkey emits `voice-assist-hotkey`; the island calls `voice_start(mode="assist")` (the card shows the take as usual); `voice-text {text, language, mode}` has `mode: "assist" | "card"`. `logic.ts` `match(text, actions)`: lowercase, no accents, drops "por favor", "ok coucou" and glue words; score = share of the spoken words found in title + keywords; runs only a best score >= 0.6 that leads the runner-up by >= 0.15 (a tie runs nothing). Match: `api.actions.run(key)` and a notice "Feito: <título>". No match: the voice card in review with the text ("Enviar" when the claude module is on, else "Copiar"). A plain take (`mode` card) never runs an action.
+- **`voiceSpeak`**: `voice_speak(text)` (gated by `require("voice")`, 200 characters at most) speaks the confirmation with SAPI `ISpVoice` and the system default voice on a `ctx.spawn` thread (COM MTA); it stops when the module stops.
+- **Not built**: wake word (user decision); spoken answers to questions (`shortcut: actions only, add a "voice.answer" service when a second module asks for it`); app launching or shell (nothing outside registered actions).
+- **Commands / events (voice)**: `voice_start(mode?)`, `voice_speak`, `voice_download_whisper`; `voice-flow`, `voice-assist-hotkey`, `voice-text.mode`.
+- **Not verified here**: a real assistant take by microphone ("próxima faixa" running the nowplaying `Alt+N` action), SAPI speech output, the hotkey registering on the user's layout.
+
+## TLS roots (reqwest, all modules)
+
+- reqwest uses `rustls-tls-native-roots`: the app now trusts every CA installed in the Windows certificate store, including ones added by antivirus or corporate proxies (TLS inspection). Pinned downloads still check size + SHA-256, and secrets-bearing calls keep their host allowlists.

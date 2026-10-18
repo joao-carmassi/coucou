@@ -1,9 +1,11 @@
 // Voice module: hotkey (Rust) -> listening (until Enter/hotkey; Esc cancels) -> transcript -> transcript inline on the voice card -> Enter launches a
-// Claude session with the text. Needs the claude module (catalog `requires`).
+// Claude session with the text. Without the claude module the card offers "Copiar" instead.
 
 import type { Disposer, IslandApi, ModuleDef } from "../../core/moduleApi";
 import { App } from "../../kit/app";
 import { VoiceBridge } from "./bridge";
+import { bindFlow, FLOW_STATUS } from "./flow";
+import { match } from "./logic";
 import { buildVoiceView, send, Voice } from "./view";
 
 const reviewing = () => Voice.phase === "review";
@@ -12,7 +14,7 @@ const STATUS: Partial<Record<string, string>> = { listening: "ouvindo…", trans
 function start(api: IslandApi): Disposer {
   // No reset here: the view is built before start() and already writes Voice.level; stop resets.
   const line = () => {
-    const text = STATUS[Voice.phase];
+    const text = STATUS[Voice.phase] ?? FLOW_STATUS[Voice.flow];
     api.status.set(text ? { priority: 40, text } : null);
   };
   // One pinned request while the card is up, in every phase (listening, transcribing, review, error). Below another
@@ -87,17 +89,35 @@ function start(api: IslandApi): Disposer {
       show();
     }),
     api.listen<number>("voice-level", (v) => {
-      if (Voice.phase !== "listening") return;
+      if (Voice.phase !== "listening" && Voice.flow !== "listening") return;
       api.avatar.level(v);
-      if (Voice.level) Voice.level.style.width = `${Math.round(v * 100)}%`;
+      if (Voice.phase === "listening" && Voice.level)Voice.level.style.width = `${Math.round(v * 100)}%`;
     }),
-    api.listen<{ text: string }>("voice-text", ({ text }) => {
+    // Assistant hotkey (off while empty): same card as a take, but the text is matched against the registered actions.
+    api.listen("voice-assist-hotkey", () => {
+      VoiceBridge.voiceStart("assist").catch((e) => { Voice.phase = "error"; Voice.note = String(e).replace(/^Error:\s*/, ""); line(); show(); });
+    }),
+    api.listen<{ text: string; mode?: string }>("voice-text", ({ text, mode }) => {
+      if (mode === "assist") {
+        // Only a registered action runs (api.actions.run); nothing else is ever launched. No match: the text waits for a click.
+        const hit = match(text, api.actions.all());
+        if (hit && api.actions.run(hit.key)) {
+          Voice.phase = "none";
+          Voice.leave();
+          const done = `Feito: ${hit.title}`;
+          api.island.notice({ text: done, key: "assist", peek: true });
+          if (api.settings<{ voiceSpeak: boolean }>().voiceSpeak === true) void VoiceBridge.voiceSpeak(done);
+          return;
+        }
+      }
       Voice.text = text;
       Voice.phase = "review";
       keys(true);
       line();
       show();
     }),
+    // Flow: only while its setting is on. A failed take shows its reason on the card.
+    bindFlow(api, { line, error: (m) => { Voice.phase = "error"; Voice.note = m; line(); show(); } }),
     // The transcript stays reachable (a close or a hover does not lose it) until Enter/Esc: its request stays in the core queue.
   ];
   return () => {

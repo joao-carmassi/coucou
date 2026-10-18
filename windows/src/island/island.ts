@@ -353,11 +353,13 @@ export class Island implements IslandHost {
 
   expand(view: IslandViewName) {
     view = this.guard(view);
+    const fresh = view !== State.view || State.mode !== "expanded"; // already open on it: the frames keep it measured
     if (view !== State.view) {
       for (const o of this.overlays) o.leaving?.(view);
       if (State.mode === "expanded") this.leave(State.view);
     }
     State.view = view;
+    if (fresh) this.presync();
     if (State.mode !== "expanded") this.setMode("expanded");
     else this.animateGeometry(false);
     this.homeCollapseAt = null;
@@ -373,13 +375,16 @@ export class Island implements IslandHost {
       this.fsm.forceHome();
       this.homeTarget = null;
       State.view = view;
+      this.presync();
       this.animateGeometry(false);
       State.notify();
       return;
     }
     const grew = viewLayout(view).height >= viewLayout(State.view).height;
-    if (view !== State.view) this.leave(State.view);
+    const changed = view !== State.view;
+    if (changed) this.leave(State.view);
     State.view = view;
+    if (changed) this.presync();
     this.animateGeometry(!grew);
     State.notify();
   }
@@ -1262,6 +1267,22 @@ export class Island implements IslandHost {
   }
 
   // ── DOM sync ────────────────────────────────────────────────────────────────
+  private syncing = false;
+
+  private syncViews() {
+    for (const [name, view] of this.views) {
+      const on = name === State.view;
+      view.el.classList.toggle("on", on);
+      if (on) view.sync();
+    }
+  }
+
+  /** Measures the destination view before the geometry target is read, so the opening is one movement. */
+  private presync() {
+    this.syncing = true; // its onResize->layoutHint would aim the springs at a half-set state
+    try { this.syncViews(); } finally { this.syncing = false; }
+  }
+
   private syncDom() {
     const expanded = State.mode === "expanded";
     const greetingActive = expanded && State.view === "greeting";
@@ -1274,11 +1295,7 @@ export class Island implements IslandHost {
     this.greetingCanvas.style.display = greetingActive ? "block" : "none";
 
     this.header.sync();
-    for (const [name, view] of this.views) {
-      const on = name === State.view;
-      view.el.classList.toggle("on", on);
-      if (on) view.sync();
-    }
+    this.syncViews();
     if (!expanded && this.kbFocus) this.hotkeyKb = false;
     const kb = expanded && (this.hotkeyKb || !!this.viewDefs.get(State.view)?.keyboard);
     if (kb !== this.kbFocus) {
@@ -1363,6 +1380,7 @@ export class Island implements IslandHost {
   }
 
   layoutHint() {
+    if (this.syncing) return;
     this.animateGeometry(false);
   }
 

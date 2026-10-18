@@ -23,7 +23,7 @@ serde_json = { version = "1", features = ["preserve_order"] }
 tokio = { version = "1", features = ["net", "io-util", "sync", "time"] }
 png = "0.17"
 sha2 = "0.10"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots"] }
 keyring = { version = "3", features = ["windows-native"] }
 
 windows = { version = "0.61", features = [
@@ -64,6 +64,8 @@ toml_edit = "0.22"
 # sysmon: extracts the pinned LibreHardwareMonitor zip (enclosed_name blocks path traversal).
 zip = { version = "2", default-features = false, features = ["deflate"] }
 hmac = "0.12"
+# crypto: Coinbase CDP JWT (ES256). Signing only; no other curve.
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "pem", "std"] }
 # `#[implement]` (drop_target.rs) expands to paths in windows-core.
 windows-core = "0.61"
 # Same version wry resolves; ICoreWebView2_19 (memory target) for the hidden settings webview.

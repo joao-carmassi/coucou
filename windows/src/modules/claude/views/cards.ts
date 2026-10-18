@@ -4,7 +4,7 @@
 import { h, svg, clear, dot, replay } from "../../../kit/dom";
 import { card, view } from "../../../kit/card";
 import { tile } from "../../../kit/tile";
-import type { ViewContext, ViewHost } from "../../../core/moduleApi";
+import { EXPANDED_W, type ViewContext, type ViewHost } from "../../../core/moduleApi";
 import { App } from "../../../kit/app";
 import { ClaudeBridge } from "../bridge";
 import type { Pill } from "../../../core/state";
@@ -14,7 +14,7 @@ import { askPill } from "../../../kit/ask";
 import type { BoardCardOf, BoardNewsOf } from "../../board/api";
 import { ICONS } from "../icons";
 import { COLOR } from "../../../kit/palette";
-import { CARD_AIR_MIN, fittedHeight } from "../fit";
+import { CARD_AIR_MIN, atFinalWidth, fittedHeight } from "../fit";
 import { CLAUDE_ID, TURN_DONE, modeName, shortModel, turnSteps, type ClaudeSession, type SessionStep } from "../types";
 import { paneCodeLead } from "../../../kit/panel";
 import { diffBlock, diffHunk, diffLine, fileKind, plusMinus, readPatch } from "../../../kit/code";
@@ -206,7 +206,8 @@ export function stack(padLeft: number, padRight: number, ...children: Node[]): H
 function airy(lines: HTMLElement, onResize: () => void): { fit(): void; readonly height: number | undefined } {
   let height: number | undefined;
   const fit = () => {
-    const parts = [...lines.children].map((child) => (child as HTMLElement).offsetHeight).filter((h) => h > 0);
+    // Measured at the width the island ends up with, so the opening is one step.
+    const parts = atFinalWidth(lines, EXPANDED_W, () => [...lines.children].map((child) => (child as HTMLElement).offsetHeight).filter((h) => h > 0));
     const gap = parseFloat(getComputedStyle(lines).rowGap) || 0;
     const content = parts.reduce((sum, part) => sum + part, 0) + gap * Math.max(0, parts.length - 1);
     // Not on screen yet: nothing to measure, the layout's own height stands.
@@ -521,11 +522,11 @@ function buildQuestion(c: Claude, ctx: ViewContext): ViewHost {
   /** Asks the island for the room the card's content takes, no more. */
   function fit() {
     // The card's lines, and the gap the stack leaves between each two of them.
-    const parts = [who.offsetHeight, title.offsetHeight, row.scrollHeight, foot.offsetHeight];
+    const parts = atFinalWidth(lines, EXPANDED_W, () => [who.offsetHeight, title.offsetHeight, row.scrollHeight, foot.offsetHeight]);
     const gap = parseFloat(getComputedStyle(lines).rowGap) || 0;
     const content = parts.reduce((sum, part) => sum + part, 0) + gap * (parts.length - 1);
     // Not on screen yet: nothing to measure, the layout's own height stands.
-    const next = who.offsetHeight > 0 ? fittedHeight(content) : undefined;
+    const next = parts[0] > 0 ? fittedHeight(content) : undefined;
     if (next === height) return;
     height = next;
     onResize();

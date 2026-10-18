@@ -1,0 +1,13 @@
+{
+  "id": "crypto",
+  "label": "Cripto",
+  "default": false,
+  "order": 21,
+  "presets": ["tudo", "vitrine"],
+  "settingsDefaults": {
+    "cryptoCoins": ["BTC", "ETH"],
+    "cryptoFiat": "BRL",
+    "cryptoOkxRegion": "www",
+    "cryptoHideTotal": true
+  }
+}

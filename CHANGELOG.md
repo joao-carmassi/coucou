@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.13.5
+
+- The finished card is measured at its natural height, so the island opens in one movement instead of chasing a growing target.
+
+## 0.13.4
+
+- The island measures the card before it starts opening, so the opening is one movement, not two.
+
+## 0.13.3
+
+- The Claude finished/error card measures its height at the island's final width, so the opening is one smooth step.
+
+## 0.13.2
+
+- Crypto: redesigned panel (Wallet/Prices tabs, per-source status, coin rows with colors, blurred values) and settings; change is since the session's first reading, not 24 h.
+
+## 0.13.1
+
+- Removed the floating Mochi (companion window).
+
+## 0.13.0
+
+- Voice: offline dictation with whisper (opt-in, nothing is downloaded until enabled), Flow on the right Ctrl key, and a per-key voice assistant.
+- GitHub: requested reviews are listed, and CI status is shown per branch.
+- Crypto: read-only Coinbase and OKX accounts, plus wallets.
+- Network: TLS now uses the Windows certificate roots (works behind corporate and antivirus proxies).
+- Fix: idle measurement (idle-measure) no longer reports wrong idle time.
+
 ## 0.12.5
 
 - Claude finished card: the answer sits in an inset panel with its own background (code blocks stand out) and the card grows to fit it (up to the panel limit, then the panel scrolls).

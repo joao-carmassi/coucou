@@ -49,6 +49,14 @@ Installed build, taken 2026-10-13 with Claude Code hook traffic active (~1 event
 
 Hook events legitimately wake the UI.
 
+2026-10-17, v0.12.5, thread-level sampling (main thread tid, 5 s steps, window height logged): while the island is
+VISIBLE compact the main thread (tao event loop) costs 10-25 ms/s (600-1500 ms / 60 s) and the GPU process 5-20 %;
+once the window collapses to the 6 px wake strip it costs 0 ms for 35+ s. The island collapses `compactHideInterval`
+(60 s) after the last event, and a running Claude session keeps it up for minutes. The "700-800 ms / 60 s" that
+`idle-measure.ps1` kept reporting was the visible compact island sampled 10 s after an event, not a hidden-state
+cost: there is no hidden-state leak. `-Hidden` now waits (`-HiddenWait`, default 180 s) for the wake strip before
+sampling and exits 2 if it never appears.
+
 Taken 2026-10-14 on installed v0.2.0, 60 s window after a 10 s warmup, default module set unless noted,
 app restarted per run, `compactHideInterval` 3 (hidden) or 0 (never hide, visible compact). Other Claude Code
 sessions were running on the machine, so hook events leak into some runs; those are listed, not discarded.
