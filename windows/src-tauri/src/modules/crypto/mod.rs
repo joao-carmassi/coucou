@@ -54,6 +54,8 @@ fn clear(key: &str) {
 pub struct Price {
     pub coin: String,
     pub price: Option<f64>,
+    /// 24 h change in percent (Coinbase product stats); None when the source has no such pair.
+    pub change24h: Option<f64>,
     pub error: Option<String>,
 }
 
@@ -88,6 +90,7 @@ pub struct Status {
 
 type PriceCache = HashMap<String, (Instant, Result<f64, String>)>;
 static PRICES: LazyLock<Mutex<PriceCache>> = LazyLock::new(Default::default);
+static CHANGES: LazyLock<Mutex<HashMap<String, (Instant, Option<f64>)>>> = LazyLock::new(Default::default);
 static FOLIO: LazyLock<Mutex<Option<(String, Instant, Portfolio)>>> = LazyLock::new(Default::default);
 
 fn forget_portfolio() {
@@ -134,6 +137,43 @@ fn parse_spot(v: &serde_json::Value) -> Result<f64, String> {
     v["data"]["amount"].as_str().and_then(|s| s.parse::<f64>().ok()).filter(|p| p.is_finite() && *p >= 0.0).ok_or_else(|| "preço indisponível".to_string())
 }
 
+fn parse_change(v: &serde_json::Value) -> Option<f64> {
+    v["price_percentage_change_24h"].as_str().and_then(|s| s.parse::<f64>().ok()).filter(|p| p.is_finite())
+}
+
+/// 24 h change of `coin` in percent, cached 60 s (misses too). The public product endpoint has no BRL pairs, so BRL
+/// falls back to the USD pair (the coin's own move; the BRL/USD move is ignored). None when neither pair exists.
+async fn change24h(coin: &str, fiat: &str) -> Option<f64> {
+    if coin == fiat {
+        return None;
+    }
+    let key = format!("{coin}-{fiat}");
+    if let Some((at, r)) = CHANGES.lock().ok().and_then(|c| c.get(&key).cloned()) {
+        if at.elapsed() < PRICE_TTL {
+            return r;
+        }
+    }
+    let mut r = None;
+    for f in [fiat, "USD"] {
+        let pair = format!("{coin}-{f}");
+        let Ok(u) = net::url("api.coinbase.com", &format!("/api/v3/brokerage/market/products/{pair}"), &[]) else { break };
+        if let Ok(v) = net::get(u, &[]).await {
+            r = parse_change(&v);
+            break;
+        }
+        if f == "USD" {
+            break;
+        }
+    }
+    if let Ok(mut c) = CHANGES.lock() {
+        if c.len() > 200 {
+            c.clear();
+        }
+        c.insert(key, (Instant::now(), r));
+    }
+    r
+}
+
 #[tauri::command]
 pub async fn crypto_prices(host: State<'_, ModuleHost>, coins: Vec<String>, fiat: String) -> Result<Vec<Price>, String> {
     host.require("crypto")?;
@@ -145,8 +185,8 @@ pub async fn crypto_prices(host: State<'_, ModuleHost>, coins: Vec<String>, fiat
             return Err(format!("moeda inválida: {c}"));
         }
         match price(c, &fiat).await {
-            Ok(p) => out.push(Price { coin: c.clone(), price: Some(p), error: None }),
-            Err(e) => out.push(Price { coin: c.clone(), price: None, error: Some(e) }),
+            Ok(p) => out.push(Price { coin: c.clone(), price: Some(p), change24h: change24h(c, &fiat).await, error: None }),
+            Err(e) => out.push(Price { coin: c.clone(), price: None, change24h: None, error: Some(e) }),
         }
     }
     Ok(out)
@@ -359,6 +399,13 @@ mod tests {
         assert!(parse_spot(&json!({"data": {"amount": "x"}})).is_err());
         assert!(parse_spot(&json!({"data": {"amount": "-1"}})).is_err());
         assert!(parse_spot(&json!({})).is_err());
+    }
+
+    #[test]
+    fn change_parser() {
+        assert_eq!(parse_change(&json!({"price": "1", "price_percentage_change_24h": "-0.41705239770413"})), Some(-0.41705239770413));
+        assert_eq!(parse_change(&json!({"price_percentage_change_24h": "x"})), None);
+        assert_eq!(parse_change(&json!({"error": "NOT_FOUND"})), None);
     }
 
     #[test]
