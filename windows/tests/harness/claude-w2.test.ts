@@ -94,6 +94,31 @@ describe("finished card", () => {
     }
   });
 
+  it("opening: height measured at natural size, so it does not follow the island up", () => {
+    let island = 0;
+    const desc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight");
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (!this.classList.contains("fin-md")) return 20;
+        const natural = 16 + (this.textContent ?? "").length;
+        const lines = this.parentElement as HTMLElement;
+        return lines.style.height === "auto" ? Math.min(150, natural) : Math.min(150, Math.max(18, island - 100));
+      },
+    });
+    try {
+      cl().store.sessions[0].answer = "linha longa. ".repeat(40);
+      cl().store.present();
+      const seen: (number | undefined)[] = [];
+      const host = CARDS.buildFinished(cl(), { onResize: () => seen.push(host.height) } as never);
+      host.sync();
+      for (island of [160, 200, 250]) host.sync();
+      expect(seen).toHaveLength(1);
+    } finally {
+      if (desc) Object.defineProperty(HTMLElement.prototype, "offsetHeight", desc);
+    }
+  });
+
   it("no answer: the old title line, no body", () => {
     cl().store.session.answer = null;
     cl().store.session.lines = ["Rodou testes"];
