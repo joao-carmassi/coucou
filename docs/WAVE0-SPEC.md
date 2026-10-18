@@ -1,5 +1,7 @@
 # Wave 0 core additions (0.9.0): A1 A2 A3 A6 A7 A10 A11
 
+> Note: the companion window (F59, section A7 below, `companionEnabled`) was removed in 0.13.1. Its mentions here are historical.
+
 Spec written by the Opus advisor (task O0). Implementers read this file; deviations must be reported. Final text will be folded into `MODULES-CONTRACT.md`.
 
 ## Binding rules
