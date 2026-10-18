@@ -201,14 +201,14 @@ describe("weather module", () => {
         notice = vi.spyOn(T.island!, "addNotice");
         T.island!.hide();
         await vi.advanceTimersByTimeAsync(MIN15);
-        expect(T.forecasts).toBe(1); // no cache: fetched first
+        expect(T.forecasts).toBe(1); // the opened view measured itself at setup, which fetched
         expect(armed()).toBe(2); // re-armed
         expect(peeks()).toBe(1); // peeked even though it was hidden
         expect(notice!.mock.calls.find((c) => c[1].key === "weather-glance")![1].text).toMatch(/23°C/);
         await vi.advanceTimersByTimeAsync(MIN15);
-        expect(T.forecasts).toBe(1); // cache younger than 30 min: no fetch
+        expect(T.forecasts).toBe(2); // 30 min old: stale
         await vi.advanceTimersByTimeAsync(MIN15);
-        expect(T.forecasts).toBe(2); // 45 min old: stale
+        expect(T.forecasts).toBe(2); // cache younger than 30 min: no fetch
         expect(armed()).toBe(4);
       });
     });
