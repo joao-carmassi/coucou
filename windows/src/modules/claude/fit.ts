@@ -27,15 +27,19 @@ export function finalWidth(islandW: number, linesW: number, expanded: number): n
   return next > linesW + 1 ? next : undefined;
 }
 
-/** Runs `measure` with `lines` at its final width, restored at once: no paint sees it. */
+/**
+ * Runs `measure` with `lines` at its final width and natural height, restored at once: no paint sees it.
+ * Natural height: a shrinkable child (.fin-md) would otherwise follow the island's current height, and the target would chase it.
+ */
 export function atFinalWidth<T>(lines: HTMLElement, expanded: number, measure: () => T): T {
   const isl = document.getElementById("island");
   const w = isl ? finalWidth(isl.offsetWidth, lines.offsetWidth, expanded) : undefined;
-  if (w === undefined) return measure();
-  lines.style.width = w + "px";
+  if (w !== undefined) lines.style.width = w + "px";
+  lines.style.height = "auto";
   try {
     return measure();
   } finally {
-    lines.style.width = "";
+    if (w !== undefined) lines.style.width = "";
+    lines.style.height = "";
   }
 }
