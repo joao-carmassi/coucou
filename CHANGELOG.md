@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.6
+
+- Crypto: the change next to each price is now the real 24 h change (Coinbase public product stats; BRL uses the USD pair). The change since the session's first reading remains the fallback.
+- Build: the MSVC "Creating library" notice no longer shows up as a compiler warning.
+- Tests: old settings files with the removed companion keys load, and the keys are kept on save.
+- Docs: companion mentions in the wave 0 spec are marked historical, and the 0.13.0 notes were corrected.
+
 ## 0.13.5
 
 - The finished card is measured at its natural height, so the island opens in one movement instead of chasing a growing target.
@@ -22,9 +29,10 @@
 
 ## 0.13.0
 
-- Voice: offline dictation with whisper (opt-in, nothing is downloaded until enabled), Flow on the right Ctrl key, and a per-key voice assistant.
+- Voice: offline dictation with whisper (opt-in, nothing is downloaded until you click Download in Settings), Flow on the right Ctrl key, and a per-key voice assistant.
 - GitHub: requested reviews are listed, and CI status is shown per branch.
-- Crypto: read-only Coinbase and OKX accounts, plus wallets.
+- Crypto: prices, read-only Coinbase and OKX accounts, plus public wallets.
+- Companion: Mochi could float on the desktop in a window of his own (removed again in 0.13.1).
 - Network: TLS now uses the Windows certificate roots (works behind corporate and antivirus proxies).
 - Fix: idle measurement (idle-measure) no longer reports wrong idle time.
 

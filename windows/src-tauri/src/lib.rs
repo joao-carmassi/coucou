@@ -1,4 +1,6 @@
 // Coucou for Windows — app wiring and the commands the island calls.
+// The cdylib/staticlib targets make MSVC print "Creating library ..." (localized), which rustc reports as a warning.
+#![allow(linker_messages)]
 
 mod core;
 mod modules;

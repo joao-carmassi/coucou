@@ -215,6 +215,16 @@ mod tests {
     }
 
     #[test]
+    fn removed_companion_keys_load_and_survive_a_save() {
+        let old: Settings = serde_json::from_str(r#"{"soundVolume":0.3,"companionEnabled":true,"companionPos":{"x":10,"y":20}}"#).unwrap();
+        let merged = merge_patch(&old, serde_json::from_str(r#"{"soundVolume":0.5}"#).unwrap()).unwrap();
+        let v = serde_json::to_value(for_disk(&merged, None)).unwrap();
+        assert_eq!(v["soundVolume"], 0.5);
+        assert_eq!(v["companionEnabled"], true, "unknown key kept");
+        assert_eq!(v["companionPos"]["y"], 20);
+    }
+
+    #[test]
     fn atomic_write_keeps_last_and_no_tmp() {
         let dir = std::env::temp_dir().join(format!("coucou-atomic-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
