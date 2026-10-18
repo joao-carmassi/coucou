@@ -22,9 +22,10 @@
 
 ## 0.13.0
 
-- Voice: offline dictation with whisper (opt-in, nothing is downloaded until enabled), Flow on the right Ctrl key, and a per-key voice assistant.
+- Voice: offline dictation with whisper (opt-in, nothing is downloaded until you click Download in Settings), Flow on the right Ctrl key, and a per-key voice assistant.
 - GitHub: requested reviews are listed, and CI status is shown per branch.
-- Crypto: read-only Coinbase and OKX accounts, plus wallets.
+- Crypto: prices, read-only Coinbase and OKX accounts, plus public wallets.
+- Companion: Mochi could float on the desktop in a window of his own (removed again in 0.13.1).
 - Network: TLS now uses the Windows certificate roots (works behind corporate and antivirus proxies).
 - Fix: idle measurement (idle-measure) no longer reports wrong idle time.
 
