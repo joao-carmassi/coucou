@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  amountText, changePct, changeText, failedText, fiatOf, fitHeight, folioShape, isFresh, isPartial, linkState, money, parseCoins, priceLine, PRICE_MS,
+  amountText, changePct, coinChange, changeText, failedText, fiatOf, fitHeight, folioShape, isFresh, isPartial, linkState, money, parseCoins, priceLine, PRICE_MS,
 } from "../src/modules/crypto/logic.ts";
 
 test("change this session: percent, text and direction; no base, no number", () => {
@@ -11,6 +11,13 @@ test("change this session: percent, text and direction; no base, no number", () 
   assert.deepEqual(changeText(1.234), { text: "+1,2%", dir: "up" });
   assert.deepEqual(changeText(-0.44), { text: "−0,4%", dir: "down" });
   assert.deepEqual(changeText(0.01), { text: "0,0%", dir: "flat" });
+});
+
+test("coin change: the 24 h value wins, else the session base, else none", () => {
+  assert.deepEqual(coinChange({ price: 110, change24h: -2.5 }, 100), { pct: -2.5, is24h: true });
+  assert.deepEqual(coinChange({ price: 110, change24h: 0 }, 100), { pct: 0, is24h: true });
+  assert.deepEqual(coinChange({ price: 110, change24h: null }, 100), { pct: 10, is24h: false });
+  assert.deepEqual(coinChange({ price: 110 }, undefined), { pct: null, is24h: false });
 });
 
 test("source state: off, unknown, error, empty, ok with its sum; the shape changes with a new or failed source", () => {

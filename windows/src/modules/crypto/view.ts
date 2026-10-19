@@ -10,7 +10,7 @@ import { COLOR, wear } from "../../kit/palette";
 import type { ViewContext, ViewHost } from "../../core/moduleApi";
 import { cryptoBridge } from "./bridge";
 import {
-  amountText, changePct, changeText, failedText, fitHeight, isPartial, linkState, money, SOURCE_LABEL,
+  amountText, changePct, changeText, coinChange, failedText, fitHeight, isPartial, linkState, money, SOURCE_LABEL,
   type Fiat, type LinkState, type Portfolio, type Source, type Status,
 } from "./logic";
 import { cryptoCfg, priceKey, type CryptoStore } from "./store";
@@ -32,11 +32,11 @@ function mark(ccy: string): HTMLElement {
   return el;
 }
 /** "+1,2%" coloured by direction; "–" without a base. */
-function change(p: number | null, since: number | undefined, hide = false): HTMLElement {
+function change(p: number | null, since: number | undefined, hide = false, is24h = false): HTMLElement {
   const c = p == null ? null : changeText(p);
   return h("span", {
     class: `crypto-chg ${c?.dir ?? "none"}${hide ? " hide" : ""}`, text: c?.text ?? "–",
-    title: c && since ? `Variação desde ${clock(since)} (primeira leitura desta sessão)` : "Sem leitura anterior nesta sessão",
+    title: c && is24h ? "Variação nas últimas 24 h" : c && since ? `Variação desde ${clock(since)} (primeira leitura desta sessão)` : "Sem leitura anterior nesta sessão",
   });
 }
 const blur = (cls: string, hide: boolean) => (hide ? `${cls} hide` : cls);
@@ -121,16 +121,17 @@ export function buildCryptoView(ctx: ViewContext, store: CryptoStore, onSync: ()
     const p = store.prices?.key === priceKey(coins, fiat) ? store.prices : null;
     const since = Math.min(...coins.map((c) => store.basePrice.get(`${c}|${fiat}`)?.at ?? Infinity));
     const sec = h("div", { class: "crypto-sec-head" }, h("span", { class: "crypto-k", text: `Preços em ${fiat}` }),
-      h("span", { class: "crypto-foot", text: Number.isFinite(since) ? `variação desde ${clock(since)}` : "" }));
+      h("span", { class: "crypto-foot", text: p?.data?.some((x) => x.change24h != null) ? "variação em 24 h" : Number.isFinite(since) ? `variação desde ${clock(since)}` : "" }));
     if (!coins.length) return [[sec, note(`Escolha as moedas em ${SETUP}.`)], 0];
     if (!p?.data) return [[sec, note(p?.error ? `Não foi possível carregar os preços: ${p.error}.` : "Carregando os preços…", p?.error ? "err" : "")], 0];
     return [[sec, h("div", { class: "crypto-list", role: "list", "aria-label": "Preços" }, ...p.data.map((x) => {
       const base = store.basePrice.get(`${x.coin}|${fiat}`);
+      const ch = coinChange(x, base?.v);
       return h("div", { class: "crypto-row", role: "listitem", title: x.error ? `${x.coin}: ${x.error}` : undefined },
         mark(x.coin),
         h("span", { class: "crypto-ccy", text: x.coin }),
         h("span", { class: "grow" }),
-        x.price == null ? h("span", { class: "crypto-chg none", text: "sem preço" }) : change(changePct(x.price, base?.v), base?.at),
+        x.price == null ? h("span", { class: "crypto-chg none", text: "sem preço" }) : change(ch.pct, base?.at, false, ch.is24h),
         h("b", { class: x.price == null ? "crypto-val none" : "crypto-val", text: x.price == null ? "–" : money(x.price, fiat) }));
     }))], p.data.length];
   };

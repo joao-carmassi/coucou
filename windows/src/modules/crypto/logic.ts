@@ -2,7 +2,7 @@
 
 export type Fiat = "BRL" | "USD" | "EUR";
 export type Source = "coinbase" | "okx" | "wallet";
-export interface Price { coin: string; price: number | null; error: string | null }
+export interface Price { coin: string; price: number | null; change24h?: number | null; error: string | null }
 export interface Row { ccy: string; amount: number; value: number | null; source: Source }
 export interface Portfolio { total: number; rows: Row[]; errors: string[] }
 export interface Wallet { slot: number; kind: string; short: string }
@@ -53,6 +53,10 @@ export const failedText = (errors: readonly string[]): string =>
 /** Percent change from `base` to `v`; null without a usable base. */
 export const changePct = (v: number | null, base: number | null | undefined): number | null =>
   v == null || base == null || !(base > 0) ? null : ((v - base) / base) * 100;
+
+/** Percent shown for a coin: the real 24 h change when the source gave one, else the change from the session base. */
+export const coinChange = (p: Pick<Price, "price" | "change24h">, base: number | null | undefined): { pct: number | null; is24h: boolean } =>
+  p.change24h != null ? { pct: p.change24h, is24h: true } : { pct: changePct(p.price, base), is24h: false };
 
 /** "+1,2%", "−0,4%", "0,0%" and its direction (under 0.05 % is flat). */
 export function changeText(p: number): { text: string; dir: "up" | "down" | "flat" } {
