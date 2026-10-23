@@ -20,7 +20,8 @@ export function buildAsk(src: AskSource): ViewHost {
   return {
     el,
     sync() {
-      if (src.kind === shown) return;
+      // An answered card keeps its text while the island folds, instead of losing its first line.
+      if (!src.kind || src.kind === shown) return;
       shown = src.kind;
       clear(head);
       if (shown) head.append(h("b", { text: BREAKS[shown].text }));

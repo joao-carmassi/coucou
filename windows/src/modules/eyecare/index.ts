@@ -22,7 +22,14 @@ function start(api: IslandApi): Disposer {
   let alive = true;
   let checking = false; // a checkpoint is in flight: fire() re-arms by itself
   let dropAsk: Disposer | null = null; // closes the card request and its expiry
-  const closeAsk = () => { dropAsk?.(); dropAsk = null; asking = null; api.island.redraw(); };
+  const closeAsk = () => {
+    dropAsk?.();
+    dropAsk = null;
+    asking = null;
+    // No other request took the screen: fold, or the island stays open on a spent card (the mouse is on it after a click).
+    if (api.island.mode() === "expanded" && api.island.view() === VIEW) api.island.close();
+    api.island.redraw();
+  };
   // Reads the settings each time, so a change applies from the next wait on. `ms` overrides the interval (retry).
   const arm = (ms = 0) => {
     timer?.();
@@ -72,7 +79,8 @@ export const eyecareModule: ModuleDef = {
   id: "eyecare",
   views: [
     { name: "eyecare", layout: { height: PANEL_H, botX: 54, botY: null, botDiameter: 46 }, build: (ctx) => buildView(ctx) },
-    { name: VIEW, layout: { height: 160, botX: 62, botY: null, botDiameter: 56 }, build: () => buildAsk({ get kind() { return asking?.kind ?? null; }, answer: (t) => asking?.answer(t) }) },
+    // botX 54 / 46: the placement every module view uses, clear of the 84 px the card's text leaves to Mochi.
+    { name: VIEW, layout: { height: 160, botX: 54, botY: null, botDiameter: 46 }, build: () => buildAsk({ get kind() { return asking?.kind ?? null; }, answer: (t) => asking?.answer(t) }) },
   ],
   tabs: [{ view: "eyecare", title: "Pausas", icon: () => svg(ICONS.eye, 13, { stroke: 2 }), order: 100 }],
   start,

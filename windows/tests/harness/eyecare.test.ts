@@ -1,9 +1,11 @@
 // Pausas: nothing runs while off; on = one reminder timeout, no polling; a stop clears it. A reminder opens a card to confirm.
+import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { calls } from "./setup";
 import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
 import { State } from "../../src/core/state";
+import { Requests } from "../../src/core/requests";
 import { buildCatalog } from "../../src/modules/resolve";
 import { eyecareModule } from "../../src/modules/eyecare";
 import manifest from "../../src/modules/eyecare/manifest.json";
@@ -27,14 +29,19 @@ const changed = async () => { handlers.list.slice().forEach((f) => (f as (e: unk
 const tick = (ms: number) => vi.advanceTimersByTimeAsync(ms);
 const until = async (cond: () => boolean) => { for (let i = 0; i < 240 && !cond(); i++) await tick(30_000); };
 const eye = () => calls.invoke.filter((c) => c.cmd.startsWith("eyecare_")).length;
-const cardText = () => document.body.textContent ?? "";
+const onCard = () => State.mode === "expanded" && State.view === "eyecare-break";
+/** The break card's text while it is on screen (an answered card keeps its text, folded away). */
+const cardText = () => (onCard() ? document.querySelector(".eyecare-ask")?.textContent ?? "" : "");
+/** Answered, expired or paused: no request left, and the island is not left open on the spent card. */
+const gone = () => { expect(Requests.busy()).toBe(false); expect(onCard()).toBe(false); };
 const marks = (from = 0) => calls.invoke.slice(from).filter((c) => c.cmd === "eyecare_break").map((c) => (c.args as { taken: boolean }).taken);
 const press = (label: string) => (Array.from(document.querySelectorAll("button")).find((b) => b.textContent === label) as HTMLElement).click();
 
+let island: Island;
 beforeAll(async () => {
   vi.useFakeTimers();
   document.body.innerHTML = '<div id="root"></div>';
-  const island = new Island(document.getElementById("root")!);
+  island = new Island(document.getElementById("root")!);
   Registry.init(island, [eyecareModule], buildCatalog([manifest as never], true));
   island.launch();
   await tick(15_000);
@@ -58,9 +65,20 @@ describe("eyecare module", () => {
     expect(calls.invoke.filter((c) => c.cmd === "eyecare_checkpoint")).toHaveLength(1);
     expect(cardText()).toContain("Descanse os olhos");
     expect(marks()).toEqual([]);
+    island.onCursor(360, 20); // the mouse is on the island, as it is for a click
     press("Fiz a pausa");
     expect(marks()).toEqual([true]);
+    await tick(10);
+    gone();
+    island.onCursor(-10_000, -10_000);
     expect(vi.getTimerCount()).toBeGreaterThanOrEqual(1);
+  });
+
+  it("the card's text keeps clear of Mochi", () => {
+    const l = eyecareModule.views!.find((v) => v.name === "eyecare-break")!.layout;
+    const pad = Number(/\.eyecare-ask \{[^}]*padding: \d+px \d+px \d+px (\d+)px/.exec(readFileSync("src/modules/eyecare/eyecare.css", "utf8"))?.[1]);
+    // The card starts 10 px into the island; Mochi's body draws a few px wider than its diameter, more when it squashes.
+    expect(l.botX + l.botDiameter / 2 + 12).toBeLessThanOrEqual(10 + pad);
   });
 
   it("an unanswered card expires after 2 min as not taken; Agora nao is not taken either", async () => {
@@ -70,9 +88,23 @@ describe("eyecare module", () => {
     expect(cardText()).toContain("Beba");
     await tick(2 * 60_000);
     expect(marks(n)).toEqual([false]);
-    await tick(20 * 60_000);
+    gone();
+    await until(onCard); // a fixed 20 min would land after this card's own 2 min expiry
+    expect(cardText()).toContain("Beba");
     press("Agora não");
     expect(marks(n)).toEqual([false, false]);
+    await tick(10);
+    gone();
+  });
+
+  it("pause drops the card without counting the round", async () => {
+    const n = calls.invoke.length;
+    await until(onCard);
+    State.setPaused(true);
+    await tick(10);
+    expect(marks(n)).toEqual([]);
+    gone();
+    State.setPaused(false);
   });
 
   it("quiet: waits and retries every 2 min without counting or advancing the kind", async () => {
