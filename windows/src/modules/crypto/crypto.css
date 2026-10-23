@@ -65,7 +65,7 @@
 
 /* Hidden figures stay blurred until hover or keyboard focus, so a screen share does not show them. */
 .crypto-panel .hide { filter: blur(6px); }
-.crypto-hero:hover .hide, .crypto-hero:focus-within .hide, .crypto-links:hover .hide, .crypto-list:hover .hide { filter: none; }
+.crypto-panel .hide:hover, .crypto-total:hover ~ .hide, .crypto-hero:focus-within .hide { filter: none; }
 
 /* Tab switch: 160 ms fade-in of the new panel; one-shot CSS, paused with the rest while the island is away. */
 .crypto-panel.fade { animation: crypto-fade 160ms ease-out; }
