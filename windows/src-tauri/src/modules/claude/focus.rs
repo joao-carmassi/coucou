@@ -15,7 +15,7 @@ use windows::Win32::UI::Accessibility::{
 };
 use windows::Win32::Foundation::{HWND, LPARAM};
 use windows::Win32::System::Console::{
-    AttachConsole, FreeConsole, GetConsoleWindow, GetStdHandle, SetConsoleCtrlHandler, SetStdHandle,
+    AttachConsole, FreeConsole, GetConsoleTitleW, GetConsoleWindow, GetStdHandle, SetConsoleCtrlHandler, SetStdHandle,
     STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -62,20 +62,24 @@ pub fn existing_terminal(pids: &[u32], title: Option<&str>, cwd: Option<&str>) -
     // The console a process is attached to names its window exactly. Matching by
     // process id cannot: Windows Terminal hosts every window in one process, and
     // consoles Coucou launches get handed to it outside the process chain.
-    let hwnd = pids.iter().find_map(|p| console_window(*p)).or_else(|| {
+    let found = pids.iter().find_map(|p| console_window(*p)).or_else(|| {
         let windows = app_windows();
         let me = std::process::id();
         pids.iter()
             .filter(|p| **p != me)
             .find_map(|pid| windows.iter().find(|w| w.pid == *pid))
-            .map(|w| w.hwnd)
+            .map(|w| (w.hwnd, String::new()))
     });
-    let Some(hwnd) = hwnd else { return false };
+    let Some((hwnd, console_title)) = found else { return false };
     if !bring_forward(hwnd) {
         crate::core::log::line("could not bring the terminal window forward".to_string());
     }
     // Windows Terminal hosts many sessions in one window: best effort, pick this session's tab.
-    let hints = tab_hints(title, cwd);
+    // The console's own title is what the tab is called, so it is the surest hint.
+    let mut hints = tab_hints(title, cwd);
+    if !console_title.trim().is_empty() {
+        hints.insert(0, console_title.trim().to_string());
+    }
     if !hints.is_empty() && is_terminal_window(hwnd) {
         select_wt_tab(hwnd, hints);
     }
@@ -84,10 +88,11 @@ pub fn existing_terminal(pids: &[u32], title: Option<&str>, cwd: Option<&str>) -
 
 static CONSOLE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-/// The top-level window of the console `pid` is attached to, found by briefly
-/// attaching to it (a process has one console, so this is serialized). None on
-/// any failure, e.g. an elevated process.
-fn console_window(pid: u32) -> Option<HWND> {
+/// The top-level window of the console `pid` is attached to, and the console's
+/// title (a Windows Terminal tab's name), found by briefly attaching to it (a
+/// process has one console, so this is serialized). None on any failure, e.g. an
+/// elevated process.
+fn console_window(pid: u32) -> Option<(HWND, String)> {
     let _guard = CONSOLE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // Already have our own console (debug build): cannot attach to another.
@@ -101,18 +106,44 @@ fn console_window(pid: u32) -> Option<HWND> {
         let std = [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE].map(|k| (k, GetStdHandle(k).ok()));
         let found = if AttachConsole(pid).is_ok() {
             let h = GetConsoleWindow();
+            let mut title = [0u16; 512];
+            let n = (GetConsoleTitleW(&mut title) as usize).min(title.len());
             let _ = FreeConsole();
             for (k, old) in std {
                 let _ = SetStdHandle(k, old.unwrap_or_default());
             }
-            Some(h).filter(|h| !h.is_invalid())
+            Some((h, String::from_utf16_lossy(&title[..n]))).filter(|(h, _)| !h.is_invalid())
         } else {
             None
         };
         let _ = SetConsoleCtrlHandler(None, false);
-        let root = GetAncestor(found?, GA_ROOTOWNER);
-        (!root.is_invalid() && IsWindowVisible(root).as_bool()).then_some(root)
+        let (h, title) = found?;
+        let root = GetAncestor(h, GA_ROOTOWNER);
+        (!root.is_invalid() && IsWindowVisible(root).as_bool()).then_some((root, title))
     }
+}
+
+/// Every running process named `exe` (case-insensitive), e.g. the herdr clients.
+pub fn pids_named(exe: &str) -> Vec<u32> {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
+    };
+    let mut out = Vec::new();
+    unsafe {
+        let Ok(snap) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else { return out };
+        let mut entry = PROCESSENTRY32W { dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32, ..Default::default() };
+        let mut ok = Process32FirstW(snap, &mut entry).is_ok();
+        while ok {
+            let len = entry.szExeFile.iter().position(|c| *c == 0).unwrap_or(entry.szExeFile.len());
+            if String::from_utf16_lossy(&entry.szExeFile[..len]).eq_ignore_ascii_case(exe) {
+                out.push(entry.th32ProcessID);
+            }
+            ok = Process32NextW(snap, &mut entry).is_ok();
+        }
+        let _ = CloseHandle(snap);
+    }
+    out
 }
 
 fn bring_forward(hwnd: HWND) -> bool {

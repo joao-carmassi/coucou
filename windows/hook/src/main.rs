@@ -584,6 +584,10 @@ fn build(raw: &[u8], args: &Args, format: Format) -> Option<Event> {
         ("wsl_distro", "WSL_DISTRO_NAME"),
         // Which Claude account (profile) this session belongs to.
         ("config_dir", "CLAUDE_CONFIG_DIR"),
+        // Set in every herdr pane: which pane, and the socket that can focus it.
+        // shortcut: a WSL session does not see these (not in coucou-hook-wsl.sh's WSLENV) and keeps the plain focus.
+        ("herdr_pane", "HERDR_PANE_ID"),
+        ("herdr_socket", "HERDR_SOCKET_PATH"),
     ] {
         // Claude Code's own variables mean nothing to another agent.
         let claude_only = matches!(key, "session_pid" | "entrypoint" | "config_dir");
@@ -739,7 +743,7 @@ mod tests {
     /// The line without what depends on the machine running the test.
     fn stable(line: &str) -> serde_json::Value {
         let mut v: serde_json::Value = serde_json::from_str(line).unwrap();
-        for k in ["terminal_pids", "term_program", "wt_session", "term_session_id", "vscode_pid", "session_pid", "entrypoint", "wsl_distro", "config_dir"] {
+        for k in ["terminal_pids", "term_program", "wt_session", "term_session_id", "vscode_pid", "session_pid", "entrypoint", "wsl_distro", "config_dir", "herdr_pane", "herdr_socket"] {
             v.as_object_mut().unwrap().remove(k);
         }
         v

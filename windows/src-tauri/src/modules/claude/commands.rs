@@ -8,7 +8,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::core::inbox;
 use super::hooks::{HookPreview, HookStatus};
-use super::{cfg, focus, hooks, local_claude, pipe, sessions, wsl};
+use super::{cfg, focus, herdr, hooks, local_claude, pipe, sessions, wsl};
 use crate::core::host::{blocking, ModuleHost};
 use crate::core::{log, platform, settings};
 
@@ -86,8 +86,19 @@ pub fn claude_open_terminal(
     terminal_pids: Option<Vec<u32>>,
     title: Option<String>,
     cwd: Option<String>,
+    session_id: Option<String>,
+    herdr_pane: Option<String>,
+    herdr_socket: Option<String>,
 ) -> bool {
-    if focus::existing_terminal(&terminal_pids.unwrap_or_default(), title.as_deref(), cwd.as_deref()) {
+    let pids = terminal_pids.unwrap_or_default();
+    // A session in a herdr pane: its window is the herdr client's, and a new terminal would not show it.
+    let herdr = herdr_socket.filter(|s| !s.is_empty()).and_then(|s| {
+        herdr::focus(&s, herdr_pane.as_deref().unwrap_or(""), session_id.as_deref().unwrap_or(""), &pids)
+    });
+    if let Some(done) = herdr {
+        return done;
+    }
+    if focus::existing_terminal(&pids, title.as_deref(), cwd.as_deref()) {
         return true;
     }
     let path = path.filter(|p| !p.is_empty());

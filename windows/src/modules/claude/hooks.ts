@@ -36,6 +36,9 @@ export interface HookPayload {
   wsl_distro?: string;
   /** Added by coucou-hook: its ancestor processes, nearest first. */
   terminal_pids?: number[];
+  /** Added by coucou-hook inside a herdr pane: the pane id and herdr's socket ("" elsewhere). */
+  herdr_pane?: string;
+  herdr_socket?: string;
   message?: string;
   /** UserPromptSubmit carries `prompt`; `message` belongs to Notification/Stop. */
   prompt?: string;
@@ -216,6 +219,7 @@ function sessionOf(c: Claude, payload: HookPayload): ClaudeSession {
     // The distro goes with the folder: a Windows session after a WSL one clears it.
     session.wslDistro = payload.wsl_distro || null;
     session.terminalPids = Array.isArray(payload.terminal_pids) ? payload.terminal_pids : [];
+    session.herdr = payload.herdr_socket ? { pane: payload.herdr_pane ?? "", socket: payload.herdr_socket } : null;
     session.project = aliasProjectName(lastPathComponent(payload.cwd) || SESSION_UNNAMED);
   }
   session.heardAt = Date.now();

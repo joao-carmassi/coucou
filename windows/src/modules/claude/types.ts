@@ -182,6 +182,8 @@ export interface ClaudeSession {
   wslDistro: string | null;
   /** The relay's ancestor processes; one of them owns the session's window. */
   terminalPids: number[];
+  /** The herdr pane it runs in, and herdr's socket to focus it; null outside herdr. */
+  herdr: { pane: string; socket: string } | null;
   /** Subagents running now, and how many were launched in this wave. */
   agentsRunning: number;
   agentsLaunched: number;
@@ -212,7 +214,7 @@ export function newSession(id: string): ClaudeSession {
   return {
     id, profile: "", client: null, title: null, project: SESSION_UNNAMED, cwd: null, state: "idle",
     lines: [], steps: [], asked: null, answer: null, answeredAt: 0,
-    approval: null, question: null, news: null, heardAt: 0, wslDistro: null, terminalPids: [],
+    approval: null, question: null, news: null, heardAt: 0, wslDistro: null, terminalPids: [], herdr: null,
     agentsRunning: 0, agentsLaunched: 0, model: null, mode: null, effort: null,
   };
 }

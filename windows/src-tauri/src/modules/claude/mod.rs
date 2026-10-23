@@ -3,6 +3,7 @@
 pub mod cfg;
 pub mod commands;
 pub mod focus;
+pub mod herdr;
 pub mod hooks;
 pub mod local_claude;
 pub mod pipe;
