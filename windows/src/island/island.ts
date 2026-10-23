@@ -765,6 +765,8 @@ export class Island implements IslandHost {
     this.islandEl.style.width = `${w}px`;
     this.islandEl.style.height = `${hh}px`;
     this.islandEl.style.borderRadius = `0 0 ${r}px ${r}px`;
+    // The 13 px top flares (core.css) shrink to the straight part of the side, so they fold away with the island.
+    this.islandEl.style.setProperty("--flare-k", String(clamp((hh - r) / 13, 0, 1)));
     // Centred on a whole pixel of the screen. `translateX(-50%)` put the island
     // on a fraction of one for as long as its width was animating, and whatever
     // was painted then in a layer of its own — a scrolling list, say — kept

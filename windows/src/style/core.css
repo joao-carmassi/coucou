@@ -75,6 +75,33 @@ body {
   will-change: width, height, transform;
 }
 
+/* Concave flares that bridge the island's sides into the top edge of the
+   screen. Each is a 13 px wedge plus 1 px over the island (no seam at
+   fractional scales), eased with a cubic whose handles reach past a circle's.
+   --flare-k (island.ts) folds them away with the island's straight side. */
+#island::before,
+#island::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  width: 14px;
+  height: 13px;
+  background: inherit;
+  pointer-events: none;
+  transform: scale(var(--flare-k, 1));
+}
+#island::before {
+  right: calc(100% - 1px);
+  transform-origin: 100% 0;
+  clip-path: path("M0 0 C10 0 13 3 13 13 L14 13 L14 0 Z");
+}
+#island::after {
+  left: calc(100% - 1px);
+  transform-origin: 0 0;
+  clip-path: path("M14 0 C4 0 1 3 1 13 L0 13 L0 0 Z");
+}
+
 #island-clip {
   position: absolute;
   inset: 0;
