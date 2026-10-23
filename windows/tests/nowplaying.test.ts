@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { compactCard, remaining, wantTick, clampSens, clock, danceLevel, fraction, positionAt, shapeBands, trackKey, wantCapture, type Track } from "../src/modules/nowplaying/logic.ts";
+import { compactCard, fitHeight, remaining, wantTick, clampSens, clock, danceLevel, fraction, positionAt, shapeBands, trackKey, wantCapture, type Track } from "../src/modules/nowplaying/logic.ts";
 
 const T = (o: Partial<Track> = {}): Track => ({
   appId: "Spotify.exe", app: "Spotify", title: "A", artist: "B", album: "C", playing: true,
@@ -82,4 +82,10 @@ test("wantTick: only while playing and the time is on screen", () => {
   assert.equal(wantTick({ ...b, paused: true }), false);
   assert.equal(wantTick({ ...b, mode: "expanded" }), false);
   assert.equal(wantTick({ ...b, mode: "expanded", view: "nowplaying", hasLength: false }), true);
+});
+
+test("fitHeight: the player (cover row, then the controls row with or without a length), or the empty cover row alone", () => {
+  assert.equal(fitHeight(true), 208);
+  assert.equal(fitHeight(false), 164);
+  assert.ok(fitHeight(true) <= 320);
 });

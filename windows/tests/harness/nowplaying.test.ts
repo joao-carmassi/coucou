@@ -226,3 +226,33 @@ describe("track change card", () => {
     expect(State.statusLine?.text).not.toBe("Terceira");
   });
 });
+
+describe("player view", () => {
+  const q = <T extends HTMLElement = HTMLElement>(s: string) => document.querySelector<T>(s)!;
+  const fitted = () => (island as unknown as { views: Map<string, { height?: number }> }).views.get("nowplaying")?.height;
+  it("source, title (the app's name without one), controls from can*, play/pause label; one height with or without a length", async () => {
+    island.expand("nowplaying");
+    emit("nowplaying-state", { ...track(true, ""), canPrev: false });
+    await tick(100);
+    expect(q(".np-player .np-title").textContent).toBe("Spotify");
+    expect(q(".np-src").textContent).toBe("Spotify");
+    expect(q<HTMLButtonElement>('.np-btn[aria-label="Faixa anterior"]').disabled).toBe(true);
+    expect(q<HTMLButtonElement>('.np-btn[aria-label="Próxima faixa"]').disabled).toBe(false);
+    expect(q(".np-play").getAttribute("aria-label")).toBe("Pausar");
+    expect(q(".np-progress").hidden).toBe(false);
+    expect(fitted()).toBe(208);
+    emit("nowplaying-state", { ...track(false), durationMs: null, canToggle: false });
+    await tick(100);
+    expect(q(".np-progress").hidden).toBe(true); // browsers: no length
+    expect(q(".np-src").textContent).toBe("Spotify · pausado");
+    expect(q(".np-play").getAttribute("aria-label")).toBe("Tocar");
+    expect(q<HTMLButtonElement>(".np-play").disabled).toBe(true);
+    expect(q(".np-card").classList.contains("np-paused")).toBe(true);
+    expect(fitted()).toBe(208);
+    emit("nowplaying-state", null);
+    await tick(100);
+    expect(q(".np-empty").hidden).toBe(false);
+    expect(q(".np-player").hidden).toBe(true);
+    expect(fitted()).toBe(164);
+  });
+});

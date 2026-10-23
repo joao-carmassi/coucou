@@ -2,8 +2,9 @@
 
 /** What the Rust worker reports about the player (src-tauri/src/modules/nowplaying/session.rs). */
 // Fixed parts of the Tocando view (nowplaying.css), so the island fits its content without measuring: chrome 56 (as sysmon) +
-// body padding 14 + 14, cover row 56, gap 6, progress (bar 4 + 2 + times 13) 19, gap 6, controls 28. Without a known length the progress and its gap go.
-export const fitHeight = (progress: boolean): number => 56 + 28 + 56 + 6 + 28 + (progress ? 6 + 19 : 0);
+// body padding 14 + 14, cover row 80 (the empty state is that row alone), then for a track: gap 12, deck 32 (the controls,
+// and the progress beside them when the length is known: the same row, so an unknown length does not change the height).
+export const fitHeight = (player: boolean): number => 56 + 28 + 80 + (player ? 12 + 32 : 0);
 
 export interface Track {
   appId: string;
