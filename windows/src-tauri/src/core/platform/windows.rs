@@ -15,8 +15,9 @@ use ::windows::Win32::System::SystemInformation::GetLocalTime;
 use ::windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 use ::windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
 use ::windows::Win32::UI::WindowsAndMessaging::{
-    EnumChildWindows, GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindowLongPtrW, IsWindow,
-    SetForegroundWindow, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    EnumChildWindows, GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindow, GetWindowLongPtrW, IsWindow,
+    SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, GW_HWNDPREV, HWND_TOPMOST,
+    SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
 };
 
 use super::LocalTime;
@@ -231,6 +232,30 @@ pub fn make_non_activating(win: &WebviewWindow) {
         let want = ex | WS_EX_NOACTIVATE.0 as isize | WS_EX_TOOLWINDOW.0 as isize;
         SetWindowLongPtrW(hwnd, GWL_EXSTYLE, want);
     }
+}
+
+/// Puts the window back in the always-on-top band if something pushed it out (seen
+/// with games and their anti-cheat running). Returns true when it had to.
+///
+/// Neither tao nor the style bit can be trusted for this: tao's flag still says "on
+/// top", so `set_always_on_top(true)` does nothing, and its next click-through toggle
+/// writes WS_EX_TOPMOST back into the style while the window stays buried. The
+/// z-order can: every window above a topmost one is topmost too.
+pub fn keep_topmost(win: &WebviewWindow) -> bool {
+    let Some(hwnd) = hwnd_of(win) else { return false };
+    let mut above = unsafe { GetWindow(hwnd, GW_HWNDPREV) };
+    // Bounded: the z-order can change under the walk.
+    for _ in 0..1024 {
+        let Ok(h) = above else { return false };
+        if unsafe { GetWindowLongPtrW(h, GWL_EXSTYLE) } & WS_EX_TOPMOST.0 as isize == 0 {
+            // Async: the poll thread must not wait on the UI thread.
+            let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS;
+            let _ = unsafe { SetWindowPos(hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0, flags) };
+            return true;
+        }
+        above = unsafe { GetWindow(h, GW_HWNDPREV) };
+    }
+    false
 }
 
 /// The window that had the focus when the palette hotkey fired (0 = none).

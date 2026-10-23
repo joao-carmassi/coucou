@@ -367,6 +367,15 @@ pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
     // Moving across displays can rescale the window: re-assert the physical size.
     let _ = win.set_size(PhysicalSize::new(pw, ph));
     let _ = win.set_always_on_top(true);
+    ensure_on_top(&win);
+}
+
+/// Raises the island if something pushed it under other windows: otherwise it is
+/// heard but never seen, and hover and the tray cannot reach it.
+fn ensure_on_top(win: &WebviewWindow) {
+    if platform::keep_topmost(win) {
+        crate::core::log::line("island was pushed under other windows — back on top".to_string());
+    }
 }
 
 /// Position, size and scale of the monitor the island lives on. Any change here
@@ -408,6 +417,9 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
                 // is already running, so this costs one monitor query.
                 ticks = ticks.wrapping_add(1);
                 if ticks % 30 == 0 {
+                    if let Some(win) = window(&app) {
+                        ensure_on_top(&win);
+                    }
                     let now = current_screen_key(&app);
                     if now.is_some() && now != last_screen {
                         let first = last_screen.is_none();
