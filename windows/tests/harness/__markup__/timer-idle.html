@@ -1,26 +1,43 @@
 <div class="view on">
 <div class="card">
-<div class="stack timer-swap" style="padding: 4px 16px 4px 84px;">
+<div class="stack timer-body timer-idle timer-swap" style="padding: 4px 16px 4px 84px;">
+<div class="timer-head">
 <div class="title">Timer</div>
 <div class="sub">Escolha um tempo ou digite os minutos.</div>
+</div>
 <div class="actions timer-row">
-<button class="btn secondary">
-<span>5 min</span>
+<button class="btn secondary timer-preset">
+<b>5</b>
+<small> min</small>
 </button>
-<button class="btn secondary">
-<span>10 min</span>
+<button class="btn secondary timer-preset">
+<b>10</b>
+<small> min</small>
 </button>
-<button class="btn secondary">
-<span>25 min</span>
+<button class="btn secondary timer-preset">
+<b>25</b>
+<small> min</small>
 </button>
+<div class="timer-custom">
 <input class="island-field timer-min" type="number" min="1" max="600" placeholder="min" autocomplete="off">
 <button class="btn secondary">
 <span>Ok</span>
 </button>
+</div>
 <div class="grow">
 </div>
-<button class="link-btn text-link">Cronômetro</button>
-<button class="link-btn text-link">Pomodoro</button>
+<div class="timer-modes">
+<button class="link-btn text-link timer-mode">
+<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+<path d="M10 2.8h4M12 2.8v3.7M18.3 7.2l1.4-1.4M12 13.5v-3.3M12 6.5a7 7 0 1 0 0 14 7 7 0 0 0 0-14z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+</path>
+</svg>Cronômetro</button>
+<button class="link-btn text-link timer-mode">
+<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+<path d="M12 7.2V4.4M8.8 5.7 12 7.2l3.2-1.5M12 7.2a6.9 6.9 0 1 0 0 13.8 6.9 6.9 0 0 0 0-13.8z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+</path>
+</svg>Pomodoro</button>
+</div>
 </div>
 </div>
 </div>

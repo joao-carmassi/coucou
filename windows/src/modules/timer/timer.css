@@ -1,14 +1,56 @@
-/* Timer: selected preset / mode, disabled start, idle <-> running swap */
+/* Timer: this module's classes, all prefixed "timer-". The body's class names the status (timer-idle, -ready, -running,
+   -paused). Only the swap between two states fades; the progress moves by transform, once a second, while it is on show. */
+/* Global, kept from before: other island views' disabled .btn (sysmon's download button) rely on it. */
 .btn:disabled { opacity: 0.4; pointer-events: none; }
 .timer-swap { animation: timer-swap 0.2s ease-out; }
 @keyframes timer-swap { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .timer-row { align-items: center; }
-/* size comes from .island-field (ui.css): it used to win by cascade order, keep that look */
-.timer-min { text-align: center; -moz-appearance: textfield; }
+
+/* Idle: title and hint on one line; then three preset tiles, the minutes tile and the two other modes */
+.timer-idle { gap: 12px; }
+.timer-head { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.timer-head > .sub { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.btn.secondary.timer-preset {
+  flex: none; flex-direction: column; justify-content: center; gap: 0; width: 62px; height: 56px; padding: 0; border-radius: 14px;
+  background: var(--surface-tile); box-shadow: inset 0 0 0 1px var(--surface-edge); color: var(--ink);
+}
+.btn.secondary.timer-preset:hover { background: var(--surface-tile-hover); }
+.timer-preset > b { font: 600 21px/23px var(--font); font-variant-numeric: tabular-nums; letter-spacing: -0.3px; }
+.timer-preset > small { font: 500 10px/12px var(--font); color: var(--dim-3); }
+.timer-custom {
+  flex: none; display: flex; align-items: center; gap: 6px; height: 56px; padding: 0 9px; border-radius: 14px;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+}
+.island-field.timer-min {
+  flex: none; width: 58px; height: 36px; padding: 0 6px; border-radius: 10px; text-align: center;
+  font: 600 17px var(--font); font-variant-numeric: tabular-nums; -moz-appearance: textfield;
+}
+.timer-min::placeholder { font: 400 12.5px var(--font); }
 .timer-min::-webkit-inner-spin-button, .timer-min::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.timer-label { font: 400 11.5px var(--font); color: var(--dim); }
-.timer-readout { font: 600 30px/36px var(--font); font-variant-numeric: tabular-nums; letter-spacing: -0.5px; color: var(--ink); }
-.timer-progress { height: 4px; border-radius: 999px; background: var(--surface-track); overflow: hidden; margin-top: 4px; }
-.timer-progress > i { display: block; height: 100%; border-radius: inherit; background: var(--amber); transition: width 1s linear; }
-.paused .timer-readout { color: var(--dim); }
-.paused .timer-progress > i { opacity: 0.45; }
+.timer-modes { flex: none; display: flex; flex-direction: column; gap: 4px; padding-left: 12px; border-left: 1px solid var(--surface-plate); }
+.text-link.timer-mode {
+  display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px 0 8px; border-radius: 8px;
+  font: 500 12px var(--font); color: var(--surface-text); transition: background 0.12s ease-out, color 0.12s ease-out;
+}
+.text-link.timer-mode:hover { background: var(--surface-track); color: var(--ink); }
+.timer-mode > svg { flex: none; color: var(--amber); }
+
+/* Ready / running / paused: status line (its dot amber while it runs), the readout with the controls, the progress */
+.timer-body:not(.timer-idle) { gap: 3px; }
+.timer-label { display: flex; align-items: center; gap: 7px; font: 600 9.5px/12px var(--font); text-transform: uppercase; letter-spacing: 0.6px; color: var(--dim-2); }
+.timer-label::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--dim-4); }
+.timer-ready .timer-label::before { background: var(--surface-text); }
+.timer-running .timer-label::before { background: var(--amber); box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 22%, transparent); }
+.timer-readout { font: 600 46px/50px var(--font); font-variant-numeric: tabular-nums; letter-spacing: -1.5px; color: var(--ink); transition: color 0.3s ease-out; }
+.timer-ready .timer-readout { color: var(--surface-text); }
+.timer-paused .timer-readout { color: var(--dim); }
+.timer-row > .text-link { padding: 4px; }
+.timer-progress { height: 5px; margin-top: 6px; border-radius: 999px; background: var(--surface-track); overflow: hidden; }
+.timer-progress > i { display: block; height: 100%; background: var(--amber); transform-origin: left; transform: scaleX(1); transition: transform 1s linear, background 0.3s; }
+.timer-ready .timer-progress > i { background: color-mix(in srgb, var(--amber) 45%, transparent); }
+.timer-paused .timer-progress > i { background: var(--dim-4); }
+
+@media (prefers-reduced-motion: reduce) {
+  .timer-swap { animation: none; }
+  .timer-progress > i, .timer-readout, .text-link.timer-mode { transition: none; }
+}
