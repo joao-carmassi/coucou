@@ -9,7 +9,7 @@
 // (no CPU, no polling); the OS wakes it once per foreground change, which re-reads the answers
 // (well under a millisecond) and emits `presence` only when the value changed. A game often takes the
 // foreground before it fills the screen, so the island's answer is read once more RECHECK_MS later (a one-shot
-// thread timer, re-armed by each foreground change).
+// SetTimer on the hook thread, re-armed by each foreground change).
 // The island watches while it is visible (and while a notice waits) with "hide when busy" on: one blocked hook
 // thread whenever the island is visible, none when it is hidden or the setting is off.
 // A crashed app can leave LastUsedTimeStop == 0 in the registry: such a use older than 12 h is ignored
@@ -17,7 +17,7 @@
 // Not covered: Focus Assist, and a change that does not move the foreground (a call that starts in the app
 // already in front is seen at the next foreground change or the next `presence_watch(true)`).
 
-use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -334,7 +334,7 @@ fn hook_loop() {
 
 /// A game often takes the foreground first and fills the screen a moment later.
 const RECHECK_MS: u32 = 3000;
-/// The pending one-shot recheck timer of the hook thread (0 = none).
+/// The SetTimer id of the hook thread's pending recheck (0 = none).
 static RECHECK: AtomicUsize = AtomicUsize::new(0);
 
 /// Re-reads the island's answer, only while the island watches (LAST is set). Never takes WATCH: presence_watch
@@ -345,6 +345,19 @@ fn recheck() {
     }
     if let Some(app) = APP.lock().unwrap().clone() {
         emit_changed(&app);
+    }
+}
+
+/// What `poll_full_screen` saw last.
+static FULL: AtomicBool = AtomicBool::new(false);
+
+/// For the island's cursor poll (about twice a second, only while the island shows): a window that goes full
+/// screen in place — a video's full-screen button, F11 — moves no foreground. Reads the one cheap answer, and
+/// the whole presence only when it changed.
+pub fn poll_full_screen() {
+    let full = foreground_fills_monitor();
+    if FULL.swap(full, Ordering::Relaxed) != full {
+        let _ = std::panic::catch_unwind(recheck);
     }
 }
 
@@ -360,7 +373,7 @@ unsafe extern "system" fn on_event(_h: HWINEVENTHOOK, event: u32, hwnd: HWND, _o
             cb(&app, &fg);
         }
     });
-    // Runs on the hook thread (inside GetMessageW), so the timer is this thread's own.
+    // Runs on the hook thread (inside GetMessageW), so the SetTimer belongs to this thread.
     let old = RECHECK.swap(SetTimer(None, 0, RECHECK_MS, None), Ordering::SeqCst);
     if old != 0 {
         let _ = KillTimer(None, old);

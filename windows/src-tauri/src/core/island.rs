@@ -420,6 +420,7 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
                     if let Some(win) = window(&app) {
                         ensure_on_top(&win);
                     }
+                    crate::core::presence::poll_full_screen();
                     let now = current_screen_key(&app);
                     if now.is_some() && now != last_screen {
                         let first = last_screen.is_none();
