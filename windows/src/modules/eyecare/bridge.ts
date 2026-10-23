@@ -1,9 +1,11 @@
 import { command } from "../../kit/tauri";
 import { NO_BREAKS, type Breaks, type Days } from "./logic";
 
+export interface Checkpoint { idle: number; quiet: boolean }
+
 export const EyecareBridge = {
-  /** Cuts the open screen-time segment; answers the ms since the last keyboard or mouse input (null outside Tauri). */
-  checkpoint: () => command<number>("eyecare_checkpoint"),
+  /** Cuts the open screen-time segment; answers the ms since the last input and whether the user is busy (null outside Tauri). */
+  checkpoint: () => command<Checkpoint>("eyecare_checkpoint"),
   /** day -> exe -> seconds; a fresh checkpoint first. */
   usage: async (): Promise<Days> => (await command<Days>("eyecare_usage")) ?? {},
   /** Counts one reminder round of today; `taken` = the user was already away (a break). */

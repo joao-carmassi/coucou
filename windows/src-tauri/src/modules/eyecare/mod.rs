@@ -4,11 +4,11 @@
 // kept in %LOCALAPPDATA%\Coucou\eyecare.json for `eyecareKeepDays` days. Nothing leaves the machine.
 // Break rounds are two counters per local day plus the time of the last break, in eyecare-breaks.json, same retention.
 //
-// Cost: no thread and no timer of its own. The shared foreground hook (core/presence) calls `on_fg` at every
-// foreground change; the open segment is closed there. The frontend's single reminder timeout calls
-// `eyecare_checkpoint`, which cuts the open segment and removes the time the user was idle.
-// shortcut: time is credited when a segment closes; an idle stretch is only detected at a checkpoint, so with
-// reminders off one unbroken stretch in one app is credited at most SEG_CAP_SECS.
+// Idle: no input for IDLE_GRACE_MS (5 min) stops the count; a full-screen/game/call ("quiet") counts as present.
+// Cost: one module thread that wakes once a minute (a channel recv_timeout, woken at once by stop) and cuts the
+// open segment, so idle is seen close to when it happens. The shared foreground hook (core/presence) also calls
+// `on_fg` at every foreground change, and the frontend calls `eyecare_checkpoint` at each reminder.
+// A segment longer than SEG_CAP_SECS can only span a sleep/hibernate, which is therefore not credited.
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;
@@ -25,10 +25,11 @@ pub const PREFIXES: &[&str] = &["eyecare_"];
 
 const FILE: &str = "eyecare.json";
 const BREAKS_FILE: &str = "eyecare-breaks.json";
-/// Input idle time that is not counted (reading, thinking).
-const IDLE_GRACE_MS: u64 = 60_000;
-/// Most one segment may credit when no checkpoint cut it.
-const SEG_CAP_SECS: u64 = 3600;
+/// No input for this long = away: that whole stretch is not counted.
+const IDLE_GRACE_MS: u64 = 5 * 60_000;
+/// Segments are cut every CUT_EVERY_SECS, so more than this means the machine slept.
+const SEG_CAP_SECS: u64 = 180;
+const CUT_EVERY_SECS: u64 = 60;
 /// Disk writes at most this often from the foreground hook (checkpoints and stop always write).
 const WRITE_EVERY_SECS: u64 = 60;
 const DEFAULT_EXCLUDED: &[&str] = &["lockapp.exe"];
@@ -76,10 +77,10 @@ fn lock() -> std::sync::MutexGuard<'static, Option<Acc>> {
 
 // ── Pure logic ────────────────────────────────────────────────────────────────
 
-/// Seconds to credit for a segment of `elapsed_ms` when the user has been idle `idle_ms` (the idle time past the
-/// grace is taken off), capped at SEG_CAP_SECS.
+/// Seconds to credit for a segment of `elapsed_ms` when the user has been idle `idle_ms`: from the grace on, the
+/// whole idle stretch is taken off (below it, nothing); capped at SEG_CAP_SECS.
 fn credit(elapsed_ms: u64, idle_ms: u64) -> u64 {
-    let lost = idle_ms.saturating_sub(IDLE_GRACE_MS).min(elapsed_ms);
+    let lost = if idle_ms >= IDLE_GRACE_MS { idle_ms.min(elapsed_ms) } else { 0 };
     ((elapsed_ms - lost) / 1000).min(SEG_CAP_SECS)
 }
 
@@ -170,6 +171,25 @@ fn write<T: serde::Serialize>(p: &std::path::Path, v: &T) -> std::io::Result<()>
     std::fs::rename(tmp, p)
 }
 
+/// Idle ms to take off a segment: 0 while the user is "quiet" (full-screen video, game, presentation, call),
+/// who watches without touching the input.
+fn away_ms() -> u64 {
+    let idle = presence::user_idle_ms();
+    if idle >= IDLE_GRACE_MS && presence::now().quiet { 0 } else { idle }
+}
+
+/// Cuts the open segment on the current exe; flushes when `force` or the write is due.
+fn cut(force: bool) {
+    let idle = away_ms();
+    if let Some(acc) = lock().as_mut() {
+        let cur = acc.cur.as_ref().map(|c| c.0.clone());
+        acc.switch(Instant::now(), idle, cur);
+        if force || acc.written.elapsed().as_secs() >= WRITE_EVERY_SECS {
+            acc.flush();
+        }
+    }
+}
+
 fn unix_ms() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
 }
@@ -182,7 +202,7 @@ pub struct EyecareModule;
 fn on_fg(_app: &AppHandle, fg: &Foreground) {
     let mut g = lock();
     let Some(acc) = g.as_mut() else { return };
-    acc.switch(Instant::now(), presence::user_idle_ms(), Some(fg.exe.clone()));
+    acc.switch(Instant::now(), away_ms(), Some(fg.exe.clone()));
     if acc.dirty && acc.written.elapsed().as_secs() >= WRITE_EVERY_SECS {
         acc.flush();
     }
@@ -216,10 +236,20 @@ impl Module for EyecareModule {
         acc.switch(Instant::now(), 0, Some(presence::foreground_now().exe));
         *lock() = Some(acc);
         presence::on_foreground(ctx, on_fg);
+        let (wake, rx) = std::sync::mpsc::channel::<()>();
+        ctx.spawn(move |stop| {
+            // Timeout = next cut; a message or a dropped sender = stop.
+            while matches!(rx.recv_timeout(std::time::Duration::from_secs(CUT_EVERY_SECS)), Err(std::sync::mpsc::RecvTimeoutError::Timeout))
+                && !stop.load(std::sync::atomic::Ordering::Relaxed)
+            {
+                cut(false);
+            }
+        });
         // Registered after the hook's own stopper, so it runs first (stoppers run in reverse).
-        ctx.on_stop(|| {
+        ctx.on_stop(move || {
+            let _ = wake.send(());
             if let Some(mut acc) = lock().take() {
-                acc.switch(Instant::now(), presence::user_idle_ms(), None);
+                acc.switch(Instant::now(), away_ms(), None);
                 acc.dirty = true;
                 acc.flush();
             }
@@ -238,16 +268,20 @@ impl Module for EyecareModule {
     }
 }
 
-/// Cuts the open segment (idle time removed) and answers the ms since the last input.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Checkpoint {
+    /// ms since the last keyboard or mouse input.
+    idle: u64,
+    /// Full-screen app, presentation, call or quiet hours: do not interrupt.
+    quiet: bool,
+}
+
+/// Cuts the open segment (idle time removed) and answers the idle ms and whether the user is "quiet".
 #[tauri::command]
-pub fn eyecare_checkpoint() -> u64 {
-    let idle = presence::user_idle_ms();
-    if let Some(acc) = lock().as_mut() {
-        let cur = acc.cur.as_ref().map(|c| c.0.clone());
-        acc.switch(Instant::now(), idle, cur);
-        acc.flush();
-    }
-    idle
+pub fn eyecare_checkpoint() -> Checkpoint {
+    cut(true);
+    Checkpoint { idle: presence::user_idle_ms(), quiet: presence::now().quiet }
 }
 
 /// day -> exe -> seconds, after a checkpoint. Empty while the module is off.
@@ -306,9 +340,11 @@ mod tests {
 
     #[test]
     fn credit_removes_idle_past_grace_and_caps() {
-        assert_eq!(credit(600_000, 0), 600);
-        assert_eq!(credit(600_000, 30_000), 600); // within grace
-        assert_eq!(credit(600_000, 360_000), 300); // 6 min idle, 1 min grace -> 5 min lost
+        assert_eq!(credit(120_000, 0), 120);
+        assert_eq!(credit(60_000, 299_000), 60); // below the grace nothing is taken off
+        assert_eq!(credit(60_000, 300_000), 0); // 5 min idle: the segment was idle
+        assert_eq!(credit(170_000, 100_000_000), 0);
+        assert_eq!(credit(600_000, 450_000), 150); // idle for the last 450 s of 600 s
         assert_eq!(credit(600_000, 9_999_999), 0);
         assert_eq!(credit(10 * 3600 * 1000, 0), SEG_CAP_SECS);
     }

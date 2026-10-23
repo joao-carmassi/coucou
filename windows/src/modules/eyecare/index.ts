@@ -1,55 +1,79 @@
-// Pausas: break reminders (one scoped api.timeout, no polling) + a view with breaks and screen time per app.
+// Pausas: break reminders (one scoped api.timeout, no polling; a card asks for confirmation) + a view with breaks and screen time per app.
 // Screen time is counted in Rust from the shared foreground hook; this side only asks for numbers.
 import "./eyecare.css";
 import { svg } from "../../kit/dom";
 import { ICONS } from "../../kit/icons";
-import { BAND, PANEL_H, type Disposer, type IslandApi, type ModuleDef } from "../../core/moduleApi";
+import { PANEL_H, type Disposer, type IslandApi, type ModuleDef } from "../../core/moduleApi";
 import { EyecareBridge } from "./bridge";
-import { BREAKS, enabledKinds, intervalMin, pickKind, shouldNotify } from "./logic";
+import { ASK_MS, BREAKS, RETRY_MS, enabledKinds, intervalMin, pickKind, roundOf, type BreakKind } from "./logic";
+import { buildAsk } from "./ask";
 import { buildView } from "./view";
 
+const VIEW = "eyecare-break";
+
 interface Cfg { eyecareInterval: unknown; eyecareKinds: unknown }
+
+/** The reminder waiting for an answer (one at a time); the card view reads it. */
+let asking: { kind: BreakKind; answer(taken: boolean): void } | null = null;
 
 function start(api: IslandApi): Disposer {
   let timer: Disposer | null = null;
   let n = 0;
   let alive = true;
   let checking = false; // a checkpoint is in flight: fire() re-arms by itself
-  // Reads the settings each time, so a change applies from the next wait on.
-  const arm = () => {
+  let dropAsk: Disposer | null = null; // closes the card request and its expiry
+  const closeAsk = () => { dropAsk?.(); dropAsk = null; asking = null; api.island.redraw(); };
+  // Reads the settings each time, so a change applies from the next wait on. `ms` overrides the interval (retry).
+  const arm = (ms = 0) => {
     timer?.();
     timer = null;
     const min = intervalMin(api.settings<Cfg>().eyecareInterval);
-    if (alive && min) timer = api.timeout(() => void fire(), min * 60_000);
+    if (alive && min) timer = api.timeout(() => void fire(), ms || min * 60_000);
+  };
+  const ask = (kind: BreakKind) => {
+    const offReq = api.island.request({ view: VIEW, priority: 50, pin: true });
+    const answer = (taken: boolean) => { if (asking?.kind !== kind) return; void EyecareBridge.mark(taken); closeAsk(); };
+    const offTimer = api.timeout(() => answer(false), ASK_MS);
+    asking = { kind, answer };
+    dropAsk = () => { offReq(); offTimer(); };
+    api.island.redraw();
   };
   const fire = async () => {
     timer = null;
     checking = true;
     // The checkpoint also cuts the screen-time segment, so a long away stretch is not counted.
-    const idle = await EyecareBridge.checkpoint();
+    const cp = await EyecareBridge.checkpoint();
     checking = false;
     if (!alive) return;
-    if (!intervalMin(api.settings<Cfg>().eyecareInterval)) { arm(); return; } // switched off while waiting
+    const min = intervalMin(api.settings<Cfg>().eyecareInterval);
+    if (!min) { arm(); return; } // switched off while waiting
     const kind = pickKind(enabledKinds(api.settings<Cfg>().eyecareKinds), n);
-    // A round counts only when a reminder could fire; an away user (5 min+) already took that break.
-    if (kind && !api.paused()) void EyecareBridge.mark(!shouldNotify(idle));
-    if (kind && shouldNotify(idle) && !api.paused()) {
+    if (!kind || api.paused() || asking) { arm(); return; }
+    const round = roundOf(cp?.idle ?? null, cp?.quiet ?? false, min * 60_000);
+    if (round === "wait") { arm(RETRY_MS); return; } // not counted, same kind next time
+    if (round === "taken") void EyecareBridge.mark(true);
+    if (round === "ask") {
       n++;
-      const b = BREAKS[kind];
-      api.island.notice({ text: b.text, priority: BAND.NOTICE, ms: 8000, key: "break", view: "eyecare", peek: true });
-      if (!api.island.busy()) api.avatar.emote(b.emote);
+      // Before the request: busy() is true while our own card is up.
+      if (!api.island.busy()) api.avatar.emote(BREAKS[kind].emote);
+      ask(kind);
     }
     arm();
   };
   arm();
   // Re-arm on a settings change (deferred: the stored settings are replaced by a listener that runs after ours).
   const off = api.listen("settings-changed", () => void api.timeout(() => { if (alive && !checking) arm(); }, 0));
-  return () => { alive = false; timer?.(); off(); };
+  // Pause or stop: nobody can answer; the round is neither taken nor missed.
+  const offPause = api.onPause((p) => { if (p && asking) closeAsk(); });
+  return () => { alive = false; timer?.(); off(); offPause(); if (asking) closeAsk(); };
 }
 
 export const eyecareModule: ModuleDef = {
   id: "eyecare",
-  views: [{ name: "eyecare", layout: { height: PANEL_H, botX: 54, botY: null, botDiameter: 46 }, build: (ctx) => buildView(ctx) }],
+  views: [
+    { name: "eyecare", layout: { height: PANEL_H, botX: 54, botY: null, botDiameter: 46 }, build: (ctx) => buildView(ctx) },
+    { name: VIEW, layout: { height: 160, botX: 62, botY: null, botDiameter: 56 }, build: () => buildAsk({ get kind() { return asking?.kind ?? null; }, answer: (t) => asking?.answer(t) }) },
+  ],
   tabs: [{ view: "eyecare", title: "Pausas", icon: () => svg(ICONS.eye, 13, { stroke: 2 }), order: 100 }],
   start,
 };

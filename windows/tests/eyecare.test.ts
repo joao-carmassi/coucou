@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { appName, dayKey, dayTotal, enabledKinds, fmtDur, intervalMin, lastDays, parseExcluded, pickKind, shouldNotify, topApps } from "../src/modules/eyecare/logic.ts";
+import { appName, dayKey, dayTotal, enabledKinds, fmtDur, intervalMin, lastDays, parseExcluded, pickKind, roundOf, topApps } from "../src/modules/eyecare/logic.ts";
 
 test("interval: 0 is off, otherwise clamped to 5..60", () => {
   assert.deepEqual([0, -3, "x", null, 1, 20, 20.9, 999].map(intervalMin), [0, 0, 0, 0, 5, 20, 20, 60]);
@@ -13,10 +13,18 @@ test("kinds rotate over the enabled ones only", () => {
   assert.equal(pickKind(enabledKinds("bad"), 0), null);
 });
 
-test("a user idle for 5 min or more already rested: no reminder", () => {
-  assert.equal(shouldNotify(null), true);
-  assert.equal(shouldNotify(30_000), true);
-  assert.equal(shouldNotify(5 * 60_000), false);
+test("a reminder waits when busy, skips a repeated absence, counts a rest, else asks", () => {
+  const iv = 20 * 60_000;
+  assert.equal(roundOf(30_000, true, iv), "wait");
+  assert.equal(roundOf(30 * 60_000, true, iv), "wait");
+  assert.equal(roundOf(null, false, iv), "ask");
+  assert.equal(roundOf(30_000, false, iv), "ask");
+  assert.equal(roundOf(5 * 60_000, false, iv), "taken");
+  assert.equal(roundOf(iv + 5 * 60_000 - 1, false, iv), "taken"); // the last round still saw an active user
+  assert.equal(roundOf(iv + 5 * 60_000, false, iv), "skip");
+  // The shortest interval (5 min) still counts an absence once.
+  assert.equal(roundOf(5 * 60_000, false, 5 * 60_000), "taken");
+  assert.equal(roundOf(10 * 60_000, false, 5 * 60_000), "skip");
 });
 
 test("usage sums, sorts and formats", () => {

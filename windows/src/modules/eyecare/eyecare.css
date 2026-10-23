@@ -52,3 +52,10 @@
 .eyecare-panel.fade { animation: eyecare-fade 160ms ease-out; }
 @keyframes eyecare-fade { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .eyecare-panel.fade { animation: none; } }
+
+/* Break card (view eyecare-break): title, one line, two buttons */
+.eyecare-ask { display: flex; flex-direction: column; gap: 10px; padding: 14px 12px 14px 84px; font: 400 12px var(--font); color: var(--ink); }
+.eyecare-ask b { font-weight: 600; font-size: 13px; }
+.eyecare-ask span { color: var(--dim); }
+.eyecare-ask-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.eyecare-ask-actions span { color: inherit; }

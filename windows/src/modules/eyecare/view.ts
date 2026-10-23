@@ -11,7 +11,7 @@ import {
 
 type Tab = "today" | "week";
 const TOP = 5, WEEK_TOP = 4;
-const RULE = "Conta como pausa quando o lembrete encontra você longe do teclado e do mouse há 5 min ou mais.";
+const RULE = "Conta como pausa quando você confirma no lembrete (Fiz a pausa) ou já estava longe do teclado e do mouse há 5 min ou mais.";
 
 const dur = (s: number) => (s >= 60 ? fmtDur(s) : s > 0 ? "< 1 min" : "0 min");
 const pct = (v: number, max: number) => (max > 0 ? Math.min(100, Math.round((v / max) * 1000) / 10) : 0);

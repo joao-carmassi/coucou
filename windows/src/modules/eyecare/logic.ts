@@ -31,9 +31,18 @@ export function pickKind(kinds: readonly BreakKind[], n: number): BreakKind | nu
   return kinds.length ? kinds[n % kinds.length] : null;
 }
 
-/** At the single timeout: nag, or skip because the user was away for a while (that was the break). */
-export function shouldNotify(idleMs: number | null): boolean {
-  return idleMs === null || idleMs < RESTED_MS;
+/** Wait this long before asking again when the user is busy (full-screen, game, call). */
+export const RETRY_MS = 2 * 60_000;
+/** An unanswered card closes after this long, and the round counts as not taken. */
+export const ASK_MS = 2 * 60_000;
+
+/** What a reminder does: wait (quiet), skip (same absence as the last round), count as taken (already away), or ask. */
+export type Round = "wait" | "skip" | "taken" | "ask";
+export function roundOf(idleMs: number | null, quiet: boolean, intervalMs: number): Round {
+  if (quiet) return "wait";
+  const idle = idleMs ?? 0;
+  // Already rested at the last round (one interval ago): that round counted this absence.
+  return idle >= intervalMs + RESTED_MS ? "skip" : idle >= RESTED_MS ? "taken" : "ask";
 }
 
 export type Days = Record<string, Record<string, number>>;
