@@ -66,7 +66,25 @@ export interface HookPayload {
   permission_mode?: string;
   effort?: { level?: string };
   model?: string;
+  /** Set when the hook fires inside a subagent (or in-process teammate). */
+  agent_id?: string;
+  /** On a Stop: what is still in flight (shell, subagent, monitor, workflow, teammate…). */
+  background_tasks?: { type?: string; status?: string }[];
 }
+
+/** Statuses of a background task that is over (the docs list none; these are the usual words). */
+const TASK_OVER: ReadonlySet<string> = new Set(["completed", "done", "failed", "killed", "stopped", "cancelled", "canceled", "error"]);
+
+/** Subagents and teammates a Stop leaves still running; a dev server or shell does not count. */
+function pendingAgents(payload: HookPayload): number {
+  return (payload.background_tasks ?? []).filter(
+    (t) => (t.type === "subagent" || t.type === "teammate") && !TASK_OVER.has((t.status ?? "").toLowerCase()),
+  ).length;
+}
+
+/** A Stop that is not the turn's real end: it came from inside a subagent, or subagents are still running. */
+const isPartialStop = (name: string, payload: HookPayload) =>
+  name === "Stop" && (!!payload.agent_id || pendingAgents(payload) > 0);
 
 /** Sessions followed at once: as many as the island has tabs for. */
 const MAX_SESSIONS = 4;
@@ -248,13 +266,15 @@ const WORK_EVENTS: ReadonlySet<string> = new Set(["SessionStart", "UserPromptSub
  * the session it shows for as long as that one is at work or being looked at:
  * another one takes its place when it has nothing going on, or to ask for
  * something — unless the one in front is itself waiting for an answer, and
- * then the request waits its turn.
+ * then the request waits its turn. A session that finishes (or fails) always
+ * takes it, watched or not; a partial Stop (subagents still going) does not.
  */
-function takesFront(c: Claude, session: ClaudeSession, event: string): boolean {
+function takesFront(c: Claude, session: ClaudeSession, event: string, partial: boolean): boolean {
   const front = c.store.session;
   if (!front.id) return true;
   if (front === session || waits(front)) return false;
   if (event === "PermissionRequest") return true;
+  if (event === "StopFailure" || (event === "Stop" && !partial)) return true;
   const watched = c.api.island.mode() === "expanded" && ABOUT_FRONT.has(c.api.island.view());
   return WORK_EVENTS.has(event) && resting(front) && !watched;
 }
@@ -563,31 +583,35 @@ export function handleHook(c: Claude, payload: HookPayload) {
   const name = payload.hook_event_name ?? "";
 
   const session = sessionOf(c, payload);
-  if (takesFront(c, session, name)) c.store.bringForward(session.id);
+  const partial = isPartialStop(name, payload);
+  if (takesFront(c, session, name, partial)) c.store.bringForward(session.id);
   /** The session the island shows; the others go on behind their tabs. */
   const front = session.id === c.store.frontId;
-  const focused = front && c.focusId() === CLAUDE_ID;
+  let focused = front && c.focusId() === CLAUDE_ID;
   const cwd = payload.cwd ?? "";
 
   /** Alerts force the island open; work events only reveal the compact island. */
   const surface = (view: IslandViewName | null) => {
-    if (c.api.island.mode() === "expanded") {
-      if (view) c.api.island.setView(view);
-    } else if (view) {
-      c.alert(view);
-    } else if (c.api.island.mode() === "hidden") {
-      c.api.island.wake();
-    }
+    // A view always goes through open(), even on an open island: it also re-arms the auto-close countdown.
+    if (view) c.alert(view);
+    else if (c.api.island.mode() === "hidden") c.api.island.wake();
   };
 
   /**
-   * A turn's end, good or bad: its card when the session is in front, a mark
-   * on its tab when it is behind, a badge on the pill when Claude's is not
-   * the one in front.
+   * A turn's end, good or bad: its card, always — the session is already in
+   * front (takesFront) and Claude's pill is brought to the front too, unless a
+   * pinned request (an approval anywhere) is up; then it is a mark on the tab
+   * (session behind) and a badge on the pill (Claude's not in front).
    */
   const tell = (what: "done" | "error") => {
-    if (focused) return surface(what === "done" ? "finished" : "error");
-    if (!front) session.news = what;
+    // open() ignores pins: the card would cover a pinned request (another module's approval, a break card).
+    const busy = c.api.island.busy();
+    if (front && c.focusId() !== CLAUDE_ID && !busy) {
+      c.setFocus(CLAUDE_ID);
+      focused = true;
+    }
+    if (focused && !busy) return surface(what === "done" ? "finished" : "error");
+    if (!front || busy) session.news = what;
     if (c.focusId() !== CLAUDE_ID) c.store.setBadge(CLAUDE_ID, what);
     // The sound already played: a hidden island has to show up too (it folds back on its own),
     // or a session that ends behind the front one is heard and never seen.
@@ -659,6 +683,13 @@ export function handleHook(c: Claude, payload: HookPayload) {
         session.answeredAt = Date.now();
       }
       closeSteps(session, payload.last_message ?? null);
+      if (partial) {
+        // A subagent reported back, or some are still going: no card, no sound; the last Stop opens it.
+        session.agentsRunning = pendingAgents(payload);
+        session.state = "working";
+        surface(null);
+        break;
+      }
       session.agentsRunning = session.agentsLaunched = 0;
       session.state = "done";
       if (payload.message) say(session, payload.message.slice(0, LINE_CHARS));
