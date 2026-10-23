@@ -1,12 +1,15 @@
 // Presence: is the user busy (a full-screen app, a presentation, quiet hours, a call)?
 //
-// `now()` reads two cheap OS answers: SHQueryUserNotificationState and the microphone consent
-// registry (an app using the mic has LastUsedTimeStop == 0). Never window titles.
+// `now()` reads three cheap OS answers: SHQueryUserNotificationState, whether the foreground window is a
+// borderless window covering its whole monitor (a "full-screen window" game or video, which the first one
+// misses), and the microphone consent registry (an app using the mic has LastUsedTimeStop == 0). Never window titles.
 //
 // Watching: one shared WinEventHook thread (EVENT_SYSTEM_FOREGROUND), refcounted. It exists only while
 // subscribers > 0 and is stopped like `hotkeys::quit_thread`. Idle cost: one thread blocked in GetMessageW
-// (no CPU, no timeout, no polling); the OS wakes it once per foreground change, which re-reads the two answers
-// (well under a millisecond) and emits `presence` only when the value changed.
+// (no CPU, no polling); the OS wakes it once per foreground change, which re-reads the answers
+// (well under a millisecond) and emits `presence` only when the value changed. A game often takes the
+// foreground before it fills the screen, so the island's answer is read once more RECHECK_MS later (a one-shot
+// thread timer, re-armed by each foreground change).
 // The island watches while it is visible (and while a notice waits) with "hide when busy" on: one blocked hook
 // thread whenever the island is visible, none when it is hidden or the setting is off.
 // A crashed app can leave LastUsedTimeStop == 0 in the registry: such a use older than 12 h is ignored
@@ -14,14 +17,15 @@
 // Not covered: Focus Assist, and a change that does not move the foreground (a call that starts in the app
 // already in front is seen at the next foreground change or the next `presence_watch(true)`).
 
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use windows::core::PWSTR;
-use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, WPARAM};
+use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, RECT, WPARAM};
+use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONULL};
 use windows::Win32::System::Registry::{
     RegCloseKey, RegEnumKeyExW, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ, REG_VALUE_TYPE,
 };
@@ -33,8 +37,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINF
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
 use windows::Win32::UI::Shell::SHQueryUserNotificationState;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetMessageW, GetWindowThreadProcessId, PeekMessageW, PostThreadMessageW, EVENT_SYSTEM_FOREGROUND, MSG, PM_NOREMOVE,
-    WINEVENT_OUTOFCONTEXT, WM_QUIT, WM_USER,
+    GetClassNameW, GetForegroundWindow, GetMessageW, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, KillTimer,
+    PeekMessageW, PostThreadMessageW, SetTimer, EVENT_SYSTEM_FOREGROUND, GWL_STYLE, MSG, PM_NOREMOVE, WINEVENT_OUTOFCONTEXT,
+    WM_QUIT, WM_TIMER, WM_USER, WS_CAPTION,
 };
 
 use crate::core::host::ModuleCtx;
@@ -93,7 +98,45 @@ fn filetime_now() -> u64 {
 pub fn now() -> Presence {
     let state = unsafe { SHQueryUserNotificationState().map(|s| s.0).unwrap_or(5) };
     let mic = mic_in_use(&mic_entries(), &own_exe());
-    Presence { quiet: quiet_of(state) || mic, mic }
+    Presence { quiet: quiet_of(state) || foreground_fills_monitor() || mic, mic }
+}
+
+/// The desktop, the taskbar and the shell's own overlays (Alt-Tab, Task View, Start): they cover the screen but
+/// are not a full-screen app.
+const SHELL_CLASSES: [&str; 7] = [
+    "Progman",
+    "WorkerW",
+    "Shell_TrayWnd",
+    "Shell_SecondaryTrayWnd",
+    "XamlExplorerHostIslandWindow",
+    "Windows.UI.Core.CoreWindow",
+    "ForegroundStaging",
+];
+
+/// `win` covers all of `mon` (screen rects).
+pub fn covers(win: &RECT, mon: &RECT) -> bool {
+    win.left <= mon.left && win.top <= mon.top && win.right >= mon.right && win.bottom >= mon.bottom
+}
+
+/// The foreground window has no caption and covers its whole monitor: a borderless "full-screen window" game or
+/// video. A maximized window keeps its caption (and stops at the taskbar), so it never counts.
+fn foreground_fills_monitor() -> bool {
+    unsafe {
+        let fg = GetForegroundWindow();
+        if fg.is_invalid() || GetWindowLongW(fg, GWL_STYLE) as u32 & WS_CAPTION.0 == WS_CAPTION.0 {
+            return false;
+        }
+        let mut class = [0u16; 64];
+        let n = GetClassNameW(fg, &mut class).max(0) as usize;
+        if SHELL_CLASSES.contains(&String::from_utf16_lossy(&class[..n]).as_str()) {
+            return false;
+        }
+        let mut r = RECT::default();
+        let mut mi = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+        GetWindowRect(fg, &mut r).is_ok()
+            && GetMonitorInfoW(MonitorFromWindow(fg, MONITOR_DEFAULTTONULL), &mut mi).as_bool()
+            && covers(&r, &mi.rcMonitor)
+    }
 }
 
 const MIC_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone";
@@ -272,10 +315,36 @@ fn hook_loop() {
             WINEVENT_OUTOFCONTEXT,
         );
         // Out-of-context hooks are delivered from inside GetMessageW.
-        while GetMessageW(&mut msg, None, 0, 0).0 > 0 {}
+        while GetMessageW(&mut msg, None, 0, 0).0 > 0 {
+            if msg.message == WM_TIMER && msg.hwnd.is_invalid() {
+                let _ = KillTimer(None, msg.wParam.0);
+                let _ = RECHECK.compare_exchange(msg.wParam.0, 0, Ordering::SeqCst, Ordering::SeqCst);
+                let _ = std::panic::catch_unwind(recheck);
+            }
+        }
+        let t = RECHECK.swap(0, Ordering::SeqCst);
+        if t != 0 {
+            let _ = KillTimer(None, t);
+        }
         if !hook.is_invalid() {
             let _ = UnhookWinEvent(hook);
         }
+    }
+}
+
+/// A game often takes the foreground first and fills the screen a moment later.
+const RECHECK_MS: u32 = 3000;
+/// The pending one-shot recheck timer of the hook thread (0 = none).
+static RECHECK: AtomicUsize = AtomicUsize::new(0);
+
+/// Re-reads the island's answer, only while the island watches (LAST is set). Never takes WATCH: presence_watch
+/// holds it while it waits for this thread to end.
+fn recheck() {
+    if LAST.lock().unwrap().is_none() {
+        return;
+    }
+    if let Some(app) = APP.lock().unwrap().clone() {
+        emit_changed(&app);
     }
 }
 
@@ -291,6 +360,11 @@ unsafe extern "system" fn on_event(_h: HWINEVENTHOOK, event: u32, hwnd: HWND, _o
             cb(&app, &fg);
         }
     });
+    // Runs on the hook thread (inside GetMessageW), so the timer is this thread's own.
+    let old = RECHECK.swap(SetTimer(None, 0, RECHECK_MS, None), Ordering::SeqCst);
+    if old != 0 {
+        let _ = KillTimer(None, old);
+    }
 }
 
 fn foreground_of(hwnd: HWND) -> Foreground {
@@ -317,6 +391,10 @@ static WATCH: Mutex<Option<u64>> = Mutex::new(None);
 static LAST: Mutex<Option<Presence>> = Mutex::new(None);
 
 fn emit_if_changed(app: &AppHandle, _fg: &Foreground) {
+    emit_changed(app);
+}
+
+fn emit_changed(app: &AppHandle) {
     let p = now();
     let mut last = LAST.lock().unwrap();
     if *last != Some(p) {
@@ -360,6 +438,16 @@ mod tests {
         for (s, q) in [(1, false), (2, true), (3, true), (4, true), (5, false), (6, true), (7, false), (0, false)] {
             assert_eq!(quiet_of(s), q, "state {s}");
         }
+    }
+
+    #[test]
+    fn full_screen_window_covers_its_monitor() {
+        let r = |left, top, right, bottom| RECT { left, top, right, bottom };
+        let mon = r(1920, 0, 4480, 1440);
+        assert!(covers(&r(1920, 0, 4480, 1440), &mon), "exactly the monitor");
+        assert!(covers(&r(1912, -8, 4488, 1448), &mon), "overhanging borders");
+        assert!(!covers(&r(1912, -8, 4488, 1400), &mon), "stops at the taskbar (maximized)");
+        assert!(!covers(&r(0, 0, 1920, 1080), &mon), "another monitor");
     }
 
     #[test]
