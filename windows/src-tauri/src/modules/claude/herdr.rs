@@ -29,8 +29,8 @@ fn pipe_path(socket: &str) -> Option<String> {
 }
 
 /// Connects to herdr's pipe, only when its server is one of the session's ancestors (`pids`). Checked before
-/// anything is sent: a stale HERDR_* variable or someone else's pipe gets nothing.
-fn open(pipe: &str, pids: &[u32]) -> Option<File> {
+/// anything is sent: a stale HERDR_* variable or someone else's pipe gets nothing. Also gives the server's pid.
+fn open(pipe: &str, pids: &[u32]) -> Option<(File, u32)> {
     let start = Instant::now();
     let file = loop {
         match OpenOptions::new().read(true).write(true).open(pipe) {
@@ -43,12 +43,12 @@ fn open(pipe: &str, pids: &[u32]) -> Option<File> {
     };
     let mut server = 0u32;
     unsafe { GetNamedPipeServerProcessId(HANDLE(file.as_raw_handle()), &mut server) }.ok()?;
-    pids.contains(&server).then_some(file)
+    pids.contains(&server).then_some((file, server))
 }
 
-/// One request on its own connection: the answer's `result`, or None on an error or past ANSWER.
-fn call(pipe: &str, pids: &[u32], method: &str, params: Value) -> Option<Value> {
-    let mut file = open(pipe, pids)?;
+/// One request on its own connection: the answer's `result` and the server's pid, or None on an error or past ANSWER.
+fn call(pipe: &str, pids: &[u32], method: &str, params: Value) -> Option<(Value, u32)> {
+    let (mut file, server) = open(pipe, pids)?;
     let line = json!({ "id": "coucou", "method": method, "params": params }).to_string() + "\n";
     file.write_all(line.as_bytes()).ok()?;
     let start = Instant::now();
@@ -59,7 +59,7 @@ fn call(pipe: &str, pids: &[u32], method: &str, params: Value) -> Option<Value> 
             let line: Vec<u8> = buf.drain(..=end).collect();
             if let Ok(v) = serde_json::from_slice::<Value>(&line) {
                 if v.get("id").and_then(Value::as_str) == Some("coucou") {
-                    return v.get("result").cloned();
+                    return v.get("result").cloned().map(|r| (r, server));
                 }
             }
         }
@@ -95,9 +95,10 @@ fn pick_pane<'a>(list: &'a Value, session_id: &str, hook_pane: &str) -> Option<&
 // pane in another one; upgrade when that setup shows up.
 pub fn focus(socket: &str, hook_pane: &str, session_id: &str, pids: &[u32]) -> Option<bool> {
     let pipe = pipe_path(socket)?;
-    let list = call(&pipe, pids, "pane.list", json!({}))?;
-    // The server is one of the session's ancestors; a client never is.
-    let clients: Vec<u32> = focus::pids_named("herdr.exe").into_iter().filter(|p| !pids.contains(p)).collect();
+    let (list, server) = call(&pipe, pids, "pane.list", json!({}))?;
+    // Every herdr.exe but the server is a client. A client that started the server is its parent, so it is one
+    // of the session's ancestors too: only the server's pid is left out.
+    let clients: Vec<u32> = focus::pids_named("herdr.exe").into_iter().filter(|p| *p != server).collect();
     let raised = focus::existing_terminal(&clients, None, None);
     if let Some(pane) = pick_pane(&list, session_id, hook_pane) {
         let id = |k: &str| pane.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
