@@ -224,56 +224,99 @@ async fn poll_stripe(app: AppHandle) {
 
 // ── Vercel ────────────────────────────────────────────────────────────────────
 
-async fn poll_vercel(app: AppHandle) {
-    let Some(token) = secrets::get("vercel-token") else { return };
+/// One GET to the Vercel API: the JSON body, or the HTTP status (0: no connection).
+async fn vercel_get(token: &str, path: &str) -> Result<Value, u16> {
     let response = client()
-        .get("https://api.vercel.com/v6/deployments?limit=5")
+        .get(format!("https://api.vercel.com{path}"))
         .header("Authorization", format!("Bearer {token}"))
         .header("Accept", "application/json")
         .send()
-        .await;
-    let Ok(response) = response else { return };
+        .await
+        .map_err(|_| 0u16)?;
     if !response.status().is_success() {
+        return Err(response.status().as_u16());
+    }
+    Ok(response.json().await.unwrap_or(json!({})))
+}
+
+/// Team ids fit in a query string as they are; anything else is skipped.
+fn team_id(t: &Value) -> Option<&str> {
+    let id = t.get("id")?.as_str()?;
+    (!id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')).then_some(id)
+}
+
+/// The raw deployments of every scope, merged: one entry per uid, newest first, the 5 the card can show.
+fn vercel_list(raw: Vec<Value>) -> Vec<Value> {
+    let mut seen = std::collections::HashSet::new();
+    let mut list: Vec<Value> = raw
+        .into_iter()
+        .filter(|d| d.get("uid").and_then(Value::as_str).is_some_and(|id| seen.insert(id.to_string())))
+        .collect();
+    let at = |d: &Value| d.get("createdAt").and_then(Value::as_f64).unwrap_or(0.0);
+    list.sort_by(|a, b| at(b).total_cmp(&at(a)));
+    list.iter()
+        .filter_map(|d| {
+            let meta = d.get("meta");
+            let pick = |keys: [&str; 3]| {
+                meta.and_then(|m| keys.iter().find_map(|k| m.get(*k).and_then(Value::as_str)))
+                    .map(str::to_string)
+            };
+            Some(json!({
+                "id": d.get("uid")?.as_str()?,
+                "projectName": d.get("name")?.as_str()?,
+                "url": d.get("url").and_then(Value::as_str).unwrap_or(""),
+                "state": d.get("state")?.as_str()?,
+                "createdAt": at(d),
+                "commitMessage": pick(["githubCommitMessage", "gitlabCommitMessage", "bitbucketCommitMessage"]),
+                "branch": pick(["githubCommitRef", "gitlabCommitRef", "bitbucketBranch"]),
+            }))
+        })
+        .take(5)
+        .collect()
+}
+
+/// The newest deploy that has ended: a build under way shows on the card but rings nothing until it ends.
+fn vercel_finished(list: &[Value]) -> Option<&Value> {
+    list.iter().find(|d| {
+        d.get("state").and_then(Value::as_str).is_some_and(|s| ["READY", "ERROR", "CANCELED"].contains(&s))
+    })
+}
+
+async fn poll_vercel(app: AppHandle) {
+    let Some(token) = secrets::get("vercel-token") else { return };
+    // Without teamId the API answers for the token's default scope only: ask it, then each team the token sees.
+    // shortcut: first page of /v2/teams (20 teams), follow `pagination.next` if a token ever sees more.
+    let mut scopes = vec![String::new()];
+    if let Ok(teams) = vercel_get(&token, "/v2/teams").await {
+        let ids = teams.get("teams").and_then(Value::as_array).into_iter().flatten().filter_map(team_id);
+        scopes.extend(ids.map(|id| format!("&teamId={id}")));
+    }
+    let (mut raw, mut ok, mut failed) = (Vec::new(), false, 0u16);
+    for scope in &scopes {
+        match vercel_get(&token, &format!("/v6/deployments?limit=5{scope}")).await {
+            Ok(json) => {
+                ok = true;
+                raw.extend(json.get("deployments").and_then(Value::as_array).cloned().unwrap_or_default());
+            }
+            // A team that refuses this token (SAML, removed) does not hide the others.
+            Err(code) => failed = failed.max(code),
+        }
+    }
+    if !ok {
+        if failed == 0 {
+            return; // no connection: keep what the card shows
+        }
         emit(&app, IntegrationUpdate {
             id: "integration_vercel",
             data: json!({}),
-            error: Some(status_error(response.status().as_u16(), "O token não tem acesso")),
+            error: Some(status_error(failed, "O token não tem acesso")),
             event: None,
         });
         return;
     }
-    let json: Value = response.json().await.unwrap_or(json!({}));
-    let terminal = ["READY", "ERROR", "CANCELED"];
-    let deployments: Vec<Value> = json
-        .get("deployments")
-        .and_then(Value::as_array)
-        .map(|list| {
-            list.iter()
-                .filter_map(|d| {
-                    let state = d.get("state")?.as_str()?;
-                    if !terminal.contains(&state) {
-                        return None;
-                    }
-                    let meta = d.get("meta");
-                    let pick = |keys: [&str; 3]| {
-                        meta.and_then(|m| keys.iter().find_map(|k| m.get(*k).and_then(Value::as_str)))
-                            .map(str::to_string)
-                    };
-                    Some(json!({
-                        "id": d.get("uid")?.as_str()?,
-                        "projectName": d.get("name")?.as_str()?,
-                        "url": d.get("url").and_then(Value::as_str).unwrap_or(""),
-                        "state": state,
-                        "createdAt": d.get("createdAt").and_then(Value::as_f64).unwrap_or(0.0),
-                        "commitMessage": pick(["githubCommitMessage", "gitlabCommitMessage", "bitbucketCommitMessage"]),
-                        "branch": pick(["githubCommitRef", "gitlabCommitRef", "bitbucketBranch"]),
-                    }))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    let deployments = vercel_list(raw);
 
-    let event = deployments.first().and_then(|latest| {
+    let event = vercel_finished(&deployments).and_then(|latest| {
         let id = latest.get("id")?.as_str()?;
         if !is_new("vercel", id) {
             return None;
@@ -660,5 +703,43 @@ fn fmt_value(v: &Value) -> String {
         Value::Array(a) => format!("[{}]", a.len()),
         Value::Object(_) => "{…}".into(),
         other => other.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dep(uid: &str, name: &str, state: &str, at: f64) -> Value {
+        json!({ "uid": uid, "name": name, "state": state, "createdAt": at, "url": "x.vercel.app" })
+    }
+
+    #[test]
+    fn vercel_merges_scopes_newest_first() {
+        // Personal scope, then two teams; the default scope can also be one of the teams (same uid twice).
+        let raw = vec![
+            dep("a", "site", "READY", 100.0),
+            dep("b", "api", "BUILDING", 500.0),
+            dep("a", "site", "READY", 100.0),
+            dep("c", "docs", "ERROR", 300.0),
+            dep("d", "web", "QUEUED", 400.0),
+            dep("e", "old", "READY", 50.0),
+            dep("f", "older", "READY", 10.0),
+        ];
+        let list = vercel_list(raw);
+        let ids: Vec<&str> = list.iter().map(|d| d["id"].as_str().unwrap()).collect();
+        assert_eq!(ids, ["b", "d", "c", "a", "e"]);
+        assert_eq!(list[0]["state"], "BUILDING");
+        // A build under way is shown but the event waits for the newest one that ended.
+        assert_eq!(vercel_finished(&list).unwrap()["id"], "c");
+        assert!(vercel_finished(&vercel_list(vec![dep("b", "api", "BUILDING", 1.0)])).is_none());
+    }
+
+    #[test]
+    fn vercel_team_ids_stay_in_the_query() {
+        assert_eq!(team_id(&json!({ "id": "team_Ab-12" })), Some("team_Ab-12"));
+        assert_eq!(team_id(&json!({ "id": "x&limit=1" })), None);
+        assert_eq!(team_id(&json!({ "id": "" })), None);
+        assert_eq!(team_id(&json!({})), None);
     }
 }

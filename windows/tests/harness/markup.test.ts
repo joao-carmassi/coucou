@@ -123,6 +123,7 @@ describe("integrations cards", () => {
   it("calcom loaded but empty", () => snap("integrations-calcom-empty", cardOf("integration_calcom", { loaded: true, data: { bookings: [] } })));
   it("vercel detail ready", () => snap("integrations-vercel-detail", cardOf("integration_vercel", { loaded: true, data: DATA.integration_vercel, detail: true })));
   it("vercel detail failed", () => snap("integrations-vercel-detail-error", cardOf("integration_vercel", { loaded: true, detail: true, data: { deployments: [{ projectName: "api", state: "CANCELED", createdAt: ago(3 * HOUR) }] } })));
+  it("vercel detail building", () => snap("integrations-vercel-detail-building", cardOf("integration_vercel", { loaded: true, detail: true, data: { deployments: [{ projectName: "api", state: "BUILDING", createdAt: ago(1 * MIN), branch: "main" }] } })));
   it("n8n activity success", () => snap("integrations-n8n-done", cardOf("integration_n8n", { mood: "done", lines: ["Backup nightly", "42 items\nall good"] })));
   it("n8n activity failed", () => snap("integrations-n8n-failed", cardOf("integration_n8n", { mood: "error", lines: ["Sync CRM"] })));
   it("n8n detail success", () => snap("integrations-n8n-detail-done", cardOf("integration_n8n", { mood: "done", lines: ["Backup nightly", "42 items\nall good"], detail: true })));

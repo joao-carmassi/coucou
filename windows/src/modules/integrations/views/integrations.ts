@@ -89,11 +89,22 @@ function idleCard(task: Pill, openSettings: () => void): HTMLElement {
 
 // ── Vercel ────────────────────────────────────────────────────────────────────
 
+/** A deploy's colour and word: green ready, amber queued or building, red failed or canceled. */
+function deployState(state: unknown): [accent: string, label: string] {
+  switch (state) {
+    case "READY": return [COLOR.pass, "Pronto"];
+    case "CANCELED": return [COLOR.red, "Cancelado"];
+    case "QUEUED": return [COLOR.amber, "Na fila"];
+    case "BUILDING": case "INITIALIZING": return [COLOR.amber, "Em andamento"];
+    default: return [COLOR.red, "Erro"];
+  }
+}
+
 function vercelCard(onDetail: () => void): HTMLElement {
   const deployments = arr("integration_vercel", "deployments");
   const rows = h("div", { class: "int-rows" });
   deployments.slice(0, 3).forEach((d, i) => {
-    const accent = d.state === "READY" ? "#22C55E" : "#F4505E";
+    const [accent] = deployState(d.state);
     const name = h("span", { class: "int-name", text: String(d.projectName ?? "") });
     const ago = agoOf(timeAgo(d.createdAt));
     if (i === 0) {
@@ -112,9 +123,7 @@ function vercelCard(onDetail: () => void): HTMLElement {
 
 function vercelDetail(onBack: () => void): HTMLElement {
   const d = arr("integration_vercel", "deployments")[0] ?? {};
-  const success = d.state === "READY";
-  const accent = success ? "#22C55E" : "#F4505E";
-  const status = success ? "Pronto" : d.state === "CANCELED" ? "Cancelado" : "Erro";
+  const [accent, status] = deployState(d.state);
   const body = h("div", { class: "int-detail-body" });
   if (d.commitMessage) body.append(h("div", { class: "int-commit", text: String(d.commitMessage) }));
   const meta = h("div", { class: "int-meta" });
