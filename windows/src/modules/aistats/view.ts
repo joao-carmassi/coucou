@@ -163,9 +163,9 @@ export function buildView(ctx: ViewContext): ViewHost {
   return {
     el,
     get height() { return fitHeight(tab, rows, empty); },
-    // Nothing is read while the tab is hidden; one refresh each time it comes up.
+    // Nothing is read while the tab is hidden; one refresh each time it comes up (the island open: folded keeps the view name).
     sync() {
-      const on = ctx.api.island.view() === "aistats";
+      const on = ctx.api.island.mode() === "expanded" && ctx.api.island.view() === "aistats";
       if (on && !shown) void load();
       shown = on;
     },

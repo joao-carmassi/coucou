@@ -193,4 +193,21 @@ describe("eyecare module", () => {
     expect(calls.invoke.filter((c) => c.cmd === "eyecare_checkpoint").length).toBe(n + 1);
     Registry.apply({ eyecare: false });
   });
+
+  it("the tab fetches again each time the island reopens on it (folding keeps the view name)", async () => {
+    State.settings.eyecareInterval = 0;
+    Registry.apply({ eyecare: true });
+    const usage = () => calls.invoke.filter((c) => c.cmd === "eyecare_usage").length;
+    const n = usage();
+    island.open("eyecare");
+    await tick(1000);
+    expect(usage()).toBe(n + 1);
+    island.hide();
+    await tick(1000);
+    expect(usage()).toBe(n + 1); // nothing while folded
+    island.open("eyecare");
+    await tick(1000);
+    expect(usage()).toBe(n + 2);
+    Registry.apply({ eyecare: false });
+  });
 });
