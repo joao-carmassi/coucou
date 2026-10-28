@@ -9,6 +9,7 @@ const os = vi.hoisted(() => ({ quiet: false }));
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: async (cmd: string, args?: unknown) => {
     calls.invoke.push({ cmd, args });
+    if (cmd === "presence_full_screen") return os.quiet;
     return cmd === "presence_watch" && (args as { on: boolean }).on ? { quiet: os.quiet, mic: false } : null;
   },
 }));
@@ -149,6 +150,20 @@ describe("notices", () => {
     expect(text()).toBe("still shows");
     State.settings.hideWhenBusy = true;
     island.applySettings();
+  });
+
+  it("hidden in a full-screen app: the mouse at the top edge does not wake the island", async () => {
+    const hover = () => document.getElementById("wake-strip")!.dispatchEvent(new MouseEvent("mouseenter"));
+    island.hide();
+    await tick(500);
+    os.quiet = true; // hidden: no watch, so no presence event either
+    hover();
+    await tick(100);
+    expect(State.mode).toBe("hidden");
+    os.quiet = false;
+    hover();
+    await tick(100);
+    expect(State.mode).toBe("compact");
   });
 
   it("paused: a no-op disposer, nothing queued", async () => {

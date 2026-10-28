@@ -96,9 +96,14 @@ fn filetime_now() -> u64 {
 }
 
 pub fn now() -> Presence {
-    let state = unsafe { SHQueryUserNotificationState().map(|s| s.0).unwrap_or(5) };
     let mic = mic_in_use(&mic_entries(), &own_exe());
-    Presence { quiet: quiet_of(state) || foreground_fills_monitor() || mic, mic }
+    Presence { quiet: full_screen() || mic, mic }
+}
+
+/// `quiet` without the mic: a full-screen app, a presentation or quiet hours is in front.
+fn full_screen() -> bool {
+    let state = unsafe { SHQueryUserNotificationState().map(|s| s.0).unwrap_or(5) };
+    quiet_of(state) || foreground_fills_monitor()
 }
 
 /// The desktop, the taskbar and the shell's own overlays (Alt-Tab, Task View, Start): they cover the screen but
@@ -419,6 +424,12 @@ fn emit_changed(app: &AppHandle) {
 #[tauri::command]
 pub fn presence_now() -> Presence {
     now()
+}
+
+/// For the hidden island's wake strip: no thread, no watch, read once when the mouse reaches it.
+#[tauri::command]
+pub fn presence_full_screen() -> bool {
+    full_screen()
 }
 
 /// `on`: subscribes the island (idempotent) and answers with the current state; later changes arrive as the

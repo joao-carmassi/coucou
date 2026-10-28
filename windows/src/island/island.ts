@@ -857,7 +857,11 @@ export class Island implements IslandHost {
     // The wake strip is the only thing the OS can hit while the island is hidden.
     this.wakeStrip.addEventListener("mouseenter", () => {
       Sound.resume();
-      if (State.mode === "hidden") this.mouseEnter();
+      if (State.mode !== "hidden") return;
+      // Hidden, the presence watch is off: ask now, or a full-screen video's top edge wakes the island under the cursor.
+      // A pinned request ignores presence, as everywhere else.
+      if (!State.settings.hideWhenBusy || Requests.front()?.pin) return this.mouseEnter();
+      void Bridge.fullScreen().then((full) => { if (!full && State.mode === "hidden") this.mouseEnter(); });
     });
 
     this.islandEl.addEventListener("mousedown", (e) => {

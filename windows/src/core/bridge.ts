@@ -57,6 +57,8 @@ export const Bridge = {
 
   /** Turns the OS presence watch on or off (one subscriber); on, it answers with the current state. */
   presenceWatch: (on: boolean) => command<Presence>("presence_watch", { on }),
+  /** A full-screen app, a presentation or quiet hours is in front (the mic does not count); null outside Tauri. */
+  fullScreen: () => command<boolean>("presence_full_screen"),
 
   /** Pretty JSON of the settings without secret-looking keys. */
   exportSettings: () => command<string>("settings_export"),
