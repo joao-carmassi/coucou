@@ -2,7 +2,8 @@
 //
 // `now()` reads three cheap OS answers: SHQueryUserNotificationState, whether the foreground window is a
 // borderless window covering its whole monitor (a "full-screen window" game or video, which the first one
-// misses), and the microphone consent registry (an app using the mic has LastUsedTimeStop == 0). Never window titles.
+// misses; a floating always-on-top foreground such as a picture-in-picture video is looked past, to the window
+// under it), and the microphone consent registry (an app using the mic has LastUsedTimeStop == 0). Never window titles.
 //
 // Watching: one shared WinEventHook thread (EVENT_SYSTEM_FOREGROUND), refcounted. It exists only while
 // subscribers > 0 and is stopped like `hotkeys::quit_thread`. Idle cost: one thread blocked in GetMessageW
@@ -10,8 +11,9 @@
 // (well under a millisecond) and emits `presence` only when the value changed. A game often takes the
 // foreground before it fills the screen, so the island's answer is read once more RECHECK_MS later (a one-shot
 // SetTimer on the hook thread, re-armed by each foreground change).
-// The island watches while it is visible (and while a notice waits) with "hide when busy" on: one blocked hook
-// thread whenever the island is visible, none when it is hidden or the setting is off.
+// The island watches while it is visible (and while a notice waits or a module's call is held) with "hide when busy"
+// on: one blocked hook thread whenever the island is visible, none when it is hidden with nothing held or the setting
+// is off. A hidden island asks `presence_now` once before a module may bring it up.
 // A crashed app can leave LastUsedTimeStop == 0 in the registry: such a use older than 12 h is ignored
 // (STALE_USE), so quiet is not stuck forever.
 // Not covered: Focus Assist, and a change that does not move the foreground (a call that starts in the app
@@ -25,6 +27,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use windows::core::PWSTR;
 use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, RECT, WPARAM};
+use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
 use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONULL};
 use windows::Win32::System::Registry::{
     RegCloseKey, RegEnumKeyExW, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ, REG_VALUE_TYPE,
@@ -37,9 +40,10 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINF
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
 use windows::Win32::UI::Shell::SHQueryUserNotificationState;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetClassNameW, GetForegroundWindow, GetMessageW, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, KillTimer,
-    PeekMessageW, PostThreadMessageW, SetTimer, EVENT_SYSTEM_FOREGROUND, GWL_STYLE, MSG, PM_NOREMOVE, WINEVENT_OUTOFCONTEXT,
-    WM_QUIT, WM_TIMER, WM_USER, WS_CAPTION,
+    GetClassNameW, GetForegroundWindow, GetMessageW, GetWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId,
+    IsIconic, IsWindowVisible, KillTimer, PeekMessageW, PostThreadMessageW, SetTimer, EVENT_SYSTEM_FOREGROUND, GWL_EXSTYLE,
+    GWL_STYLE, GW_HWNDNEXT, MSG, PM_NOREMOVE, WINEVENT_OUTOFCONTEXT, WM_QUIT, WM_TIMER, WM_USER, WS_CAPTION, WS_EX_TOOLWINDOW,
+    WS_EX_TOPMOST, WS_EX_TRANSPARENT,
 };
 
 use crate::core::host::ModuleCtx;
@@ -123,24 +127,70 @@ pub fn covers(win: &RECT, mon: &RECT) -> bool {
     win.left <= mon.left && win.top <= mon.top && win.right >= mon.right && win.bottom >= mon.bottom
 }
 
-/// The foreground window has no caption and covers its whole monitor: a borderless "full-screen window" game or
+/// The window in front has no caption and covers its whole monitor: a borderless "full-screen window" game or
 /// video. A maximized window keeps its caption (and stops at the taskbar), so it never counts.
 fn foreground_fills_monitor() -> bool {
+    let w = front_window();
     unsafe {
-        let fg = GetForegroundWindow();
-        if fg.is_invalid() || GetWindowLongW(fg, GWL_STYLE) as u32 & WS_CAPTION.0 == WS_CAPTION.0 {
+        if w.is_invalid() || GetWindowLongW(w, GWL_STYLE) as u32 & WS_CAPTION.0 == WS_CAPTION.0 {
             return false;
         }
         let mut class = [0u16; 64];
-        let n = GetClassNameW(fg, &mut class).max(0) as usize;
+        let n = GetClassNameW(w, &mut class).max(0) as usize;
         if SHELL_CLASSES.contains(&String::from_utf16_lossy(&class[..n]).as_str()) {
             return false;
         }
-        let mut r = RECT::default();
-        let mut mi = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
-        GetWindowRect(fg, &mut r).is_ok()
-            && GetMonitorInfoW(MonitorFromWindow(fg, MONITOR_DEFAULTTONULL), &mut mi).as_bool()
+    }
+    covers_its_monitor(w)
+}
+
+fn covers_its_monitor(w: HWND) -> bool {
+    let mut r = RECT::default();
+    let mut mi = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+    unsafe {
+        GetWindowRect(w, &mut r).is_ok()
+            && GetMonitorInfoW(MonitorFromWindow(w, MONITOR_DEFAULTTONULL), &mut mi).as_bool()
             && covers(&r, &mi.rcMonitor)
+    }
+}
+
+/// The foreground window, or, when that one floats (a picture-in-picture video, a widget, the island itself), the
+/// first window under it that the user would call the app in front: a click on a floating window makes it the
+/// foreground while the game or video under it still fills the screen.
+fn front_window() -> HWND {
+    let fg = unsafe { GetForegroundWindow() };
+    if fg.is_invalid() || !floating(fg) {
+        return fg;
+    }
+    let mut next = unsafe { GetWindow(fg, GW_HWNDNEXT) };
+    // Bounded: the z-order can change under the walk.
+    for _ in 0..1024 {
+        let Ok(w) = next else { break };
+        if !passed_over(w) {
+            return w;
+        }
+        next = unsafe { GetWindow(w, GW_HWNDNEXT) };
+    }
+    fg
+}
+
+/// Always on top and smaller than its monitor.
+fn floating(w: HWND) -> bool {
+    unsafe { GetWindowLongW(w, GWL_EXSTYLE) as u32 & WS_EX_TOPMOST.0 != 0 && !covers_its_monitor(w) }
+}
+
+/// Not "the app in front": hidden, minimized, cloaked (a suspended store app, another virtual desktop), a tool or
+/// click-through window (a full-screen overlay), or floating too.
+fn passed_over(w: HWND) -> bool {
+    unsafe {
+        let ex = GetWindowLongW(w, GWL_EXSTYLE) as u32;
+        let mut cloaked = 0u32;
+        let cloaked = DwmGetWindowAttribute(w, DWMWA_CLOAKED, &mut cloaked as *mut u32 as *mut _, 4).is_ok() && cloaked != 0;
+        !IsWindowVisible(w).as_bool()
+            || IsIconic(w).as_bool()
+            || cloaked
+            || ex & (WS_EX_TOOLWINDOW.0 | WS_EX_TRANSPARENT.0) != 0
+            || floating(w)
     }
 }
 
