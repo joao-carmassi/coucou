@@ -127,7 +127,7 @@ describe("request queue", () => {
     folded();
   });
 
-  it("'Aguardar': close keeps the request; hover on the hidden island reopens it pinned", () => {
+  it("'Aguardar': close keeps the request; hover on the hidden island reopens it pinned", async () => {
     const off = requestPin(a(), "dummy-b", 0, 90);
     tick(10);
     island.collapse();
@@ -138,7 +138,7 @@ describe("request queue", () => {
     tick(10);
     expect(State.mode).toBe("hidden");
     document.querySelector("#wake-strip, .wake-strip")?.dispatchEvent(new MouseEvent("mouseenter"));
-    tick(10);
+    await vi.advanceTimersByTimeAsync(10); // the strip asks the OS about full screen first
     expect(State.mode).toBe("expanded");
     expect(State.view).toBe("dummy-b");
     expect(State.isPinned).toBe(true);

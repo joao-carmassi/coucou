@@ -150,7 +150,8 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
       },
     },
     island: {
-      open: (view) => host.open(view),
+      // A module surfacing a hidden island waits out a full-screen app or a call (the tray and hotkey are not gated).
+      open: (view) => host.whenFree(() => host.open(view)),
       hold(view, o) {
         const off = Holds.add(id, view, o?.idleMs, Date.now());
         const d = () => { scope.remove(d); off(); };
@@ -170,10 +171,10 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
       },
       focusMs: () => focusMs(State.settings.compactHideInterval),
       busy: () => Requests.busy(),
-      setView: (v) => host.setView(v),
+      setView: (v) => host.whenFree(() => host.setView(v)),
       close: () => host.collapse(),
-      wake: () => host.reveal(),
-      reopen: () => host.reopen(),
+      wake: () => host.whenFree(() => host.reveal()),
+      reopen: () => host.whenFree(() => host.reopen()),
       hide: () => host.hide(),
       keepAwake: (pred) => scope.add(Hooks.provide("keepAwake", pred)),
       mode: () => State.mode,

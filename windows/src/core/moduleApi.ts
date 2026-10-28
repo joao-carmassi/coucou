@@ -145,6 +145,8 @@ export interface IslandHost {
   reveal(): void;
   reopen(): void;
   setView(view: string): void;
+  /** Runs `go` now, or, while the island is hidden over a full-screen app or a call ("hide when busy"), holds it. */
+  whenFree(go: () => void): void;
   note(text: string): void;
   error(err: unknown): void;
   mouseInside(): boolean;
@@ -255,6 +257,8 @@ export interface IslandApi {
      * Asks for the screen. The core keeps one list (highest priority in front, the newest wins a tie; cleaned when this module stops).
      * A request below the front one is queued: the view does not switch. Disposing the front shows the next one's view (island still open), else the island may auto-close again.
      * `pin` holds the island open (no auto-close, Esc or click-outside) while it is in front. `ms` disposes it by itself.
+     * Over a full-screen app or a call ("Ocultar durante tela cheia e chamadas"), whatever the priority, it waits hidden and
+     * the island opens on it once that ends; so do open, setView, wake and reopen on a hidden island (they are only held).
      */
     request(spec: RequestSpec): Disposer;
     /**

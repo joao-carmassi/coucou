@@ -69,9 +69,9 @@ describe("mochi + sound", () => {
     spy.mockRestore();
   });
 
-  it("mini and free canvases tick, and are pruned once detached", () => {
+  it("mini and free canvases tick, and are pruned once detached", async () => {
     dummy().island.wake(); // hidden is lazy (no frames); compact draws its own mini grid, so count after that settles
-    tick(100);
+    await vi.advanceTimersByTimeAsync(100); // a hidden island's wake first asks the OS whether it is busy
     const before = miniBotCount();
     const mini = dummy().mochi.mini(dummy().pills.get("dummy-pill")!, 20);
     const free = dummy().mochi.free("#22C55E", "done", 20, 0.8);

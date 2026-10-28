@@ -10,6 +10,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: async (cmd: string, args?: unknown) => {
     calls.invoke.push({ cmd, args });
     if (cmd === "presence_full_screen") return os.quiet;
+    if (cmd === "presence_now") return { quiet: os.quiet, mic: false };
     return cmd === "presence_watch" && (args as { on: boolean }).on ? { quiet: os.quiet, mic: false } : null;
   },
 }));
@@ -226,15 +227,36 @@ describe("notices", () => {
     expect(text()).not.toBe("k");
   });
 
-  it("a pinned request is not folded by quiet", async () => {
-    const off = a().island.request({ view: "dummy-a", priority: 20, pin: true });
+  it("quiet folds a waiting card too; it comes back when quiet ends", async () => {
+    const off = a().island.request({ view: "dummy-a", priority: 100, pin: true });
     await tick(100);
     expect(State.mode).toBe("expanded");
     quiet(true);
     await tick(500);
-    expect(State.mode).toBe("expanded");
-    off();
+    expect(State.mode).toBe("hidden");
     quiet(false);
+    await tick(500);
+    expect(State.mode).toBe("expanded");
+    expect(State.view).toBe("dummy-a");
+    off();
+  });
+
+  it("hidden in a game: a module's wake, open or request waits, and the card shows once it ends", async () => {
+    island.hide();
+    await tick(500);
+    os.quiet = true; // hidden: no watch, so no presence event either
+    a().island.wake();
+    a().island.open("dummy-a");
+    await tick(100);
+    expect(State.mode).toBe("hidden");
+    const off = a().island.request({ view: "dummy-a", priority: 100, pin: true });
+    await tick(100);
+    expect(State.mode).toBe("hidden");
+    os.quiet = false; // left full screen in place (no foreground event): the re-ask notices
+    await tick(3500);
+    expect(State.mode).toBe("expanded");
+    expect(State.view).toBe("dummy-a");
+    off();
   });
 
   it("no timeout is left once the queue is empty", async () => {

@@ -13,7 +13,7 @@ import type { BotEmoteName, IslandMode, IslandViewName } from "../core/layout";
 import { Avatar } from "../core/avatar";
 import { Hooks, emitMode } from "../core/hooks";
 import { glowOf } from "../mochi/moods";
-import { BAND, EXPANDED_W, PANEL_H } from "../core/moduleApi";
+import { EXPANDED_W, PANEL_H } from "../core/moduleApi";
 import type { Disposer, IslandHost, Notice, Overlay, StatusCard, StatusLine, TabDef, ViewContext, ViewDef } from "../core/moduleApi";
 import { Holds, Last, focusMs } from "../core/holds";
 import { Requests, type Req, type RequestSpec } from "../core/requests";
@@ -45,6 +45,8 @@ const TINT_SETTLED = 0.004;
 
 /** Minimum frame interval while compact with only the looping avatar animating. */
 const IDLE_FRAME_MS = 60;
+/** While something is held over a busy screen, how often the OS is asked again. */
+const REASK_MS = 3000;
 
 export class Island implements IslandHost {
   readonly fsm = new IslandStateMachine();
@@ -145,6 +147,11 @@ export class Island implements IslandHost {
   private watching = false;
   /** The watch was just turned on and has not answered yet: hold the non-urgent ones meanwhile. */
   private presencePending = false;
+  /** Module calls that want the hidden island while the OS is asked whether it is busy (see whenFree). */
+  private asking: (() => void)[] | null = null;
+  /** Something wanted the screen while busy: the island comes back once that ends (on the waiting request, if any). */
+  private holding = false;
+  private reaskTimer: number | null = null;
   /** Inside clickCompact: only a click consumes the notice on show. */
   private clicked = false;
 
@@ -471,7 +478,7 @@ export class Island implements IslandHost {
     if (front && !spec.quiet) Requests.parked = false;
     this.syncPin();
     // Below the front one it waits: the screen is not taken.
-    if (front && !spec.quiet) this.open(r.view);
+    if (front && !spec.quiet) this.whenFree(() => { if (Requests.front() === r) this.open(r.view); });
     State.notify();
     return () => this.dropRequest(r);
   }
@@ -569,18 +576,50 @@ export class Island implements IslandHost {
 
   /**
    * The OS presence watch (one blocked thread in Rust, zero CPU) runs only while there is something to hide or hold:
-   * the setting is on and the island is visible or a notice waits.
+   * the setting is on and the island is visible, a notice waits or something is held.
    */
   private syncWatch() {
-    const want = State.settings.hideWhenBusy && (State.mode !== "hidden" || this.notices.size > 0);
+    const want = State.settings.hideWhenBusy && (State.mode !== "hidden" || this.notices.size > 0 || this.holding);
     if (want === this.watching) return;
     this.watching = want;
     if (!want) {
       this.quiet = this.presencePending = false;
       void Bridge.presenceWatch(false);
+      if (this.holding) this.release(); // the setting went off: nothing hides any more
       return;
     }
     this.askPresence();
+  }
+
+  /**
+   * A module wants the screen (open, wake, a request). Hidden with "hide when busy" on, the OS is asked first: the
+   * watch is off while hidden, and nothing may show over a full-screen app or a call, a waiting card included. Then
+   * it is held and the island comes back once that ends. A visible island is not gated: whoever brought it up sees it.
+   */
+  whenFree(go: () => void) {
+    if (State.mode !== "hidden" || !State.settings.hideWhenBusy) return go();
+    if (this.holding) return; // release() reopens on the waiting request
+    if (this.asking) { this.asking.push(go); return; }
+    this.asking = [go];
+    void Bridge.presenceNow().then((p) => {
+      const wishes = this.asking ?? [];
+      this.asking = null;
+      if (p?.quiet && State.mode === "hidden" && State.settings.hideWhenBusy) {
+        this.holding = true;
+        this.syncWatch();
+      } else wishes.forEach((w) => w());
+    });
+  }
+
+  /** Busy is over (or the setting went off): back on the waiting request, else the compact island folds by itself. */
+  private release() {
+    this.holding = false;
+    if (this.reaskTimer != null) window.clearTimeout(this.reaskTimer);
+    this.reaskTimer = null;
+    this.syncWatch();
+    if (State.mode !== "hidden") return; // brought up meanwhile
+    if (Requests.front()) this.fsm.forceHome();
+    else this.fsm.reveal();
   }
 
   /** The answer is the current state: taken silently (whoever woke the island meant to see it). */
@@ -604,10 +643,19 @@ export class Island implements IslandHost {
     const was = this.quiet;
     this.quiet = p.quiet;
     if (!silent && !was && p.quiet && State.settings.hideWhenBusy) {
-      // Requests ignore presence: a pinned one, or any at urgent priority, keeps the island up.
-      const front = Requests.front();
-      const keep = Requests.pinned() || (front?.priority ?? 0) >= BAND.URGENT;
-      if (State.mode !== "hidden" && !keep && !(State.mode === "expanded" && this.mouseInside())) this.fsm.forceHidden();
+      // A waiting card folds too (held: it comes back when this ends); never from under the cursor.
+      if (State.mode !== "hidden" && !(State.mode === "expanded" && this.mouseInside())) {
+        if (Requests.front()) this.holding = true;
+        this.fsm.forceHidden();
+      }
+    }
+    if (this.holding && !p.quiet) this.release();
+    else if (this.holding && this.reaskTimer == null) {
+      // Leaving a full screen in place (Esc on a video) moves no foreground and fires no event: ask again.
+      this.reaskTimer = window.setTimeout(() => {
+        this.reaskTimer = null;
+        if (this.holding && this.watching) this.askPresence();
+      }, REASK_MS);
     }
     this.syncNotices();
   }
@@ -858,9 +906,9 @@ export class Island implements IslandHost {
     this.wakeStrip.addEventListener("mouseenter", () => {
       Sound.resume();
       if (State.mode !== "hidden") return;
-      // Hidden, the presence watch is off: ask now, or a full-screen video's top edge wakes the island under the cursor.
-      // A pinned request ignores presence, as everywhere else.
-      if (!State.settings.hideWhenBusy || Requests.front()?.pin) return this.mouseEnter();
+      // Hidden, the presence watch is off: ask now, or a full-screen video's top edge wakes the island under the cursor
+      // (a waiting card included: it comes back when the full screen ends).
+      if (!State.settings.hideWhenBusy) return this.mouseEnter();
       void Bridge.fullScreen().then((full) => { if (!full && State.mode === "hidden") this.mouseEnter(); });
     });
 
