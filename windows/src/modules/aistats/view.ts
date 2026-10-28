@@ -160,12 +160,15 @@ export function buildView(ctx: ViewContext): ViewHost {
     } finally { busy = false; }
   };
   draw(false);
+  const up = () => ctx.api.island.mode() === "expanded" && ctx.api.island.view() === "aistats";
+  // sync() only runs while the view is shown, so a switch to another tab is noticed here (else coming back read nothing).
+  ctx.api.island.onChange(() => { if (shown && !up()) shown = false; });
   return {
     el,
     get height() { return fitHeight(tab, rows, empty); },
     // Nothing is read while the tab is hidden; one refresh each time it comes up (the island open: folded keeps the view name).
     sync() {
-      const on = ctx.api.island.mode() === "expanded" && ctx.api.island.view() === "aistats";
+      const on = up();
       if (on && !shown) void load();
       shown = on;
     },

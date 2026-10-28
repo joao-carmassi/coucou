@@ -208,6 +208,12 @@ describe("eyecare module", () => {
     island.open("eyecare");
     await tick(1000);
     expect(usage()).toBe(n + 2);
+    // sync() runs only for the view on screen: another tab and back must fetch again too.
+    island.setView("empty");
+    await tick(1000);
+    island.setView("eyecare");
+    await tick(1000);
+    expect(usage()).toBe(n + 3);
     Registry.apply({ eyecare: false });
   });
 });

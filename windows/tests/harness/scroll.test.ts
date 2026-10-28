@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 
 vi.mock("../../src/kit/tauri", () => ({ IS_TAURI: true, command: async () => ({}), commandOrThrow: async () => null, onEvent: async () => () => {} }));
-const ctx = (view: string) => ({ api: { island: { view: () => view, mode: () => "expanded" }, settings: () => ({}), listen: () => () => {}, timeout: () => () => {} }, onResize() {}, actions: {} }) as never;
+const ctx = (view: string) => ({ api: { island: { view: () => view, mode: () => "expanded", onChange: () => () => {} }, settings: () => ({}), listen: () => () => {}, timeout: () => () => {} }, onResize() {}, actions: {} }) as never;
 
 describe("scroll area", () => {
   it("ui.css defines it, with a themed scrollbar", () => {

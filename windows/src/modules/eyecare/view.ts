@@ -141,15 +141,18 @@ export function buildView(ctx: ViewContext): ViewHost {
   };
   draw(false);
   let shown = false;
+  const up = () => ctx.api.island.mode() === "expanded" && ctx.api.island.view() === "eyecare";
   // The tiles read the settings (reminder interval): redraw when they change (a tick later, the core stores them after us).
   ctx.api.listen("settings-changed", () => void ctx.api.timeout(() => draw(), 0));
+  // sync() only runs while the view is shown, so a switch to another tab is noticed here (else coming back fetched nothing).
+  ctx.api.island.onChange(() => { if (shown && !up()) shown = false; });
   return {
     el,
     get height() { return fitHeight(tab, rows); },
     // Nothing is fetched while the tab is hidden; one fetch each time it comes up. A folded island keeps the view
     // name, so "up" also needs the island open: reopening on this tab fetches again.
     sync() {
-      const on = ctx.api.island.mode() === "expanded" && ctx.api.island.view() === "eyecare";
+      const on = up();
       if (on && !shown) { draw(); void load(); } // draw now: the fetch is async and the tile must not show a stale interval
       shown = on;
     },
