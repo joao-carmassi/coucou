@@ -152,6 +152,8 @@ export class Island implements IslandHost {
   /** Something wanted the screen while busy: the island comes back once that ends (on the waiting request, if any). */
   private holding = false;
   private reaskTimer: number | null = null;
+  /** Busy began while the cursor was on the open island: it folds once the cursor leaves (foldIfOut). */
+  private foldBusy = false;
   /** Inside clickCompact: only a click consumes the notice on show. */
   private clicked = false;
 
@@ -588,7 +590,7 @@ export class Island implements IslandHost {
       if (this.holding) this.release(); // the setting went off: nothing hides any more
       return;
     }
-    this.askPresence();
+    this.askPresence(true);
   }
 
   /**
@@ -622,13 +624,16 @@ export class Island implements IslandHost {
     else this.fsm.reveal();
   }
 
-  /** The answer is the current state: taken silently (whoever woke the island meant to see it). */
-  private askPresence() {
+  /**
+   * The answer is the current state. `silent` (the watch just started): whoever brought the island up meant to see it.
+   * A later ask is not silent: the answer also resets Rust's last value, so a busy start it reports must still fold.
+   */
+  private askPresence(silent = false) {
     this.presencePending = true;
     void Bridge.presenceWatch(true).then((p) => {
       if (!this.watching) return;
       this.presencePending = false;
-      this.applyPresence(p ?? { quiet: false, mic: false }, true);
+      this.applyPresence(p ?? { quiet: false, mic: false }, silent);
     });
   }
 
@@ -643,12 +648,10 @@ export class Island implements IslandHost {
     const was = this.quiet;
     this.quiet = p.quiet;
     if (!silent && !was && p.quiet && State.settings.hideWhenBusy) {
-      // A waiting card folds too (held: it comes back when this ends); never from under the cursor.
-      if (State.mode !== "hidden" && !(State.mode === "expanded" && this.mouseInside())) {
-        if (Requests.front()) this.holding = true;
-        this.fsm.forceHidden();
-      }
+      this.foldBusy = true;
+      this.foldIfOut();
     }
+    if (!p.quiet) this.foldBusy = false;
     if (this.holding && !p.quiet) this.release();
     else if (this.holding && this.reaskTimer == null) {
       // Leaving a full screen in place (Esc on a video) moves no foreground and fires no event: ask again.
@@ -658,6 +661,18 @@ export class Island implements IslandHost {
       }, REASK_MS);
     }
     this.syncNotices();
+  }
+
+  /**
+   * Busy began while the island showed: it folds, a waiting card too (held: it comes back when busy ends). Never from
+   * under the cursor: then it folds once the cursor is off it (onCursor), not only at the moment busy began.
+   */
+  private foldIfOut() {
+    if (State.mode === "hidden") { this.foldBusy = false; return; }
+    if (State.mode === "expanded" && this.mouseInside()) return;
+    this.foldBusy = false;
+    if (Requests.front()) this.holding = true;
+    this.fsm.forceHidden();
   }
 
   reveal() {
@@ -906,10 +921,11 @@ export class Island implements IslandHost {
     this.wakeStrip.addEventListener("mouseenter", () => {
       Sound.resume();
       if (State.mode !== "hidden") return;
-      // Hidden, the presence watch is off: ask now, or a full-screen video's top edge wakes the island under the cursor
-      // (a waiting card included: it comes back when the full screen ends).
+      // Hidden, the presence watch is off: ask now, or a full-screen game's top edge wakes the island under the cursor
+      // (a waiting card included: it comes back when the full screen ends). Full screen, the strip also lets the
+      // mouse through until the cursor leaves it: a click there must reach the game, not us.
       if (!State.settings.hideWhenBusy) return this.mouseEnter();
-      void Bridge.fullScreen().then((full) => { if (!full && State.mode === "hidden") this.mouseEnter(); });
+      void Bridge.stripPassThrough().then((passing) => { if (!passing && State.mode === "hidden") this.mouseEnter(); });
     });
 
     this.islandEl.addEventListener("mousedown", (e) => {
@@ -960,6 +976,7 @@ export class Island implements IslandHost {
   /** Cursor in window-logical coordinates; `down` is the left button, from Rust's poll. */
   onCursor(x: number, y: number, down = false) {
     State.mouse = { x, y };
+    if (this.foldBusy) this.foldIfOut();
     const rect = this.islandRect();
     State.mouseInIsland = { x: x - rect.x, y: y - rect.y };
     let held = false;

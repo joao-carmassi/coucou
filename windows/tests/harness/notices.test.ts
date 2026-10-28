@@ -9,7 +9,7 @@ const os = vi.hoisted(() => ({ quiet: false }));
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: async (cmd: string, args?: unknown) => {
     calls.invoke.push({ cmd, args });
-    if (cmd === "presence_full_screen") return os.quiet;
+    if (cmd === "strip_pass_through") return os.quiet;
     if (cmd === "presence_now") return { quiet: os.quiet, mic: false };
     return cmd === "presence_watch" && (args as { on: boolean }).on ? { quiet: os.quiet, mic: false } : null;
   },
@@ -38,6 +38,7 @@ const loadCatalog = async () => {
 import { Island } from "../../src/island/island";
 import { Registry } from "../../src/core/registry";
 import { State } from "../../src/core/state";
+import { PANEL_W } from "../../src/core/layout";
 
 let island: Island;
 const tick = (ms: number) => vi.advanceTimersByTimeAsync(ms);
@@ -239,6 +240,30 @@ describe("notices", () => {
     expect(State.mode).toBe("expanded");
     expect(State.view).toBe("dummy-a");
     off();
+  });
+
+  it("busy beginning under the cursor: the card folds once the cursor leaves it, not only at that moment", async () => {
+    const off = a().island.request({ view: "dummy-a", priority: 100, pin: true });
+    await tick(100);
+    island.onCursor(PANEL_W / 2, 10); // on the card
+    quiet(true);
+    await tick(500);
+    expect(State.mode).toBe("expanded");
+    island.onCursor(PANEL_W / 2, 900); // the game re-centres the cursor
+    await tick(500);
+    expect(State.mode).toBe("hidden");
+    quiet(false);
+    await tick(500);
+    expect(State.mode).toBe("expanded");
+    off();
+  });
+
+  it("a later ask that finds busy folds too (its answer replaces the event Rust would have sent)", async () => {
+    expect(State.mode).toBe("compact");
+    os.quiet = true; // no event: the next ask is the first to hear it
+    b().island.notice({ text: "asks again" });
+    await tick(100);
+    expect(State.mode).toBe("hidden");
   });
 
   it("hidden in a game: a module's wake, open or request waits, and the card shows once it ends", async () => {
