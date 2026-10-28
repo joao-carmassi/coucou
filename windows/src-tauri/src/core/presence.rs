@@ -105,7 +105,7 @@ pub fn now() -> Presence {
 }
 
 /// `quiet` without the mic: a full-screen app, a presentation or quiet hours is in front.
-fn full_screen() -> bool {
+pub(crate) fn full_screen() -> bool {
     let state = unsafe { SHQueryUserNotificationState().map(|s| s.0).unwrap_or(5) };
     quiet_of(state) || foreground_fills_monitor()
 }
@@ -467,6 +467,7 @@ fn emit_changed(app: &AppHandle) {
     let mut last = LAST.lock().unwrap();
     if *last != Some(p) {
         *last = Some(p);
+        crate::core::log::line(format!("presence quiet={} mic={}", p.quiet, p.mic));
         let _ = app.emit("presence", p);
     }
 }
@@ -474,12 +475,6 @@ fn emit_changed(app: &AppHandle) {
 #[tauri::command]
 pub fn presence_now() -> Presence {
     now()
-}
-
-/// For the hidden island's wake strip: no thread, no watch, read once when the mouse reaches it.
-#[tauri::command]
-pub fn presence_full_screen() -> bool {
-    full_screen()
 }
 
 /// `on`: subscribes the island (idempotent) and answers with the current state; later changes arrive as the

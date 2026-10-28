@@ -59,8 +59,8 @@ export const Bridge = {
   presenceWatch: (on: boolean) => command<Presence>("presence_watch", { on }),
   /** The current state, read once (no watch). */
   presenceNow: () => command<Presence>("presence_now"),
-  /** A full-screen app, a presentation or quiet hours is in front (the mic does not count); null outside Tauri. */
-  fullScreen: () => command<boolean>("presence_full_screen"),
+  /** The cursor reached the wake strip: true = a full-screen app is in front and the strip lets the mouse through. */
+  stripPassThrough: () => command<boolean>("strip_pass_through"),
 
   /** Pretty JSON of the settings without secret-looking keys. */
   exportSettings: () => command<string>("settings_export"),

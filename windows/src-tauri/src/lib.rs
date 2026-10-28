@@ -199,6 +199,12 @@ fn begin_island_drag(app: AppHandle) {
     island::begin_drag(&app);
 }
 
+/// The cursor reached the wake strip: true = a full-screen app is in front, the strip lets the mouse through.
+#[tauri::command]
+fn strip_pass_through(app: AppHandle) -> bool {
+    island::strip_pass_through(&app)
+}
+
 #[tauri::command]
 fn center_island(app: AppHandle, shared: State<Shared>) {
     island::adjust_placement(&app, &shared, None);
@@ -362,6 +368,7 @@ pub fn run() {
         forget_foreground,
         reposition,
         begin_island_drag,
+        strip_pass_through,
         center_island,
         open_url,
         quit_app,
@@ -371,7 +378,6 @@ pub fn run() {
         set_paused,
         crate::core::inbox::inbox_ingest,
         crate::core::presence::presence_now,
-        crate::core::presence::presence_full_screen,
         crate::core::presence::presence_watch,
     ]);
     let mods = modules::handlers();

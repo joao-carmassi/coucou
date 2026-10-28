@@ -592,6 +592,42 @@ pub fn set_ignore_cursor(app: &AppHandle, ignore: bool) {
     }
 }
 
+/// A strip pass-through is running (one at a time).
+static PASSING: AtomicBool = AtomicBool::new(false);
+
+/// The cursor reached the wake strip. Over a full-screen app the strip lets the mouse through: a click at the top
+/// edge would land on us and pull the user out of a game. It takes the mouse again once the cursor is off it (polled
+/// at 20 Hz only meanwhile) or the island opens. False: nothing is full screen, the strip wakes the island as usual.
+pub fn strip_pass_through(app: &AppHandle) -> bool {
+    if !crate::core::presence::full_screen() {
+        return false;
+    }
+    if PASSING.swap(true, Ordering::SeqCst) {
+        return true;
+    }
+    let Some((win, Ok(pos), Ok(size))) = window(app).map(|w| (w.clone(), w.outer_position(), w.outer_size())) else {
+        PASSING.store(false, Ordering::SeqCst);
+        return true;
+    };
+    let _ = win.set_ignore_cursor_events(true);
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let gate = app.state::<crate::Shared>().gate.clone();
+        let (left, right, bottom) = (pos.x as f64, (pos.x + size.width as i32) as f64, (pos.y + size.height as i32) as f64);
+        // Opened meanwhile: set_collapsed(false) handed click-through back to the cursor poll.
+        while gate.collapsed.load(Ordering::Relaxed) {
+            std::thread::sleep(Duration::from_millis(50));
+            let Some((cx, cy)) = cursor_physical() else { continue };
+            if cx < left || cx >= right || cy >= bottom {
+                let _ = win.set_ignore_cursor_events(false);
+                break;
+            }
+        }
+        PASSING.store(false, Ordering::SeqCst);
+    });
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
