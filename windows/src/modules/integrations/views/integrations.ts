@@ -107,16 +107,27 @@ function vercelCard(onDetail: () => void): HTMLElement {
     const [accent] = deployState(d.state);
     const name = h("span", { class: "int-name", text: String(d.projectName ?? "") });
     const ago = agoOf(timeAgo(d.createdAt));
+    let row: HTMLElement;
     if (i === 0) {
       const more = h(
         "button",
-        { class: "int-more", title: "Detalhes", onclick: onDetail },
+        {
+          class: "int-more",
+          title: "Detalhes",
+          onclick: (e: Event) => { e.stopPropagation(); onDetail(); }, // the row behind opens the deploy
+        },
         svg(ICONS.ellipsis, 8),
       );
-      rows.append(listRow(accent, true, name, ago, more));
+      row = listRow(accent, true, name, ago, more);
     } else {
-      rows.append(listRow(accent, false, name, ago));
+      row = listRow(accent, false, name, ago);
     }
+    if (d.url) {
+      row.classList.add("link");
+      row.title = String(d.url);
+      row.onclick = () => void App.openUrl(`https://${d.url}`);
+    }
+    rows.append(row);
   });
   return tileCard(undefined, header("#7C5CFF", "Vercel", "Deploys"), rows);
 }

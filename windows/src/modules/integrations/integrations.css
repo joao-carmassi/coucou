@@ -94,6 +94,15 @@
   min-width: 0;
 }
 
+/* A row that opens its link (the first row keeps its inline tint, so the name lights up too). */
+.int-row.link:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.int-row.link:hover .int-name {
+  color: #e6e8eb;
+}
+
 .int-name {
   font: 500 11px var(--font);
   color: #9398a1;
