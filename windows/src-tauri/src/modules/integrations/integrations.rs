@@ -265,6 +265,8 @@ fn vercel_list(raw: Vec<Value>) -> Vec<Value> {
                 "id": d.get("uid")?.as_str()?,
                 "projectName": d.get("name")?.as_str()?,
                 "url": d.get("url").and_then(Value::as_str).unwrap_or(""),
+                // The deploy's page on the dashboard, under its own team (vercel.com/<team>/<project>/<id>).
+                "inspectorUrl": d.get("inspectorUrl").and_then(Value::as_str).filter(|u| u.starts_with("https://vercel.com/")),
                 "state": d.get("state")?.as_str()?,
                 "createdAt": at(d),
                 "commitMessage": pick(["githubCommitMessage", "gitlabCommitMessage", "bitbucketCommitMessage"]),
@@ -733,6 +735,18 @@ mod tests {
         // A build under way is shown but the event waits for the newest one that ended.
         assert_eq!(vercel_finished(&list).unwrap()["id"], "c");
         assert!(vercel_finished(&vercel_list(vec![dep("b", "api", "BUILDING", 1.0)])).is_none());
+    }
+
+    #[test]
+    fn vercel_inspector_url_only_on_the_dashboard() {
+        let with = |u: &str| {
+            let mut d = dep("a", "site", "READY", 1.0);
+            d["inspectorUrl"] = json!(u);
+            vercel_list(vec![d])[0]["inspectorUrl"].clone()
+        };
+        assert_eq!(with("https://vercel.com/acme/site/J1hX"), "https://vercel.com/acme/site/J1hX");
+        assert!(with("https://evil.example/x").is_null());
+        assert!(vercel_list(vec![dep("a", "site", "READY", 1.0)])[0]["inspectorUrl"].is_null());
     }
 
     #[test]

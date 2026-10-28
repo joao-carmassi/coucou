@@ -100,6 +100,12 @@ function deployState(state: unknown): [accent: string, label: string] {
   }
 }
 
+/** The deploy's dashboard page (its team, its project), else its own address. */
+export function deployUrl(d: Record<string, unknown> | undefined): string | null {
+  if (typeof d?.inspectorUrl === "string") return d.inspectorUrl;
+  return d?.url ? `https://${d.url}` : null;
+}
+
 function vercelCard(onDetail: () => void): HTMLElement {
   const deployments = arr("integration_vercel", "deployments");
   const rows = h("div", { class: "int-rows" });
@@ -122,10 +128,11 @@ function vercelCard(onDetail: () => void): HTMLElement {
     } else {
       row = listRow(accent, false, name, ago);
     }
-    if (d.url) {
+    const link = deployUrl(d);
+    if (link) {
       row.classList.add("link");
-      row.title = String(d.url);
-      row.onclick = () => void App.openUrl(`https://${d.url}`);
+      row.title = link;
+      row.onclick = () => void App.openUrl(link);
     }
     rows.append(row);
   });

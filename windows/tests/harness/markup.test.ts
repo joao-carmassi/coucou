@@ -87,7 +87,7 @@ function cardOf(id: string, st: { configured?: boolean; loaded?: boolean; error?
 
 const DATA: Record<string, Record<string, unknown>> = {
   integration_vercel: { deployments: [
-    { projectName: "coucou-site", state: "READY", createdAt: ago(5 * MIN), commitMessage: "fix: header spacing", branch: "main", url: "coucou-site.vercel.app" },
+    { projectName: "coucou-site", state: "READY", createdAt: ago(5 * MIN), commitMessage: "fix: header spacing", branch: "main", url: "coucou-site.vercel.app", inspectorUrl: "https://vercel.com/acme/coucou-site/J1hXN00q" },
     { projectName: "api", state: "ERROR", createdAt: ago(3 * HOUR) },
     { projectName: "docs", state: "READY", createdAt: ago(2 * DAY) },
     { projectName: "hidden-fourth", state: "READY", createdAt: ago(9 * DAY) },

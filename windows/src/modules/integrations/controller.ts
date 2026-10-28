@@ -8,7 +8,7 @@ import type { Disposer, HomeRequest, IslandApi } from "../../core/moduleApi";
 import type { BoardCard, BoardFocus, BoardNews } from "../board/api";
 import { GITHUB, PROVIDERS, cleanups, info, rt, steps, type IntegrationInfo, type Provider } from "./store";
 import { pillPresent } from "./providers";
-import { renderIntegrationCard, githubData, type GithubOpening, type IntegrationCardHooks } from "./views/integrations";
+import { renderIntegrationCard, deployUrl, githubData, type GithubOpening, type IntegrationCardHooks } from "./views/integrations";
 import { enterGithubPanel, newsFacts, resetGithub, sawRunEnd } from "./views/github";
 
 /** As in the Swift pollers: a pill's finished or error look clears itself after this. */
@@ -210,11 +210,19 @@ export function startProvider(api: IslandApi, def: Provider): Disposer {
     };
   }
 
+  /** Vercel: the newest deploy's dashboard page (the dashboard home lands on the default team, not the deploy's). */
+  function vercelLink(): string | null {
+    if (id !== "integration_vercel") return null;
+    const list = (info[id]?.data as { deployments?: Record<string, unknown>[] } | undefined)?.deployments;
+    return Array.isArray(list) ? deployUrl(list[0]) : null;
+  }
+
   /** The ↗ button: same targets as openAgentTarget() on macOS. */
   function openTarget(taskId: string): boolean {
     if (taskId !== id || !owned) return false;
     if (id === "integration_n8n") void IntegrationsBridge.openN8n();
     else if (isGithub && githubData()) void App.openUrl(githubData()!.profileUrl);
+    else if (vercelLink()) void App.openUrl(vercelLink()!);
     else if (def.url) void App.openUrl(def.url);
     return true;
   }
