@@ -271,6 +271,15 @@ fn vercel_list(raw: Vec<Value>) -> Vec<Value> {
                 "createdAt": at(d),
                 "commitMessage": pick(["githubCommitMessage", "gitlabCommitMessage", "bitbucketCommitMessage"]),
                 "branch": pick(["githubCommitRef", "gitlabCommitRef", "bitbucketBranch"]),
+                "sha": pick(["githubCommitSha", "gitlabCommitSha", "bitbucketCommitHash"]).map(|s| s.chars().take(7).collect::<String>()),
+                "author": pick(["githubCommitAuthorLogin", "gitlabCommitAuthorLogin", "bitbucketCommitAuthorName"])
+                    .or_else(|| d.pointer("/creator/username").and_then(Value::as_str).map(str::to_string)),
+                // "production", or null for a preview.
+                "target": d.get("target").and_then(Value::as_str),
+                // Build time, once the deploy is ready.
+                "buildMs": d.get("ready").and_then(Value::as_f64)
+                    .zip(d.get("buildingAt").and_then(Value::as_f64))
+                    .map(|(r, b)| r - b).filter(|ms| *ms >= 0.0),
             }))
         })
         .take(5)
@@ -747,6 +756,23 @@ mod tests {
         assert_eq!(with("https://vercel.com/acme/site/J1hX"), "https://vercel.com/acme/site/J1hX");
         assert!(with("https://evil.example/x").is_null());
         assert!(vercel_list(vec![dep("a", "site", "READY", 1.0)])[0]["inspectorUrl"].is_null());
+    }
+
+    #[test]
+    fn vercel_detail_fields() {
+        let mut d = dep("a", "site", "READY", 1.0);
+        d["target"] = json!("production");
+        d["buildingAt"] = json!(1000.0);
+        d["ready"] = json!(43000.0);
+        d["creator"] = json!({ "username": "edu" });
+        d["meta"] = json!({ "githubCommitSha": "a1b2c3d4e5f6" });
+        let v = &vercel_list(vec![d])[0];
+        assert_eq!(v["sha"], "a1b2c3d");
+        assert_eq!(v["author"], "edu");
+        assert_eq!(v["target"], "production");
+        assert_eq!(v["buildMs"], 42000.0);
+        let bare = &vercel_list(vec![dep("b", "api", "BUILDING", 1.0)])[0];
+        assert!(bare["sha"].is_null() && bare["target"].is_null() && bare["buildMs"].is_null());
     }
 
     #[test]

@@ -106,6 +106,9 @@ export function deployUrl(d: Record<string, unknown> | undefined): string | null
   return d?.url ? `https://${d.url}` : null;
 }
 
+/** Which way the Vercel card last turned: the next build plays the slide once, a data refresh does not. */
+let vercelSwap: "in" | "back" | null = null;
+
 function vercelCard(onDetail: () => void): HTMLElement {
   const deployments = arr("integration_vercel", "deployments");
   const rows = h("div", { class: "int-rows" });
@@ -118,11 +121,12 @@ function vercelCard(onDetail: () => void): HTMLElement {
       const more = h(
         "button",
         {
-          class: "int-more",
-          title: "Detalhes",
-          onclick: (e: Event) => { e.stopPropagation(); onDetail(); }, // the row behind opens the deploy
+          class: "vc-btn vc-more",
+          title: "Detalhes do deploy",
+          "aria-label": "Detalhes do deploy",
+          onclick: (e: Event) => { e.stopPropagation(); vercelSwap = "in"; onDetail(); }, // the row behind opens the deploy
         },
-        svg(ICONS.ellipsis, 8),
+        svg(ICONS.ellipsis, 14),
       );
       row = listRow(accent, true, name, ago, more);
     } else {
@@ -136,39 +140,95 @@ function vercelCard(onDetail: () => void): HTMLElement {
     }
     rows.append(row);
   });
-  return tileCard(undefined, header("#7C5CFF", "Vercel", "Deploys"), rows);
+  const card = tileCard(undefined, header("#7C5CFF", "Vercel", "Deploys"), rows);
+  if (vercelSwap === "back") {
+    card.classList.add("int-swap", "back");
+    queueMicrotask(() => card.querySelector<HTMLElement>(".vc-more")?.focus({ preventScroll: true }));
+  }
+  vercelSwap = null;
+  return card;
+}
+
+/** 42000 → "42s", 95000 → "1min 35s". */
+function duration(ms: number): string {
+  const s = Math.round(ms / 1000);
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}min${s % 60 ? ` ${s % 60}s` : ""}`;
+}
+
+/** A "·"-joined line of the facts that are there, or null when none is. */
+function facts(cls: string, ...parts: unknown[]): HTMLElement | null {
+  const words = parts.filter((p) => typeof p === "string" && p).map(String);
+  if (!words.length) return null;
+  const line = h("div", { class: cls, title: words.join(" · ") });
+  words.forEach((w, i) => {
+    if (i) line.append(h("i", { text: "·" }));
+    line.append(h("span", { text: w }));
+  });
+  return line;
 }
 
 function vercelDetail(onBack: () => void): HTMLElement {
   const d = arr("integration_vercel", "deployments")[0] ?? {};
   const [accent, status] = deployState(d.state);
-  const body = h("div", { class: "int-detail-body" });
-  if (d.commitMessage) body.append(h("div", { class: "int-commit", text: String(d.commitMessage) }));
-  const meta = h("div", { class: "int-meta" });
-  if (d.branch) meta.append(h("span", { text: String(d.branch) }));
-  meta.append(h("span", { text: `há ${timeAgo(d.createdAt)}` }));
-  body.append(meta);
+  const back = () => { vercelSwap = "back"; onBack(); };
+  const name = String(d.projectName ?? "Deploy");
+
+  // Lines start under the project name; the status colour stays in the head.
+  const body = h("div", { class: "vc-body" });
+  if (d.commitMessage) body.append(h("div", { class: "vc-commit", title: String(d.commitMessage), text: String(d.commitMessage) }));
+  const git = facts("vc-facts mono", d.branch, d.sha, d.author);
+  if (git) body.append(git);
+  // Older data (before the target was read) says nothing rather than "Preview".
+  const env = d.target === undefined ? null : d.target === "production" ? "Produção" : "Preview";
+  body.append(facts("vc-facts", env, `há ${timeAgo(d.createdAt)}`, typeof d.buildMs === "number" ? `build ${duration(d.buildMs)}` : null)!);
   if (d.url) {
+    const url = `https://${d.url}`;
+    const copy = h(
+      "button",
+      {
+        class: "vc-btn vc-copy",
+        title: "Copiar URL",
+        "aria-label": "Copiar URL",
+        onclick: () => {
+          void navigator.clipboard?.writeText(url).then(() => {
+            copy.classList.add("done");
+            copy.replaceChildren(svg(ICONS.check, 10, { stroke: 2.4 }));
+          });
+        },
+      },
+      svg(ICONS.copy, 10, { stroke: 2 }),
+    );
     body.append(
-      h("button", {
-        class: "int-link",
-        text: String(d.url),
-        onclick: () => void App.openUrl(`https://${d.url}`),
-      }),
+      h(
+        "div",
+        { class: "vc-url" },
+        h("button", { class: "vc-link", title: url, onclick: () => void App.openUrl(url) }, h("span", { text: String(d.url) }), svg(ICONS.arrowUpRight, 10)),
+        copy,
+      ),
     );
   }
-  return tileCard(
-    "detail",
+
+  const card = tileCard(
+    "detail vc-sheet",
     h(
       "div",
-      { class: "int-detail-head" },
-      h("button", { class: "int-back", onclick: onBack }, svg(ICONS.chevronLeft, 10, { stroke: 2.4 })),
-      dot(accent, 6),
-      h("b", { text: String(d.projectName ?? "Deploy") }),
-      h("span", { class: "int-badge", style: `color:${accent};background:${accent}24`, text: status }),
+      { class: "vc-head" },
+      h("button", { class: "vc-btn vc-back", title: "Voltar", "aria-label": "Voltar", onclick: back }, svg(ICONS.chevronLeft, 10, { stroke: 2.4 })),
+      h("b", { title: name, text: name }),
+      h("span", { class: "vc-status", style: `color:${accent}` }, dot(accent, 5), h("span", { text: status })),
     ),
     body,
   );
+  // Escape steps back to the list before it would close the island.
+  card.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.stopPropagation(); back(); }
+  });
+  if (vercelSwap === "in") {
+    card.classList.add("int-swap");
+    queueMicrotask(() => card.querySelector<HTMLElement>(".vc-back")?.focus({ preventScroll: true }));
+  }
+  vercelSwap = null;
+  return card;
 }
 
 // ── Resend ────────────────────────────────────────────────────────────────────

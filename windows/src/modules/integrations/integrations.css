@@ -137,7 +137,6 @@
   flex: 0 0 auto;
 }
 
-.int-more,
 .int-back {
   border: 0;
   background: transparent;
@@ -146,16 +145,74 @@
   place-items: center;
   cursor: default;
   flex: 0 0 auto;
-}
-
-.int-more {
-  width: 18px;
-  height: 18px;
-}
-
-.int-back {
   width: 28px;
   height: 28px;
+}
+
+/* Vercel's small icon buttons (the row's "…", the sheet's back and copy): bare glyphs
+   like .np-btn and the tabs, a plate only under the mouse or the keyboard. */
+.vc-btn {
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--dim-2);
+  cursor: default;
+  transition: color 0.12s ease-out, background 0.12s ease-out;
+}
+
+/* A bigger target than the glyph, without growing the line. */
+.vc-btn::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+}
+
+.vc-btn:hover,
+.vc-btn:focus-visible {
+  color: var(--ink);
+  background: var(--surface-plate);
+}
+
+.vc-btn:focus-visible,
+.vc-link:focus-visible {
+  outline: 1.5px solid rgba(255, 255, 255, 0.55);
+  outline-offset: 0;
+}
+
+/* The "…" at the end of the first row: no taller than the row's words. */
+.vc-more {
+  width: 20px;
+  height: 14px;
+  margin: 0 -4px 0 auto;
+  border-radius: 7px;
+}
+
+/* Vercel's list and its deploy sheet trade places with a short slide. */
+.int-swap {
+  animation: int-swap 0.2s ease-out both;
+}
+
+.int-swap.back {
+  --int-swap-from: -8px;
+}
+
+@keyframes int-swap {
+  from {
+    opacity: 0;
+    transform: translateX(var(--int-swap-from, 8px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .int-swap { animation: none; }
+  .vc-btn, .vc-link { transition: none; }
 }
 
 .int-balance {
@@ -326,39 +383,134 @@
   flex: 0 0 auto;
 }
 
-.int-detail-body {
+/* ── Vercel deploy sheet ── */
+
+.vc-head {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-top: 8px;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  height: 18px;
 }
 
-.int-commit {
-  font: 400 10.5px var(--font);
-  color: #c5c8cd;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+/* The chevron's glyph lines up with the list's title dot. */
+.vc-back {
+  margin-left: -4px;
 }
 
-.int-meta {
-  display: flex;
-  gap: 8px;
-  font: 400 10px var(--font);
-  color: var(--dim-3);
-}
-
-.int-link {
-  border: 0;
-  background: transparent;
-  font: 400 10px var(--mono);
-  color: #7c5cffd9;
-  text-align: left;
-  cursor: default;
+.vc-head b {
+  font: 600 12px var(--font);
+  color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.vc-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding-left: 8px;
+  flex: 0 0 auto;
+  font: 500 10px var(--font);
+}
+
+/* Under the project name, past the back button. */
+.vc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0 0 17px;
+  min-width: 0;
+}
+
+.vc-commit {
+  font: 500 11px/15px var(--font);
+  color: var(--surface-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 1px;
+}
+
+/* branch · sha · author, then env · when · build time: the first fact gives way first. */
+.vc-facts {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  font: 400 10px/13px var(--font);
+  color: var(--dim-3);
+}
+
+.vc-facts.mono {
+  font-family: var(--mono);
+  color: var(--dim-2);
+}
+
+.vc-facts span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.vc-facts span:not(:first-child) {
+  flex: 0 0 auto;
+}
+
+.vc-facts i {
+  font-style: normal;
+  color: var(--dim-5);
+}
+
+.vc-url {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin-top: 5px;
+}
+
+.vc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  font: 400 10px/14px var(--mono);
+  color: var(--dim-2);
+  cursor: default;
+  transition: color 0.12s ease-out;
+}
+
+.vc-link span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.vc-link svg {
+  flex: 0 0 auto;
+  opacity: 0.7;
+}
+
+.vc-link:hover {
+  color: var(--ink);
+}
+
+.vc-link:hover span {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.vc-copy.done {
+  color: var(--green);
 }
 
 .int-detail-text {

@@ -24,6 +24,8 @@ export const ICONS = {
   add: "M12 5v14M5 12h14",
   // lock, stroked
   lock: "M8 11V8a4 4 0 0 1 8 0v3M6 11h12v9H6z",
+  // two sheets, stroked: copy
+  copy: "M9 9h10.5v10.5H9zM15 9V4.5H4.5V15H9",
   // minus, stroked
   dash: "M7 12h10",
   // a rocket, for deployments, stroked
