@@ -1,7 +1,7 @@
 import { command } from "../../kit/tauri";
 import { NO_BREAKS, type Breaks, type Days } from "./logic";
 
-export interface Checkpoint { idle: number; quiet: boolean }
+export interface Checkpoint { idle: number; quiet: boolean; back: number }
 
 export const EyecareBridge = {
   /** Cuts the open screen-time segment; answers the ms since the last input and whether the user is busy (null outside Tauri). */

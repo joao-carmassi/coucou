@@ -5,7 +5,7 @@ import { svg } from "../../kit/dom";
 import { ICONS } from "../../kit/icons";
 import { PANEL_H, type Disposer, type IslandApi, type ModuleDef } from "../../core/moduleApi";
 import { EyecareBridge } from "./bridge";
-import { ASK_MS, BREAKS, RETRY_MS, enabledKinds, intervalMin, pickKind, roundOf, type BreakKind } from "./logic";
+import { ASK_MS, BREAKS, RETRY_MS, enabledKinds, intervalMin, pickKind, restedLeft, roundOf, type BreakKind } from "./logic";
 import { buildAsk } from "./ask";
 import { buildView } from "./view";
 
@@ -19,6 +19,8 @@ let asking: { kind: BreakKind; answer(taken: boolean): void } | null = null;
 function start(api: IslandApi): Disposer {
   let timer: Disposer | null = null;
   let n = 0;
+  let counted = false; // the absence under way at the last round was counted (taken/skip): its return is not a second break
+  let back = 0; // the return already used to re-arm, so a timer firing early does not count it twice
   let alive = true;
   let checking = false; // a checkpoint is in flight: fire() re-arms by itself
   let dropAsk: Disposer | null = null; // closes the card request and its expiry
@@ -58,6 +60,12 @@ function start(api: IslandApi): Disposer {
     if (!kind || api.paused() || asking) { arm(); return; }
     const round = roundOf(cp?.idle ?? null, cp?.quiet ?? false, min * 60_000);
     if (round === "wait") { arm(RETRY_MS); return; } // not counted, same kind next time
+    if (round === "ask" && cp && cp.back !== back) {
+      const left = restedLeft(cp.back, Date.now(), min * 60_000);
+      // Came back from a real break inside this interval: that was the break; the next one is due an interval after the return.
+      if (left) { if (!counted) void EyecareBridge.mark(true); counted = false; back = cp.back; arm(left); return; }
+    }
+    counted = round !== "ask";
     if (round === "taken") void EyecareBridge.mark(true);
     if (round === "ask") {
       n++;

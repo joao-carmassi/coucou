@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { appName, dayKey, dayTotal, enabledKinds, fmtDur, intervalMin, lastDays, parseExcluded, pickKind, roundOf, topApps } from "../src/modules/eyecare/logic.ts";
+import { appName, dayKey, dayTotal, enabledKinds, fmtDur, intervalMin, lastDays, parseExcluded, pickKind, restedLeft, roundOf, topApps } from "../src/modules/eyecare/logic.ts";
 
 test("interval: 0 is off, otherwise clamped to 5..60", () => {
   assert.deepEqual([0, -3, "x", null, 1, 20, 20.9, 999].map(intervalMin), [0, 0, 0, 0, 5, 20, 20, 60]);
@@ -68,4 +68,12 @@ test("view heights: fixed parts add up, the week does not depend on rows", async
   assert.equal(fitHeight("today", 5), 292);
   assert.equal(fitHeight("week", 0), 272);
   assert.ok(fitHeight("today", 5) <= 320);
+});
+
+test("restedLeft restarts the interval from the return", () => {
+  const iv = 40 * 60_000, now = 10_000_000;
+  assert.equal(restedLeft(0, now, iv), 0);
+  assert.equal(restedLeft(now - 3 * 60_000, now, iv), 37 * 60_000);
+  assert.equal(restedLeft(now - iv, now, iv), 0);
+  assert.equal(restedLeft(now + 5_000, now, iv), iv);
 });

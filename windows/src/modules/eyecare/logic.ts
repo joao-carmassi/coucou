@@ -45,7 +45,12 @@ export function roundOf(idleMs: number | null, quiet: boolean, intervalMs: numbe
   return idle >= intervalMs + RESTED_MS ? "skip" : idle >= RESTED_MS ? "taken" : "ask";
 }
 
-export type Days = Record<string, Record<string, number>>;
+/** Ms left of the interval that restarted when the user came back from a real absence at `backMs`; 0 = no recent return. */
+export function restedLeft(backMs: number, nowMs: number, intervalMs: number): number {
+  return backMs ? Math.min(intervalMs, Math.max(0, backMs + intervalMs - nowMs)) : 0;
+}
+
+export type Days =Record<string, Record<string, number>>;
 
 /** Local "YYYY-MM-DD", the same key the Rust side writes. */
 export function dayKey(d: Date): string {

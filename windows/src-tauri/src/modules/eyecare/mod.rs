@@ -67,6 +67,10 @@ struct Acc {
     breaks: Breaks,
     dirty: bool,
     written: Instant,
+    /// The last cut saw an absence (idle >= grace, not quiet) still under way.
+    away: bool,
+    /// Unix ms the last absence ended (last input seen at the first cut after it, <= CUT_EVERY_SECS late); 0 = none.
+    back: u64,
 }
 
 static ACC: Mutex<Option<Acc>> = Mutex::new(None);
@@ -139,6 +143,16 @@ impl Acc {
         self.cur = next.filter(|e| !is_excluded(e, &self.cfg.excluded)).map(|e| (e, now));
     }
 
+    /// Notes the end of an absence; `idle_ms` is already quiet-exempt (away_ms), so a film or a call is not a break.
+    fn watch(&mut self, now_ms: u64, idle_ms: u64) {
+        if idle_ms >= IDLE_GRACE_MS {
+            self.away = true;
+        } else if self.away {
+            self.away = false;
+            self.back = now_ms.saturating_sub(idle_ms);
+        }
+    }
+
     fn flush(&mut self) {
         if self.dirty {
             self.dirty = false;
@@ -184,6 +198,7 @@ fn cut(force: bool) {
     if let Some(acc) = lock().as_mut() {
         let cur = acc.cur.as_ref().map(|c| c.0.clone());
         acc.switch(Instant::now(), idle, cur);
+        acc.watch(unix_ms(), idle);
         if force || acc.written.elapsed().as_secs() >= WRITE_EVERY_SECS {
             acc.flush();
         }
@@ -230,7 +245,7 @@ impl Module for EyecareModule {
         prune(&mut days, today, cfg.keep_days);
         let mut breaks: Breaks = read(&breaks_path());
         prune(&mut breaks.days, today, cfg.keep_days);
-        let mut acc = Acc { days, cur: None, cfg, breaks, dirty: false, written: Instant::now() };
+        let mut acc = Acc { days, cur: None, cfg, breaks, dirty: false, written: Instant::now(), away: false, back: 0 };
         forget_excluded(&mut acc);
         acc.flush();
         acc.switch(Instant::now(), 0, Some(presence::foreground_now().exe));
@@ -275,13 +290,16 @@ pub struct Checkpoint {
     idle: u64,
     /// Full-screen app, presentation, call or quiet hours: do not interrupt.
     quiet: bool,
+    /// Unix ms the last real absence (>= IDLE_GRACE_MS, not quiet) ended; 0 = none since start.
+    back: u64,
 }
 
 /// Cuts the open segment (idle time removed) and answers the idle ms and whether the user is "quiet".
 #[tauri::command]
 pub fn eyecare_checkpoint() -> Checkpoint {
     cut(true);
-    Checkpoint { idle: presence::user_idle_ms(), quiet: presence::now().quiet }
+    let back = lock().as_ref().map_or(0, |a| a.back);
+    Checkpoint { idle: presence::user_idle_ms(), quiet: presence::now().quiet, back }
 }
 
 /// day -> exe -> seconds, after a checkpoint. Empty while the module is off.
@@ -335,7 +353,20 @@ mod tests {
 
     fn acc(excluded: &[&str]) -> Acc {
         let cfg = Cfg { excluded: excluded.iter().map(|e| e.to_string()).collect(), keep_days: 30 };
-        Acc { days: Days::new(), cur: None, cfg, breaks: Breaks::default(), dirty: false, written: Instant::now() }
+        Acc { days: Days::new(), cur: None, cfg, breaks: Breaks::default(), dirty: false, written: Instant::now(), away: false, back: 0 }
+    }
+
+    #[test]
+    fn watch_notes_the_end_of_an_absence() {
+        let mut a = acc(&[]);
+        a.watch(1_000_000, 60_000);
+        assert_eq!(a.back, 0, "short idle is not an absence");
+        a.watch(2_000_000, IDLE_GRACE_MS);
+        assert_eq!(a.back, 0, "still away");
+        a.watch(2_060_000, 10_000);
+        assert_eq!(a.back, 2_050_000, "back = last input after the absence");
+        a.watch(2_120_000, 1_000);
+        assert_eq!(a.back, 2_050_000, "kept until the next absence ends");
     }
 
     #[test]
