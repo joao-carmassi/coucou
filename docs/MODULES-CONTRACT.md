@@ -127,7 +127,7 @@ export interface IslandHost { // what Island lends the registry
   readonly actions: ViewActions; open(view: string): void; addRequest(owner: string, spec: RequestSpec): Disposer; hide(): void; collapse(): void; reveal(): void;
   setView(view: string): void; note(text: string): void; error(err: unknown): void; mouseInside(): boolean;
   fsmState(): FsmState; layoutHint(): void; redraw(): void; // host side only; modules get api.island.redraw
-  addView(def: ViewDef, ctx: ViewContext): Disposer; setTabs(tabs: TabDef[]): void; addOverlay(o: Overlay): Disposer;
+  addView(def: ViewDef, ctx: ViewContext): Disposer; setTabs(tabs: TabDef[]): void; addOverlay(o: Overlay): Disposer; addHistory(view: string, def: HistoryDef): { push(): void; off: Disposer };
   avatarEmote(e: BotEmoteName): void; avatarMorph(v: number): void; avatarGulp(): void }
 export interface IslandApi {
   readonly id: string; settings(): Settings;
@@ -138,7 +138,9 @@ export interface IslandApi {
   avatar: { publish(sig: AvatarSignal | null): void; emote(e: BotEmoteName): void; morph(v: number): void; gulp(): void };
   island: { open(view: string): void; request(spec: { view: string; priority: number; pin?: boolean; ms?: number }): Disposer; busy(): boolean; setView(view: string): void; close(): void; wake(): void; hide(): void;
     keepAwake(pred: () => boolean): Disposer; mode(): IslandMode; fsmState(): FsmState; mouseInside(): boolean; view(): string;
-    note(text: string): void; error(err: unknown): void; overlay(o: Overlay): Disposer; /* + onChange/home/mouse/mouseLocal/redraw: see "Core API (WP0)" */ };
+    note(text: string): void; error(err: unknown): void; overlay(o: Overlay): Disposer;
+    history(view: string, def: { current(): unknown; restore(state: unknown, dir: "back" | "forward"): void }): () => void; // joins the view's own screens to the mouse back/forward history; call the returned push() after a user navigation
+    /* + onChange/home/mouse/mouseLocal/redraw: see "Core API (WP0)" */ };
   provide<K extends keyof IslandHooks>(hook: K, fn: IslandHooks[K]): Disposer;
   provide<T>(service: `${string}.${string}`, impl: T): Disposer; // services: namespaced key, removed when the module stops
   use<T>(service: `${string}.${string}`): T | undefined;          // first provider; undefined = feature absent

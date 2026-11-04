@@ -312,6 +312,11 @@ body {
   transition: opacity 0.3s ease-out 0.16s, transform 0.3s cubic-bezier(0.3, 1.2, 0.4, 1) 0.16s;
 }
 
+/* Back/forward (mouse side buttons): the view coming in starts off to the side it comes from.
+   (island.ts sets data-nav only when the system does not ask for less motion.) */
+#views[data-nav="back"] > .view:not(.on) { transform: translateX(-16px) scale(0.97); }
+#views[data-nav="fwd"] > .view:not(.on) { transform: translateX(16px) scale(0.97); }
+
 /* A view nested in a hidden view (the Ask tab's two panels) stays hidden to
    clicks too: its own `.on` would otherwise take back pointer-events and catch
    the clicks meant for the card shown under it. */

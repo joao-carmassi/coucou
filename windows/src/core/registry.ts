@@ -189,6 +189,11 @@ function makeApi(id: string, scope: Scope, host: IslandHost): IslandApi {
       mouseLocal: () => State.mouseInIsland,
       redraw: () => host.redraw(),
       overlay: (o) => scope.add(host.addOverlay(o)),
+      history: (view, def) => {
+        const { push, off } = host.addHistory(view, def);
+        scope.add(off);
+        return push;
+      },
     },
     actions: {
       add(def) {

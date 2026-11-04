@@ -14,7 +14,7 @@ import { Avatar } from "../core/avatar";
 import { Hooks, emitMode } from "../core/hooks";
 import { glowOf } from "../mochi/moods";
 import { EXPANDED_W, PANEL_H } from "../core/moduleApi";
-import type { Disposer, IslandHost, Notice, Overlay, StatusCard, StatusLine, TabDef, ViewContext, ViewDef } from "../core/moduleApi";
+import type { Disposer, HistoryDef, IslandHost, Notice, Overlay, StatusCard, StatusLine, TabDef, ViewContext, ViewDef } from "../core/moduleApi";
 import { Holds, Last, focusMs } from "../core/holds";
 import { Requests, type Req, type RequestSpec } from "../core/requests";
 import { Compact } from "../core/compact";
@@ -22,6 +22,7 @@ import { Pin } from "../core/pin";
 import { NoticeQueue, type NoticeEntry } from "../core/notices";
 import { Sound } from "../core/sound";
 import { Actions } from "../core/actions";
+import { NavHistory } from "../core/history";
 import { colorFor } from "../core/pills";
 import { State } from "../core/state";
 import { BotEngine, hexToRGB, sleepDue, type RGB } from "../mochi/engine";
@@ -72,6 +73,12 @@ export class Island implements IslandHost {
   /** View name -> id of the module that owns it. */
   private viewOwner = new Map<string, string>();
   private overlays = new Set<Overlay>();
+  /** Back/forward (mouse side buttons): the screens the user went through while the island stayed open. */
+  private nav = new NavHistory();
+  /** Views that keep screens of their own in the history (api.island.history). */
+  private histories = new Map<string, HistoryDef>();
+  /** A travel is restoring a screen: nothing records meanwhile. */
+  private replaying = false;
   private kbFocus = false;
   /** The hotkey opened the island: it takes the keyboard (arrows, Enter) until it folds. */
   private hotkeyKb = false;
@@ -185,6 +192,7 @@ export class Island implements IslandHost {
       setView: (v) => {
         // The user picked home (the default): that drops every focus (sticky holds and the last view). Automatic landings go through this.setView.
         this.setView(v);
+        this.record(v);
         if (v === State.defaultView()) { Holds.clear(); Last.clear(); } // after setView: it records the tab left
       },
       toggleSound: () => {
@@ -314,8 +322,14 @@ export class Island implements IslandHost {
     this.nudge = null;
     this.clearNudgeTimer();
     this.offsetX.target = 0;
-    if (mode === "expanded") Sound.play("open");
+    if (mode === "expanded") {
+      Sound.play("open");
+      // The view it opens on starts the history, unless something else chose it (greeting, a note, a request's view).
+      const v = State.view;
+      if (v !== "greeting" && v !== "confused" && v !== "note" && v !== Requests.front()?.view) this.record(v);
+    }
     if (prev === "expanded") {
+      this.nav.clear();
       this.leave(State.view, true);
       Sound.play("close");
       Requests.parked = true;
@@ -377,6 +391,7 @@ export class Island implements IslandHost {
 
   setView(view: IslandViewName) {
     view = this.guard(view);
+    if (!this.replaying) delete this.viewsEl.dataset.nav;
     this.tintRequest = null;
     if (view !== State.view) for (const o of this.overlays) o.leaving?.(view);
     if (State.mode !== "expanded") {
@@ -701,6 +716,36 @@ export class Island implements IslandHost {
     }, 2400);
   }
 
+  /** Records the user landing on `view` (with the screen it shows, when it keeps its own). Only while open, never while travelling. */
+  private record(view: string) {
+    if (this.replaying || State.mode !== "expanded") return;
+    this.nav.push({ view, state: this.histories.get(view)?.current() });
+  }
+
+  /** Mouse back (-1) / forward (1) with the pointer on the open island. */
+  private travel(dir: -1 | 1, x: number, y: number) {
+    const r = this.islandRect();
+    if (State.mode !== "expanded" || State.isPinned || State.view === "confused" || State.view === "greeting") return;
+    if (x < r.x || x > r.x + r.w || y < r.y || y > r.y + r.h) return;
+    const e = this.nav.step(dir, State.view, (n) => this.known(n.view));
+    if (!e) return;
+    Sound.play("blip");
+    this.replaying = true;
+    try {
+      if (e.view !== State.view) {
+        if (!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+          this.viewsEl.dataset.nav = dir < 0 ? "back" : "fwd";
+          void this.viewsEl.offsetWidth; // the side it comes from is in place before the view turns on
+        }
+        this.setView(e.view);
+      }
+      const def = this.histories.get(e.view);
+      if (def && e.state !== undefined) def.restore(e.state, dir < 0 ? "back" : "forward");
+    } finally {
+      this.replaying = false;
+    }
+  }
+
   /** Release of the left button: Mochi plain click, or the end of a nudge. Idempotent. */
   private onMouseUp() {
     if (this.botPress) {
@@ -930,6 +975,7 @@ export class Island implements IslandHost {
 
     this.islandEl.addEventListener("mousedown", (e) => {
       Sound.resume();
+      if (e.button > 2) { e.preventDefault(); return; } // the side buttons only travel (on release)
       if (State.mode !== "expanded") {
         // Compact opens on the release: a press that travels is a sideways nudge.
         if (State.mode === "compact") {
@@ -945,7 +991,12 @@ export class Island implements IslandHost {
 
     // The DOM only sees releases over our window; the cursor poll's falling edge
     // covers the rest. Both funnel into onMouseUp.
-    window.addEventListener("mouseup", () => {
+    window.addEventListener("mouseup", (e) => {
+      if (e.button === 3 || e.button === 4) {
+        e.preventDefault();
+        this.travel(e.button === 3 ? -1 : 1, e.clientX, e.clientY);
+        return;
+      }
       this.onMouseUp();
     });
 
@@ -1112,6 +1163,9 @@ export class Island implements IslandHost {
   }
 
   private frame = (nowMs: number) => {
+      if (this.dbgPrev) this.dbgGap = Math.max(this.dbgGap, nowMs - this.dbgPrev);
+      this.dbgPrev = nowMs; this.dbgN++;
+    }
     // Compact, cursor away, only the looping avatar idle (breathe/scan/sweat/zz): ~15 fps.
     // Every presented frame costs the GPU process ~4 ms of CPU (a 720x320 transparent window), so
     // the rate is the cost. The skipped frame is a timeout, not a rAF poll: polling woke the main
@@ -1505,6 +1559,14 @@ export class Island implements IslandHost {
     return () => {
       this.overlays.delete(o);
       o.el.remove();
+    };
+  }
+
+  addHistory(view: string, def: HistoryDef) {
+    this.histories.set(view, def);
+    return {
+      push: () => this.record(view),
+      off: () => { if (this.histories.get(view) === def) this.histories.delete(view); },
     };
   }
 

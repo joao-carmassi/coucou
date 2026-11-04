@@ -180,26 +180,75 @@
   flex: 0 0 auto;
 }
 
-/* The way to every file the session changed, in the panel's head. */
-.sess-files {
+/* The panel's head keeps its slots in every screen: ‹, the segments, what is open, ↗. */
+.sess-chips.sess-nav {
   flex: 0 0 auto;
-  height: 17px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--surface-plate);
-  color: var(--surface-text);
-  font: 500 10.5px var(--font);
-  cursor: default;
+  overflow: visible;
 }
 
-.sess-files:hover {
-  background: rgba(255, 255, 255, 0.14);
+.sess-nav .sess-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* One of the other sessions wants looking at: the segment says so in its colour. */
+.sess-nav .sess-chip.calls {
+  color: var(--c);
+  background: color-mix(in srgb, var(--c) 14%, transparent);
+}
+
+.sess-nav .sess-chip:disabled {
+  opacity: 0.45;
+}
+
+/* The editor's dot for unsaved, on the Diário segment while an edit is being typed. */
+.sess-nav .sess-chip.writing::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--amber);
+}
+
+/* What is open, as an editor names its file: it takes what the segments leave, and gives way first. */
+.sess-ctx {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sess-ctx .pane-head-badge:empty,
+.sess-ctx-name:empty {
+  display: none;
+}
+
+.sess-ctx-name {
+  font: 400 11px var(--mono);
   color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.sess-ctx .pane-head-aside {
+  margin-left: auto;
 }
 
 .sess-back {
   margin-right: 2px;
+}
+
+.sess-back:disabled {
+  opacity: 0.3;
+}
+
+.sess-back:disabled:hover {
+  background: var(--surface-plate);
+  color: var(--dim-2);
 }
 
 /* The name — a conversation's title can be long — keeps the row's room: what
@@ -977,3 +1026,7 @@
    (same idea as #activity-line:not(.on) span). Active view is .view.on. */
 .view:not(.on) * { animation-play-state: paused; }
 
+
+@media (prefers-reduced-motion: reduce) {
+  .session-view .pane-list.pane-from-right, .session-view .pane-list.pane-from-left { animation: none; }
+}

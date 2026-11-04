@@ -87,7 +87,7 @@ function cardOf(id: string, st: { configured?: boolean; loaded?: boolean; error?
 
 const DATA: Record<string, Record<string, unknown>> = {
   integration_vercel: { deployments: [
-    { projectName: "coucou-site", state: "READY", createdAt: ago(5 * MIN), commitMessage: "fix: header spacing", branch: "main", url: "coucou-site.vercel.app", inspectorUrl: "https://vercel.com/acme/coucou-site/J1hXN00q" },
+    { projectName: "coucou-site", state: "READY", createdAt: ago(5 * MIN), commitMessage: "fix: header spacing", branch: "main", sha: "a1b2c3d", author: "edu", target: "production", buildMs: 42000, url: "coucou-site.vercel.app", inspectorUrl: "https://vercel.com/acme/coucou-site/J1hXN00q" },
     { projectName: "api", state: "ERROR", createdAt: ago(3 * HOUR) },
     { projectName: "docs", state: "READY", createdAt: ago(2 * DAY) },
     { projectName: "hidden-fourth", state: "READY", createdAt: ago(9 * DAY) },
@@ -124,6 +124,16 @@ describe("integrations cards", () => {
   it("vercel detail ready", () => snap("integrations-vercel-detail", cardOf("integration_vercel", { loaded: true, data: DATA.integration_vercel, detail: true })));
   it("vercel detail failed", () => snap("integrations-vercel-detail-error", cardOf("integration_vercel", { loaded: true, detail: true, data: { deployments: [{ projectName: "api", state: "CANCELED", createdAt: ago(3 * HOUR) }] } })));
   it("vercel detail building", () => snap("integrations-vercel-detail-building", cardOf("integration_vercel", { loaded: true, detail: true, data: { deployments: [{ projectName: "api", state: "BUILDING", createdAt: ago(1 * MIN), branch: "main" }] } })));
+  it("vercel list and detail slide once per switch, not on a data refresh", () => {
+    const card = (detail: boolean) => cardOf("integration_vercel", { loaded: true, data: DATA.integration_vercel, detail });
+    (card(false).querySelector(".vc-more") as HTMLElement).click();
+    const sheet = card(true);
+    expect(sheet.classList.contains("int-swap")).toBe(true);
+    expect(card(true).classList.contains("int-swap")).toBe(false);
+    (sheet.querySelector(".vc-back") as HTMLElement).click();
+    expect(card(false).className).toBe("tile-card int-swap back");
+    expect(card(false).classList.contains("int-swap")).toBe(false);
+  });
   it("n8n activity success", () => snap("integrations-n8n-done", cardOf("integration_n8n", { mood: "done", lines: ["Backup nightly", "42 items\nall good"] })));
   it("n8n activity failed", () => snap("integrations-n8n-failed", cardOf("integration_n8n", { mood: "error", lines: ["Sync CRM"] })));
   it("n8n detail success", () => snap("integrations-n8n-detail-done", cardOf("integration_n8n", { mood: "done", lines: ["Backup nightly", "42 items\nall good"], detail: true })));
@@ -460,6 +470,83 @@ describe("claude session panel", () => {
     const el = await showing("session");
     snap("claude-session-head", el.querySelector(".pane-head")!);
     snap("claude-session-side", el.querySelector(".pane-side")!);
+  });
+});
+
+describe("claude session panel head and history", () => {
+  const release = (button: number) => window.dispatchEvent(new MouseEvent("mouseup", { button, clientX: 360, clientY: 20, bubbles: true, cancelable: true }));
+  const settle = async () => { await vi.advanceTimersByTimeAsync(2000); vi.setSystemTime(NOW); };
+  const segs = () => [...T.hosts.session.el.querySelectorAll<HTMLButtonElement>(".sess-nav .sess-chip")];
+  const lit = () => segs().filter((x) => x.classList.contains("on")).map((x) => x.textContent);
+  const back = () => T.hosts.session.el.querySelector(".sess-back") as HTMLButtonElement;
+  const sync = () => T.hosts.session.sync();
+  const fresh = async () => {
+    island.collapse(); await flush();
+    seedClaude();
+    enterSessionPanel("journal");
+    await showing("session");
+    await settle();
+  };
+
+  it("the head has the same slots in every screen", async () => {
+    await fresh();
+    expect(segs().map((x) => x.textContent)).toEqual(["Diário", "2 arquivos", "2 sessões"]);
+    expect(lit()).toEqual(["Diário"]);
+    expect(back().disabled).toBe(true);
+    segs()[1].click(); sync();
+    expect(segs().map((x) => x.textContent)).toEqual(["Diário", "2 arquivos", "2 sessões"]);
+    expect(lit()).toEqual(["2 arquivos"]);
+    expect(back().disabled).toBe(false);
+  });
+  it("journal, sessions segment, back to the journal, forward to the sessions", async () => {
+    await fresh();
+    segs()[2].click(); sync();
+    expect(lit()).toEqual(["2 sessões"]);
+    release(3); sync();
+    expect(lit()).toEqual(["Diário"]);
+    release(4); sync();
+    expect(lit()).toEqual(["2 sessões"]);
+  });
+  it("list, file, back twice to the journal", async () => {
+    await fresh();
+    segs()[1].click(); sync();
+    (T.hosts.session.el.querySelector(".pane-file") as HTMLElement).click(); sync();
+    expect(lit()).toEqual(["2 arquivos"]);
+    expect(T.hosts.session.el.querySelector(".sess-ctx-name")!.textContent).toBe("main.ts");
+    release(3); sync();
+    expect(T.hosts.session.el.querySelector(".sess-ctx-name")!.textContent).toBe("");
+    release(3); sync();
+    expect(lit()).toEqual(["Diário"]);
+  });
+  it("the arrow goes to the parent: file to the list, anything else to the journal", async () => {
+    await fresh();
+    segs()[1].click(); sync();
+    (T.hosts.session.el.querySelector(".pane-file") as HTMLElement).click(); sync();
+    back().click(); sync();
+    expect(T.hosts.session.el.querySelector(".sess-ctx-name")!.textContent).toBe("");
+    expect(lit()).toEqual(["2 arquivos"]);
+    back().click(); sync();
+    expect(lit()).toEqual(["Diário"]);
+    expect(back().disabled).toBe(true);
+  });
+  it("nothing hides: no files, one session", async () => {
+    await fresh();
+    cl().store.changes = new Map();
+    cl().store.sessions = [cl().store.sessions[0]];
+    cl().store.present();
+    sync();
+    expect(segs().map((x) => [x.textContent, x.disabled])).toEqual([["Diário", false], ["0 arquivos", true], ["1 sessão", true]]);
+    snap("claude-session-head-bare", T.hosts.session.el.querySelector(".pane-head")!);
+    seedClaude();
+  });
+  it("head in the list, a file and the sessions", async () => {
+    await fresh();
+    segs()[1].click(); sync();
+    snap("claude-session-head-list", T.hosts.session.el.querySelector(".pane-head")!);
+    (T.hosts.session.el.querySelector(".pane-file") as HTMLElement).click(); sync();
+    snap("claude-session-head-file", T.hosts.session.el.querySelector(".pane-head")!);
+    segs()[2].click(); sync();
+    snap("claude-session-head-sessions", T.hosts.session.el.querySelector(".pane-head")!);
   });
 });
 

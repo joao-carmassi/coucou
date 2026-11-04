@@ -17,8 +17,9 @@
 //   paneIcon(attrs, ...kids)  header button; attrs.class is appended to `pane-icon`
 //   paneList(cls?) paneCode(cls?, ...kids)  cls is appended after the kit class;  paneCodeLead(lead, ...kids)  lead goes first
 //   paneEdge(el, on)  toggles `.pane-edge` on a list;  PANE_MOTION  the entrance classes for replay()
+//   paneSlide(el, from)  plays a list's entrance from that side, whichever side it came from last
 // Rows (.pane-row, .pane-row-*, .pane-ago, .pane-right, .pane-file, .pane-file-status) are built by kit/list.ts.
-import { h } from "./dom";
+import { h, replay } from "./dom";
 
 type Part = string | HTMLElement;
 type Kids = Node | (Node | null | undefined | false)[];
@@ -50,3 +51,8 @@ export const paneCode = (cls?: string, ...kids: Kid[]): HTMLElement => h("div", 
 export const paneCodeLead = (lead: string, ...kids: Kid[]): HTMLElement => h("div", { class: `${lead} pane-code` }, ...kids);
 export const paneEdge = (el: Element, on: boolean): void => void el.classList.toggle("pane-edge", on);
 export const PANE_MOTION = { right: "pane-from-right", left: "pane-from-left" } as const;
+/** Plays the entrance from one side. replay() alone only takes off its own class, so after the other side's it would not restart. */
+export function paneSlide(el: HTMLElement, from: "left" | "right"): void {
+  el.classList.remove(PANE_MOTION.left, PANE_MOTION.right);
+  replay(el, PANE_MOTION[from]);
+}

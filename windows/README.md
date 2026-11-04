@@ -40,6 +40,7 @@ admin prompt.
 | Rest the pointer on Mochi for two seconds | Hearts |
 | Drag a file onto the island | Upload module: Mochi turns into a box and swallows it |
 | Drag Mochi onto a window | A screenshot of that window is captured and attached |
+| Mouse back / forward buttons over the open island | Go to the screen you were on before (or after): tabs, and a view's own screens such as the Claude diary's files and sessions |
 | `Esc` | Closes the island |
 | Tray icon | Abrir Coucou, Configurações…, Pausar, Sair |
 

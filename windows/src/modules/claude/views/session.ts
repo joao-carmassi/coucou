@@ -16,8 +16,8 @@
 // replay of it, a second behind. The session itself stays where it runs — the
 // Claude app, VS Code, a terminal.
 
-import { h, svg, clear, dot, replay } from "../../../kit/dom";
-import { panel, paneHead, paneTab, paneSub, paneBadge, paneAside, paneIcon, paneList, paneMain, paneCode, paneEdge, PANE_MOTION } from "../../../kit/panel";
+import { h, svg, clear, dot } from "../../../kit/dom";
+import { panel, paneHead, paneBadge, paneAside, paneIcon, paneList, paneMain, paneCode, paneEdge, paneSlide } from "../../../kit/panel";
 import { row, fileStatus, empty as emptyLine } from "../../../kit/list";
 import { diffBlock, diffHunk, diffLine, extBadge, fileKind, plusMinus, readPatch, splitPath, type FileKind } from "../../../kit/code";
 import { ICONS } from "../icons";
@@ -54,16 +54,28 @@ let stamp = 0;
 /** Redraws the island: set by buildSession. */
 let notify: () => void = () => {};
 
+/** Where a screen sits in the head, left to right: going right slides in from the right, going left from the left. */
+const RANK: Record<Screen["kind"], number> = { live: 0, list: 1, file: 2, sessions: 3 };
+/** Set by go() and by the history alone, so only a navigation plays the slide, never a data refresh; sync() takes it. */
+let motion: "left" | "right" | null = null;
+
+/** Tells the island's back/forward history the user moved to another screen of this view (set by buildSession). */
+// shortcut: entries keep the screen, not which session was picked (pickSession has side effects), so back after a pick shows the session now in front
+let record: () => void = () => {};
+
 function go(next: Screen) {
+  motion = RANK[next.kind] >= RANK[screen.kind] ? "right" : "left";
   screen = next;
   stamp++;
   notify();
+  record();
 }
 
 /** Into the panel: on the session's journal, at its end; on the list of its changes; or on the sessions to choose from. */
 export function enterSessionPanel(on: "journal" | "changes" | "sessions" = "journal") {
   screen = { kind: on === "changes" ? "list" : on === "sessions" ? "sessions" : "live" };
   stamp++;
+  record();
 }
 
 const counted = (n: number, one: string) => `${n} ${n === 1 ? one : one.endsWith("ão") ? `${one.slice(0, -2)}ões` : `${one}s`}`;
@@ -101,12 +113,17 @@ export function sessionsChip(api: IslandApi, store: ClaudeStore, onOpen: () => v
       const count = store.sessions.length;
       el.style.display = count > 1 ? "" : "none";
       el.textContent = counted(count, "sessão");
-      const calling = store.sessions.find((s) => s.id !== store.frontId && calls(s));
-      el.classList.toggle("calls", calling != null);
-      el.style.setProperty("--c", calling ? standing(api, calling).color : "currentColor");
-      el.title = calling ? `${sessionName(calling)} ${standing(api, calling).words}` : "Todas as sessões do Claude Code acompanhadas";
+      tintCalling(api, store, el);
     },
   };
+}
+
+/** Another session than the one on show wants looking at: the chip takes its colour and says who. */
+function tintCalling(api: IslandApi, store: ClaudeStore, el: HTMLElement) {
+  const calling = store.sessions.find((s) => s.id !== store.frontId && calls(s));
+  el.classList.toggle("calls", calling != null);
+  el.style.setProperty("--c", calling ? standing(api, calling).color : "currentColor");
+  el.title = calling ? `${sessionName(calling)} ${standing(api, calling).words}` : "Todas as sessões do Claude Code acompanhadas";
 }
 
 /** A session in the list of them: where it is at, its name, its project, and what it did last. */
@@ -268,24 +285,29 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
   const { actions } = ctx;
   const store = c.store;
   notify = () => store.changed();
-  const who = h("b", { text: UNNAMED });
-  const sub = paneSub();
+  // The head has the same slots in every screen: [‹] [Diário | N arquivos | N sessões] [what is open] [↗]. Nothing hides, it dims.
+  const who = h("b", { class: "sess-ctx-name" });
   const badge = paneBadge();
   const aside = paneAside();
-  // One step back: from a file to the changes, from the changes to the journal.
-  const backBtn = paneIcon({ class: "sess-back", title: "Voltar" }, svg(ICONS.chevronLeft, 10, { stroke: 2.4 }));
-  const filesBtn = h("button", { class: "sess-files", title: "Todos os arquivos que esta sessão alterou" });
+  const backBtn = paneIcon({ class: "sess-back", title: "Voltar" }, svg(ICONS.chevronLeft, 10, { stroke: 2.4 })) as HTMLButtonElement;
   const openBtn = paneIcon(
     { title: "Abrir a sessão", onclick: () => c.openClient() },
     svg(ICONS.arrowUpRight, 10),
   );
-  // With several sessions followed: the way to the list of them.
-  const sessionsBtn = sessionsChip(ctx.api, store, () => {
-    actions.blip();
-    go({ kind: "sessions" });
-  });
-  const tab = paneTab(badge, who);
-  const head = paneHead(backBtn, tab, aside, h("div", { class: "grow" }), sub, sessionsBtn.el, filesBtn, openBtn);
+  const taskDot = dot(COLOR.idle, 7);
+  const segment = (kind: Screen["kind"], title: string, ...kids: (string | Node)[]) =>
+    h("button", {
+      class: "sess-chip", title,
+      onclick: () => {
+        if (screen.kind === kind) return; // the lit one is where you are
+        actions.blip();
+        go({ kind } as Screen);
+      },
+    }, ...kids) as HTMLButtonElement;
+  const liveSeg = segment("live", "O diário da sessão", taskDot, h("span", { text: "Diário" }));
+  const filesSeg = segment("list", "Todos os arquivos que esta sessão alterou");
+  const sessionsSeg = segment("sessions", "Todas as sessões do Claude Code acompanhadas");
+  const head = paneHead(backBtn, h("div", { class: "sess-chips sess-nav" }, liveSeg, filesSeg, sessionsSeg), h("div", { class: "sess-ctx" }, badge, who, aside), openBtn);
   // The journal, and behind it the changes: one of the two is on screen.
   const journal = paneList("sess-journal");
   const list = paneList();
@@ -296,7 +318,17 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
   const steps = h("div", { class: "sess-steps" });
   const el = panel({ cls: "session-view", side: { title: name, sub: nameSub, body: steps }, main });
 
+  record = ctx.api.island.history("session", {
+    current: () => screen,
+    restore(state, dir) {
+      screen = state as Screen;
+      motion = dir === "back" ? "left" : "right";
+      stamp++;
+      notify();
+    },
+  });
   backBtn.addEventListener("click", () => {
+    if (screen.kind === "live") return;
     actions.blip();
     go(screen.kind === "file" ? { kind: "list" } : { kind: "live" });
   });
@@ -305,10 +337,6 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
     c.pickSession(id);
     go({ kind: "live" });
   };
-  filesBtn.addEventListener("click", () => {
-    actions.blip();
-    go({ kind: "list" });
-  });
 
   for (const scroller of [journal, list]) {
     const fade = () => scroller.classList.toggle("more", scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight - 2);
@@ -328,7 +356,7 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
     typing = null;
     finishTyping?.();
     finishTyping = null;
-    tab.classList.remove("writing");
+    liveSeg.classList.remove("writing");
   }
 
   /**
@@ -344,7 +372,7 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
     const caret = h("span", { class: "sess-caret" });
     let at = 0;
     let letters = 0;
-    tab.classList.add("writing");
+    liveSeg.classList.add("writing");
 
     const finish = (line: ToType) => line.row.replaceWith(diffLine(line.number, "+", line.text, kind));
     const begin = (line: ToType) => {
@@ -397,7 +425,7 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
   let opened = "";
   let shownSession = "";
 
-  function syncJournal() {
+  function syncJournal(sliding: boolean) {
     const session = store.session;
     const entering = opened !== `${session.id}:${stamp}`;
     opened = `${session.id}:${stamp}`;
@@ -434,7 +462,7 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
 
     // Another session's journal comes in from the side, as a sheet of the GitHub panel does.
     if (entering && session.id !== shownSession) {
-      if (shownSession) replay(journal, PANE_MOTION.right);
+      if (shownSession && !sliding) paneSlide(journal, "right");
       shownSession = session.id;
     }
     if (toType) type(toType.lines, toType.kind);
@@ -494,35 +522,32 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
       const picked = opened ? (files.find((f) => f.path === opened) ?? null) : null;
       if (screen.kind === "file" && !picked) screen = { kind: "list" };
       const live = screen.kind === "live";
-      sessionsBtn.sync();
-      if (screen.kind === "sessions") sessionsBtn.el.style.display = "none";
       journal.style.display = live ? "" : "none";
       list.style.display = live ? "none" : "";
       if (!live) stopTyping();
 
-      // The head: the journal is the journal, whatever file Claude is at; a
-      // file opened from the changes has its name on the tab, as in an editor.
+      // The segments: the lit one is where you are; a file is a screen of the changes. Counts of nothing dim, never hide.
       const path = picked?.path ?? null;
-      const nextHead = [session.id, screen.kind, path, files.length, picked?.edits.length, store.sessions.length].join("~");
+      taskDot.style.background = task?.color ?? COLOR.idle;
+      liveSeg.classList.toggle("on", live);
+      filesSeg.classList.toggle("on", screen.kind === "list" || screen.kind === "file");
+      sessionsSeg.classList.toggle("on", screen.kind === "sessions");
+      filesSeg.textContent = counted(files.length, "arquivo");
+      filesSeg.disabled = files.length === 0;
+      sessionsSeg.textContent = counted(store.sessions.length, "sessão");
+      sessionsSeg.disabled = store.sessions.length < 2;
+      tintCalling(ctx.api, store, sessionsSeg);
+      backBtn.disabled = live;
+
+      // What is open, as an editor names its file; a file's whole path is its tooltip.
+      const nextHead = [session.id, screen.kind, path, files.length, picked?.edits.length].join("~");
       if (nextHead !== headKey) {
         headKey = nextHead;
         clear(badge);
         clear(aside);
-        sub.classList.toggle("path", path != null);
-        who.classList.toggle("file", path != null);
-        backBtn.style.display = live ? "none" : "";
-        filesBtn.style.display = live && files.length > 0 ? "" : "none";
-        filesBtn.textContent = counted(files.length, "arquivo");
-        if (path) {
-          who.textContent = splitPath(path).base;
-          sub.textContent = path;
-          badge.append(extBadge(path));
-        } else {
-          who.textContent = live ? "Diário" : screen.kind === "sessions" ? "Sessões" : "Alterações";
-          sub.textContent =
-            screen.kind === "sessions" ? counted(store.sessions.length, "sessão") : !live && files.length > 0 ? counted(files.length, "arquivo") : "";
-          badge.append(dot(task?.color ?? COLOR.idle, 7));
-        }
+        who.textContent = path ? splitPath(path).base : "";
+        who.title = path ?? "";
+        if (path) badge.append(extBadge(path));
         if (picked) aside.append(statusWord(picked), plusMinus(picked.additions, picked.deletions));
         else if (screen.kind === "list" && files.length > 0) {
           aside.append(plusMinus(files.reduce((n, f) => n + f.additions, 0), files.reduce((n, f) => n + f.deletions, 0)));
@@ -530,8 +555,11 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
         main.style.setProperty("--accent", picked ? (picked.created ? COLOR.green : COLOR.amber) : "rgba(0,0,0,0)");
       }
 
+      const slide = motion;
+      motion = null;
       if (live) {
-        syncJournal();
+        syncJournal(slide != null);
+        if (slide) paneSlide(journal, slide);
         return;
       }
 
@@ -553,6 +581,7 @@ export function buildSession(c: Claude, ctx: ViewContext): ViewHost {
       else if (files.length === 0) list.append(emptyLine("Nada escrito nesta sessão ainda."));
       else for (const f of files) list.append(fileRow(f));
       list.scrollTop = scroll;
+      if (slide) paneSlide(list, slide);
     },
   };
 }

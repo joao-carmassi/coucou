@@ -132,6 +132,13 @@ export interface IslandHooks {
   avatarPull(): void;
 }
 
+/** A view's own screens, joined to the island's back/forward history (api.island.history). */
+export interface HistoryDef {
+  /** What the view shows now: opaque to the core, a new object per screen. */
+  current(): unknown;
+  restore(state: unknown, dir: "back" | "forward"): void;
+}
+
 /** What Island lends the registry. */
 export interface IslandHost {
   readonly actions: ViewActions;
@@ -156,6 +163,7 @@ export interface IslandHost {
   addView(def: ViewDef, ctx: ViewContext): Disposer;
   setTabs(tabs: TabDef[]): void;
   addOverlay(o: Overlay): Disposer;
+  addHistory(view: string, def: HistoryDef): { push(): void; off: Disposer };
   avatarEmote(e: BotEmoteName): void;
   avatarMorph(v: number): void;
   avatarGulp(): void;
@@ -278,6 +286,11 @@ export interface IslandApi {
     reopen(): void;
     keepAwake(pred: () => boolean): Disposer; mode(): IslandMode; fsmState(): FsmState; mouseInside(): boolean; view(): string;
     note(text: string): void; error(err: unknown): void; overlay(o: Overlay): Disposer;
+    /**
+     * Joins this view's own screens to the island's back/forward history (mouse side buttons). `current()` is what it shows now,
+     * opaque to the core (a new object per screen). Call the returned push() right after a user navigation inside the view.
+     */
+    history(view: string, def: HistoryDef): () => void;
     /** Fires after every change of the island's state (pills, mode, view, requests...); removed when the module stops. */
     onChange(fn: () => void): Disposer;
     /** The view the island rests on (what the strongest module asks for, else "empty"), read live. */
