@@ -18,8 +18,8 @@ export const FRESH: AgentState = { mood: "idle", step: "", done: false, error: f
 
 /** The pill goes this long after a turn ends. */
 export const FINISHED_MS = 5200;
-/** An approval card is dropped this long after it came up: the relay gave up (110 s) and the agent asks by itself. */
-export const PENDING_MS = 110_000;
+/** An approval card is dropped this long after it came up: the relay gave up (~12 h) and the agent asks by itself. */
+export const PENDING_MS = 43_202_000;
 /** Y/N never answer within this long of the card appearing: a keystroke meant elsewhere must not approve. */
 export const KEY_GUARD_MS = 500;
 const LINE = 120;

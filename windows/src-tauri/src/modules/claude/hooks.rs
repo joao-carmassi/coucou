@@ -34,7 +34,7 @@ pub const HOOK_EVENTS: &[(&str, u64)] = &[
     ("PreToolUse", 10),
     ("PostToolUse", 10),
     ("PostToolUseFailure", 10),
-    ("PermissionRequest", 120),
+    ("PermissionRequest", 43_210),
     ("Notification", 10),
     ("Stop", 10),
     ("StopFailure", 10),

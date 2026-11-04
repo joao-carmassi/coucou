@@ -98,3 +98,43 @@ describe("finished card", () => {
     expect(finishedOpen()).toBe(true);
   });
 });
+
+const s = (id: string) => cl().store.sessions.find((x) => x.id === id)!;
+const ask = { tool_name: "AskUserQuestion", tool_input: { questions: [{ question: "Qual?", options: [{ label: "A" }, { label: "B" }] }] } };
+
+describe("answered in the terminal", () => {
+  it("denied there: the next prompt clears the approval", () => {
+    hook("s1", "PermissionRequest", { request_id: "r1", tool_name: "Bash", tool_input: { command: "ls" } });
+    expect(s("s1").approval?.requestId).toBe("r1");
+    hook("s1", "UserPromptSubmit", { prompt: "faz outra coisa" });
+    expect(s("s1").approval).toBeNull();
+    expect(s("s1").state).toBe("thinking");
+  });
+  it("question dismissed there: the turn's end clears it and opens the finished card", () => {
+    hook("s1", "PermissionRequest", { request_id: "r2", ...ask });
+    expect(s("s1").question?.requestId).toBe("r2");
+    hook("s1", "Stop", { last_message: "ok" });
+    expect(s("s1").question).toBeNull();
+    expect(finishedOpen()).toBe(true);
+  });
+  it("a subagent at work or stopping does not clear the plan approval", () => {
+    hook("s1", "PermissionRequest", { request_id: "r3", tool_name: "ExitPlanMode", tool_input: { plan: "p" }, plan: "p" });
+    hook("s1", "PreToolUse", { agent_id: "a1", tool_name: "Read", tool_input: { file_path: "b" } });
+    hook("s1", "Stop", { agent_id: "a1" });
+    hook("s1", "PreToolUse", { tool_name: "Read", tool_input: { file_path: "c" } });
+    expect(s("s1").approval?.requestId).toBe("r3");
+  });
+  it("the relay's sender hung up: only the matching request is dropped", () => {
+    hook("s1", "PermissionRequest", { request_id: "r4", tool_name: "Bash", tool_input: { command: "ls" } });
+    hook("s1", "RequestGone", { request_id: "other" });
+    expect(s("s1").approval?.requestId).toBe("r4");
+    hook("s1", "RequestGone", { request_id: "r4" });
+    expect(s("s1").approval).toBeNull();
+  });
+  it("once cleared, a new request from that session gets its card instead of being declined", () => {
+    hook("s1", "PermissionRequest", { request_id: "r5", tool_name: "Bash", tool_input: { command: "ls" } });
+    hook("s1", "RequestGone", { request_id: "r5" });
+    hook("s1", "PermissionRequest", { request_id: "r6", tool_name: "Bash", tool_input: { command: "pwd" } });
+    expect(s("s1").approval?.requestId).toBe("r6");
+  });
+});

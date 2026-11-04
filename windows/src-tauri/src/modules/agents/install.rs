@@ -329,7 +329,7 @@ mod tests {
         let on = merged(def, &existing, &cmd("codex")).unwrap();
         assert_eq!(on["other"], 1);
         assert_eq!(on["hooks"]["Stop"].as_array().unwrap().len(), 2);
-        assert_eq!(on["hooks"]["PermissionRequest"][0]["hooks"][0]["timeout"], 120);
+        assert_eq!(on["hooks"]["PermissionRequest"][0]["hooks"][0]["timeout"], 43_210);
         assert!(hooked_json(def, &on));
         // Installing twice does not stack.
         assert_eq!(merged(def, &on, &cmd("codex")).unwrap(), on);
@@ -362,7 +362,7 @@ mod tests {
         let existing = json!({ "version": 1, "hooks": { "stop": [{ "command": "mine.cmd" }] } });
         let on = merged(def, &existing, &cmd("cursor")).unwrap();
         assert_eq!(on["version"], 1);
-        assert_eq!(on["hooks"]["beforeShellExecution"][0]["timeout"], 120);
+        assert_eq!(on["hooks"]["beforeShellExecution"][0]["timeout"], 43_210);
         assert_eq!(on["hooks"]["stop"][0]["command"], "mine.cmd");
         assert!(on["hooks"].get("preToolUse").is_none() && on["hooks"].get("beforeSubmitPrompt").is_none());
         assert_eq!(merged(def, &json!({}), &cmd("cursor")).unwrap()["version"], 1);

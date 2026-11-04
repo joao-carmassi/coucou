@@ -25,7 +25,7 @@ const CONNECT_TIMEOUT: Duration = Duration::from_millis(300);
 /// Whole-run budget for an event nobody waits on: connect and write, no more.
 const FIRE_AND_FORGET_BUDGET: Duration = Duration::from_secs(2);
 /// How long a permission prompt may stay on screen before the terminal takes over.
-const DECISION_BUDGET: Duration = Duration::from_secs(110);
+const DECISION_BUDGET: Duration = Duration::from_secs(43_202);
 
 /// Fields that are pointless to forward and can be enormous (a whole file read,
 /// a full command output). The island shows a few lines of them at most, and

@@ -57,13 +57,13 @@ fn opencode_dir() -> PathBuf {
 }
 
 // Timeouts: Codex and Cursor in seconds, Gemini in milliseconds. A permission
-// request outlives the relay's own 110 s wait by 10 s.
+// request outlives the relay's own 12 h wait by 10 s.
 const CODEX_EVENTS: &[(&str, u64)] = &[
     ("SessionStart", 10),
     ("UserPromptSubmit", 10),
     ("PreToolUse", 10),
     ("PostToolUse", 10),
-    ("PermissionRequest", 120),
+    ("PermissionRequest", 43_210),
     ("Stop", 10),
     ("SessionEnd", 3),
 ];
@@ -80,7 +80,7 @@ const GEMINI_EVENTS: &[(&str, u64)] = &[
 const CURSOR_EVENTS: &[(&str, u64)] = &[
     ("sessionStart", 10),
     ("postToolUse", 10),
-    ("beforeShellExecution", 120),
+    ("beforeShellExecution", 43_210),
     ("stop", 10),
     ("sessionEnd", 10),
 ];

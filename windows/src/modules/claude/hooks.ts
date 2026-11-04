@@ -20,10 +20,10 @@ type IslandViewName = string;
 
 /**
  * By session (Claude.pending): clears its request if no decision was made before the hook gave
- * up. Coucou answers within 108 s or not at all; after that the terminal has
+ * up. Coucou answers within 12 h or not at all; after that the terminal has
  * taken over and the card would be lying.
  */
-export const PENDING_MS = 110_000;
+export const PENDING_MS = 43_202_000;
 
 export interface HookPayload {
   hook_event_name?: string;
@@ -575,6 +575,14 @@ export function handleHook(c: Claude, payload: HookPayload) {
     return;
   }
 
+  // The relay's sender hung up: Claude Code took its answer in the terminal (or the prompt was dismissed).
+  if (payload.hook_event_name === "RequestGone") {
+    const gone = payload.request_id && c.store.sessions.find((s) => (s.approval ?? s.question)?.requestId === payload.request_id);
+    if (gone) dropPending(c, gone);
+    c.store.present();
+    return;
+  }
+
   // Paused, or a session nobody is sitting in front of: the island does not look.
   if (c.api.paused() || isAutomated(payload)) {
     // Silence here used to cost Claude Code nearly two minutes: the relay waited
@@ -588,6 +596,8 @@ export function handleHook(c: Claude, payload: HookPayload) {
 
   const session = sessionOf(c, payload);
   const partial = isPartialStop(name, payload);
+  // A new prompt, or the turn's real end: Claude Code is not asking any more, so the request was settled in the terminal.
+  if (name === "UserPromptSubmit" || (name === "Stop" && !partial)) dropPending(c, session);
   if (takesFront(c, session, name, partial)) c.store.bringForward(session.id);
   /** The session the island shows; the others go on behind their tabs. */
   const front = session.id === c.store.frontId;

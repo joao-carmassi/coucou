@@ -13,6 +13,7 @@
 // The pipe exists only while somebody is subscribed. Payloads are never logged.
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
@@ -27,8 +28,8 @@ use tokio::sync::mpsc;
 use crate::core::host::ModuleCtx;
 use crate::core::log;
 
-/// Slightly under the sender's own 110 s wait, so we always answer first.
-const DECISION_TIMEOUT: Duration = Duration::from_secs(108);
+/// Slightly under the sender's own wait (hook DECISION_BUDGET), so we always answer first.
+const DECISION_TIMEOUT: Duration = Duration::from_secs(43_200);
 /// How long the island gets to say "the card is up".
 const ACK_TIMEOUT: Duration = Duration::from_millis(800);
 const MAX_PAYLOAD: usize = 1 << 20;
@@ -178,6 +179,17 @@ async fn wait_reply(rx: &mut mpsc::Receiver<Reply>, ack: Duration, decide: Durat
     }
 }
 
+/// Resolves when the sender hangs up (it was answered elsewhere
+/// and gave up on us). It writes nothing after its line, so any read that ends is that.
+async fn hung_up(conn: &mut impl Conn) {
+    let mut b = [0u8; 64];
+    while let Ok(n) = conn.read(&mut b).await {
+        if n == 0 {
+            return;
+        }
+    }
+}
+
 /// Forgets every pending request of a channel; their waiting connections end without a reply.
 fn drop_channel(map: &mut PendingMap, name: &str) {
     map.retain(|_, (ch, _)| ch != name);
@@ -256,8 +268,26 @@ async fn serve(
     payload["request_id"] = json!(id);
     deliver(ch, payload);
 
-    let decision = wait_reply(&mut rx, ack, decide).await;
+    // None: the sender hung up before anyone decided.
+    let outcome = {
+        let mut reply = std::pin::pin!(wait_reply(&mut rx, ack, decide));
+        let mut gone = std::pin::pin!(hung_up(&mut conn));
+        std::future::poll_fn(|cx| {
+            // The reply first: a click that lands with the hang-up still counts.
+            if let std::task::Poll::Ready(d) = reply.as_mut().poll(cx) {
+                return std::task::Poll::Ready(Some(d));
+            }
+            gone.as_mut().poll(cx).map(|_| None)
+        })
+        .await
+    };
     pending().as_mut().unwrap().remove(&id);
+    let Some(decision) = outcome else {
+        log::line(format!("relay ch={name} id={id} gone"));
+        // The island lets go of the card it shows for it.
+        deliver(ch, json!({ "hook_event_name": "RequestGone", "request_id": id }));
+        return;
+    };
     log::line(format!("relay ch={name} id={id} {}", decision.as_deref().map(word).unwrap_or("none")));
 
     // No decision: say nothing at all, the sender then prints nothing.
@@ -492,6 +522,43 @@ b").is_err());
         assert!(check_reply("allow").is_ok());
         assert!(check_reply("a\nb").is_err());
         assert!(check_reply(&"x".repeat(MAX_REPLY + 1)).is_err());
+    }
+
+    #[test]
+    fn serve_tells_when_the_sender_hangs_up() {
+        fn waits(_: &Value) -> bool {
+            true
+        }
+        fn nop(_: &AppHandle, _: Value) {}
+        let ch = Channel { name: "gone", waits, deliver: nop };
+        let find = move |n: &str| (n == "gone").then_some(ch);
+        run(async move {
+            use std::sync::{Arc, Mutex as M};
+            let seen: Arc<M<Vec<Value>>> = Arc::default();
+            let (mut client, server) = tokio::io::duplex(8192);
+            let s2 = seen.clone();
+            let task = tokio::spawn(serve(
+                server,
+                find,
+                move |_, v| s2.lock().unwrap().push(v),
+                Duration::from_secs(2),
+                Duration::from_secs(2),
+            ));
+            client.write_all(b"{\"coucou_channel\":\"gone\"}\n").await.unwrap();
+            let id = loop {
+                tokio::time::sleep(5 * MS).await;
+                if let Some(v) = seen.lock().unwrap().first() {
+                    break v["request_id"].as_str().unwrap().to_string();
+                }
+            };
+            send(&id, Reply::Ack, true);
+            drop(client); // the sender gave up
+            task.await.unwrap();
+            let seen = seen.lock().unwrap();
+            assert_eq!(seen.len(), 2);
+            assert_eq!(seen[1], json!({ "hook_event_name": "RequestGone", "request_id": id }));
+            assert!(!pending().as_ref().unwrap().contains_key(&id));
+        });
     }
 
     // Whole request/reply over an in-memory stream with a test channel.

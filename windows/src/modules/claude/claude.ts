@@ -206,7 +206,7 @@ export class Claude {
     this.settleRequest();
   }
 
-  // shortcut: relay gives up after ~108 s, then the terminal takes over
+  // shortcut: relay gives up after ~12 h, then the terminal takes over
   /** "Aguardar": closes the island and leaves the request as it is: no decision is sent. */
   deferAlert() {
     this.api.island.close();
