@@ -1,6 +1,6 @@
 # Coucou
 
-A small animated character at the top of your Windows screen that shows your Claude Code sessions and lets you approve and answer
+Mochi, a tiny animated island at the top of your Windows screen to follow and approve Claude Code sessions
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
