@@ -1,80 +1,69 @@
-<div align="center">
-
-<img src="windows/src-tauri/icons/128x128.png" width="96" alt="Coucou icon">
-
 # Coucou
 
-**Mochi, a small animated character at the top of your Windows screen, shows your Claude Code sessions and lets you approve, answer and drop files without leaving what you are doing.**
+A small animated character at the top of your Windows screen that shows your Claude Code sessions and lets you approve and answer
 
-![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?logo=windows&logoColor=white)
-![Tauri 2](https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=black)
-![License: MIT](https://img.shields.io/badge/license-MIT-green)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
+![Coucou screenshot](docs/screenshot.png)
 
-</div>
+> Fork of [Louis-CFM/coucou](https://github.com/Louis-CFM/coucou) by Louis Raillé.
+> This fork is the Windows-only, modular build: a small always-on core plus optional modules (Claude Code, media, upload, timer, voice and one per service such as GitHub, Vercel, Stripe, n8n, Resend, Cal.com, Notion), with extra work on full-screen detection, Claude Code approvals and the herdr terminal integration.
 
----
+## Features
 
-This branch (`refactor/modules`) is Windows-only. The app lives in `windows/` (Tauri 2: Rust + TypeScript).
-It has no chat of its own and needs no Anthropic API key: everything about Claude Code comes from its hooks.
+- Show Claude Code sessions on a small island with Mochi, an animated character
+- Approve permissions and answer questions from the island, only on an explicit click
+- Drop a file on the island to open it in a Claude Code session, or drag Mochi onto a window to attach a screenshot
+- Add read-only service pills (GitHub, Vercel, Stripe, n8n, Resend, Cal.com, Notion) by switching modules on
+- Hide over full-screen apps and calls; mouse back/forward buttons navigate the open island
+- Run with no telemetry, no account and no Anthropic API key
 
-## Architecture
+## Tech stack
 
-- **Core** is always on: the island, the Mochi avatar, tray, settings window, hotkeys, log, Windows layer.
-- **Modules** are optional and switched on in Settings. A disabled module has no tab, view, pill, timer, thread or listener.
-- Core never imports a module. Contract: [`docs/MODULES-CONTRACT.md`](docs/MODULES-CONTRACT.md).
+- Tauri 2 (Rust backend in `windows/src-tauri/`)
+- TypeScript frontend built with Vite (`windows/src/`)
+- `coucou-hook`, a small Rust relay called by Claude Code hooks
+- Tests with `node --test` and Vitest
 
-| Module | Default | What it does |
-|---|---|---|
-| `board` | on | Início: the home tab, with the focused pill's card and the others' list. Pure TS; any module's pills show up here |
-| `claude` | on | Claude Code sessions, approvals, questions, session panel, terminals, WSL |
-| `media` | on | Screenshots, recordings and dropped files; drag Mochi onto a window |
-| `upload` | on, needs `claude` | Drop a file on the island and open it in a Claude Code session |
-| `timer` | off | Countdown and stopwatch |
-| `voice` | off, needs `claude` | Hotkey dictation, on-device, English only |
-| `github`, `vercel`, `stripe`, `n8n`, `resend`, `calcom`, `notion` | off | One module per service, one coloured pill each, read-only polling |
+## Getting started
 
-Known limit: the compact island shows at most 4 mini pills.
+### Prerequisites
 
-## Install
+- Windows 10 or 11
+- Node 20+
+- Rust toolchain with MSVC build tools
 
-The installer is temporarily unavailable: Microsoft Defender flags the unsigned build as a false positive.
-Build it from source (Rust, Node 20+, MSVC build tools):
+### Install
 
 ```powershell
-git clone https://github.com/Louis-CFM/coucou.git
+git clone https://github.com/joao-carmassi/coucou.git
 cd coucou/windows
 npm install
 npm run tauri dev      # development build
 npm run pack           # installer in windows/release/
 ```
 
-## Setup
+## Usage
 
-Tray icon, then **Settings**.
+Open the tray icon, then **Settings**.
 
-- **Claude Code**: *Install hooks* shows the diff, takes a dated backup of `settings.json`, and writes only after you click. If Coucou is not running the hook exits at once: Claude Code is never blocked.
-- **Services**: switch a service module on and paste its token. Tokens go to Windows Credential Manager.
+- **Claude Code:** *Install hooks* shows the diff, makes a dated backup of `settings.json` and writes only after you click. If Coucou is not running, the hook exits at once, so Claude Code is never blocked.
+- **Services:** switch a service module on and paste its token. Tokens go to Windows Credential Manager.
 
-Details of the Windows app: [`windows/README.md`](windows/README.md).
+Move the mouse to the top-centre of the screen to wake Mochi, click the island to open it, `Esc` to close. See [windows/README.md](windows/README.md) for all interactions and modules.
 
-## Docs
+## Configuration
 
-[`docs/MODULES-CONTRACT.md`](docs/MODULES-CONTRACT.md) module API and status, [`docs/SPEC.md`](docs/SPEC.md) behaviour,
-[`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) Claude Code hooks and service modules, [`docs/AGENTS.md`](docs/AGENTS.md) other agents,
-[`docs/idle-baseline.md`](docs/idle-baseline.md) idle budget.
+Modules are switched on or off in Settings. Module API and status: [docs/MODULES-CONTRACT.md](docs/MODULES-CONTRACT.md). Behaviour: [docs/SPEC.md](docs/SPEC.md). Hooks and service modules: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
 
-## Privacy
+## Credits
 
-No telemetry, no account. The only network requests go to the services you configure.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+- [Coucou](https://github.com/Louis-CFM/coucou) by Louis Raillé: the original app, the Mochi character, icon, sounds and the screenshot above.
+- Name, Mochi character, icon, sounds and media are (c) Louis Raillé, all rights reserved, see [LICENSE-ASSETS.md](LICENSE-ASSETS.md).
 
 ## License
 
-- **Code:** [MIT](LICENSE).
-- **Name, Mochi character, icon, sounds and media:** (c) Louis Raillé, all rights reserved, see [LICENSE-ASSETS.md](LICENSE-ASSETS.md).
+Code licensed under upstream's MIT license - see [LICENSE](LICENSE).
 
-[Website](https://louis-cfm.github.io/coucou/) · [Privacy](https://louis-cfm.github.io/coucou/privacy.html) · [Terms](https://louis-cfm.github.io/coucou/terms.html) · [Support](https://louis-cfm.github.io/coucou/support.html)
+---
+Made by [João Carmassi](https://github.com/joao-carmassi)
